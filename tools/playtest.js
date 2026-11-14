@@ -49,7 +49,7 @@ async page => {
      */
     bot.tick = dt => {
       const state = game.state;
-      const player = state.P;
+      const player = state.player;
       const job = state.job;
       const car = player.car;
       pad.x = 0;
@@ -216,7 +216,7 @@ async page => {
         busted: stats.busted,
       };
       const was = bot.seen || now;
-      const where = `${state.P.x | 0},${state.P.y | 0}`;
+      const where = `${state.player.x | 0},${state.player.y | 0}`;
       const flash = document.getElementById('flash');
       if (now.wasted > was.wasted) {
         say(`  wasted at ${where}: ${flash.firstElementChild.textContent}`);
@@ -255,7 +255,7 @@ async page => {
         }
         if (job && state.t - bot.since > 300) {
           // Nothing happened for five minutes: say where we are, then cheat.
-          const player = state.P;
+          const player = state.player;
           const target = job.to || nearestOf(jobItems(), player);
           const ride = player.car ? player.car.kind : 'on foot';
           const goal = target ? `${target.x | 0},${target.y | 0}` : 'none';
@@ -296,7 +296,7 @@ async page => {
     if (opt.trace) {
       await page.evaluate(() => {
         const game = window.GTW;
-        const player = game.state.P;
+        const player = game.state.player;
         const ride = player.car ? player.car.kind : 'on foot';
         const heat = game.state.wanted.toFixed(1);
         window.BOT.log.push(

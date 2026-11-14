@@ -1,6 +1,6 @@
 // Everything you hear is synthesised here: effects, Flo's pager voice, engines and the car radio.
 
-let AC;
+let audioCtx;
 let master;
 let sfx;
 let music;
@@ -8,13 +8,13 @@ let voiceBus;
 let drive;
 let noiseBuf;
 let tap;
-let eng;
+let engineNodes;
 let sirenGain;
 let muted = false;
 let station = -1;
-let nextT = 0;
-let stepI = 0;
-let f0 = 118;
+let nextTime = 0;
+let stepIndex = 0;
+let voicePitch = 118;
 const midi = n => 440 * 2 ** ((n - 69) / 12);
 const rnd = (a, b) => a + Math.random() * (b - a);
 
@@ -22,48 +22,50 @@ const rnd = (a, b) => a + Math.random() * (b - a);
  *
  */
 export function init() {
-  if (AC) {
-    if (AC.state !== 'running') {
-      AC.resume();
+  if (audioCtx) {
+    if (audioCtx.state !== 'running') {
+      audioCtx.resume();
     }
     return;
   }
-  AC = new (window.AudioContext || window.webkitAudioContext)();
-  master = AC.createGain();
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  master = audioCtx.createGain();
   master.gain.value = muted ? 0 : 1;
-  master.connect(AC.createDynamicsCompressor()).connect(AC.destination);
-  tap = AC.createAnalyser(); // lets the self-test see that sound is coming out
+  master
+    .connect(audioCtx.createDynamicsCompressor())
+    .connect(audioCtx.destination);
+  tap = audioCtx.createAnalyser(); // lets the self-test see that sound is coming out
   master.connect(tap);
-  sfx = AC.createGain();
+  sfx = audioCtx.createGain();
   sfx.connect(master);
-  music = AC.createGain();
+  music = audioCtx.createGain();
   music.gain.value = 0.3;
   music.connect(master);
-  voiceBus = AC.createBiquadFilter(); // small pager speaker
+  voiceBus = audioCtx.createBiquadFilter(); // small pager speaker
   voiceBus.type = 'bandpass';
   voiceBus.frequency.value = 1100;
   voiceBus.Q.value = 0.8;
-  const loud = AC.createGain();
+  const loud = audioCtx.createGain();
   loud.gain.value = 2.5;
   voiceBus.connect(loud).connect(sfx);
-  drive = AC.createWaveShaper(); // fuzz for the rock station
+  drive = audioCtx.createWaveShaper(); // fuzz for the rock station
   drive.curve = Float32Array.from({length: 256}, (_, i) =>
     Math.tanh((i / 128 - 1) * 5)
   );
-  const tone = AC.createBiquadFilter();
+  const tone = audioCtx.createBiquadFilter();
   tone.type = 'lowpass';
   tone.frequency.value = 2400;
   drive.connect(tone).connect(music);
-  noiseBuf = AC.createBuffer(1, AC.sampleRate, AC.sampleRate);
+  noiseBuf = audioCtx.createBuffer(1, audioCtx.sampleRate, audioCtx.sampleRate);
   const ch = noiseBuf.getChannelData(0);
   for (let i = 0; i < ch.length; i++) {
     ch[i] = Math.random() * 2 - 1;
   }
 
-  const o = AC.createOscillator();
-  const o2 = AC.createOscillator();
-  const lp = AC.createBiquadFilter();
-  const g = AC.createGain();
+  const o = audioCtx.createOscillator();
+  const o2 = audioCtx.createOscillator();
+  const lp = audioCtx.createBiquadFilter();
+  const g = audioCtx.createGain();
   o.type = 'sawtooth';
   o2.type = 'square';
   lp.type = 'lowpass';
@@ -74,12 +76,12 @@ export function init() {
   lp.connect(g).connect(sfx);
   o.start();
   o2.start();
-  eng = {o, o2, lp, g};
+  engineNodes = {o, o2, lp, g};
 
-  const so = AC.createOscillator();
-  const lfo = AC.createOscillator();
-  const depth = AC.createGain();
-  const slp = AC.createBiquadFilter();
+  const so = audioCtx.createOscillator();
+  const lfo = audioCtx.createOscillator();
+  const depth = audioCtx.createGain();
+  const slp = audioCtx.createBiquadFilter();
   so.type = 'square';
   so.frequency.value = 510; // Martinshorn: two notes, a fourth apart
   lfo.type = 'square';
@@ -88,7 +90,7 @@ export function init() {
   lfo.connect(depth).connect(so.frequency);
   slp.type = 'lowpass';
   slp.frequency.value = 1800;
-  sirenGain = AC.createGain();
+  sirenGain = audioCtx.createGain();
   sirenGain.gain.value = 0;
   so.connect(slp).connect(sirenGain).connect(sfx);
   so.start();
@@ -124,8 +126,8 @@ function env(g, t, a, d, vol, hold = 0) {
  * @param a
  */
 function osc(type, f, t, dur, vol, out, to = 0, a = 0.004) {
-  const o = AC.createOscillator();
-  const g = AC.createGain();
+  const o = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
   o.type = type;
   o.frequency.setValueAtTime(f, t);
   if (to) {
@@ -147,9 +149,9 @@ function osc(type, f, t, dur, vol, out, to = 0, a = 0.004) {
  * @param q
  */
 function hiss(t, dur, vol, type, freq, out, q = 0.7) {
-  const s = AC.createBufferSource();
-  const f = AC.createBiquadFilter();
-  const g = AC.createGain();
+  const s = audioCtx.createBufferSource();
+  const f = audioCtx.createBiquadFilter();
+  const g = audioCtx.createGain();
   s.buffer = noiseBuf;
   s.loop = true;
   f.type = type;
@@ -164,9 +166,9 @@ function hiss(t, dur, vol, type, freq, out, q = 0.7) {
 // ---------- effects
 
 const beep = (f, d, wait = 0, vol = 0.06, type = 'square', to = 0) =>
-  osc(type, f, AC.currentTime + wait, d, vol, sfx, to);
+  osc(type, f, audioCtx.currentTime + wait, d, vol, sfx, to);
 const crack = (d, vol, freq = 900, wait = 0) =>
-  hiss(AC.currentTime + wait, d, vol, 'lowpass', freq, sfx);
+  hiss(audioCtx.currentTime + wait, d, vol, 'lowpass', freq, sfx);
 const SFX = {
   coin: () => {
     beep(988, 0.07);
@@ -211,14 +213,14 @@ const SFX = {
     crack(0.7, 0.5, 1100);
     beep(500, 0.5, 0, 0.06, 'sine', 120);
   },
-  spray: () => hiss(AC.currentTime, 0.25, 0.1, 'highpass', 3000, sfx),
+  spray: () => hiss(audioCtx.currentTime, 0.25, 0.1, 'highpass', 3000, sfx),
   alarm: () => {
     for (let i = 0; i < 6; i++) {
       beep(i % 2 ? 880 : 1175, 0.16, i * 0.17, 0.05);
     }
   },
   glass: () => {
-    hiss(AC.currentTime, 0.25, 0.25, 'highpass', 5000, sfx);
+    hiss(audioCtx.currentTime, 0.25, 0.25, 'highpass', 5000, sfx);
     beep(2600, 0.08, 0, 0.04, 'triangle', 1800);
   },
 };
@@ -228,7 +230,7 @@ const SFX = {
  * @param arg
  */
 export function play(name, arg) {
-  if (AC && !muted) {
+  if (audioCtx && !muted) {
     SFX[name](arg);
   }
 }
@@ -238,24 +240,24 @@ export function play(name, arg) {
  */
 export function babble() {
   // one muffled syllable of Flo on the pager
-  if (!AC || muted) {
+  if (!audioCtx || muted) {
     return;
   }
-  const t = AC.currentTime;
+  const t = audioCtx.currentTime;
   const d = rnd(0.07, 0.15);
-  f0 = Math.min(150, Math.max(92, f0 + rnd(-14, 14)));
-  const o = AC.createOscillator();
-  const g = AC.createGain();
+  voicePitch = Math.min(150, Math.max(92, voicePitch + rnd(-14, 14)));
+  const o = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
   o.type = 'sawtooth';
-  o.frequency.setValueAtTime(f0, t);
-  o.frequency.linearRampToValueAtTime(f0 * rnd(0.88, 1.14), t + d);
+  o.frequency.setValueAtTime(voicePitch, t);
+  o.frequency.linearRampToValueAtTime(voicePitch * rnd(0.88, 1.14), t + d);
   env(g, t, 0.012, d, 0.5, 0.5);
   for (const [lo, hi] of [
     [280, 850],
     [950, 2300],
   ]) {
     // two wandering formants make it sound like speech
-    const f = AC.createBiquadFilter();
+    const f = audioCtx.createBiquadFilter();
     f.type = 'bandpass';
     f.Q.value = 7;
     f.frequency.setValueAtTime(rnd(lo, hi), t);
@@ -281,16 +283,16 @@ const ENGINES = {
  * @param kind
  */
 export function engine(speed, on, kind) {
-  if (!eng) {
+  if (!engineNodes) {
     return;
   }
   const [base, k, cut] = ENGINES[kind] || [45, 5.5, 380];
   const f = base + Math.abs(speed) * k;
-  const t = AC.currentTime;
-  eng.o.frequency.setTargetAtTime(f, t, 0.03);
-  eng.o2.frequency.setTargetAtTime(f / 2, t, 0.03);
-  eng.lp.frequency.value = cut;
-  eng.g.gain.setTargetAtTime(on ? 0.045 : 0, t, 0.05);
+  const t = audioCtx.currentTime;
+  engineNodes.o.frequency.setTargetAtTime(f, t, 0.03);
+  engineNodes.o2.frequency.setTargetAtTime(f / 2, t, 0.03);
+  engineNodes.lp.frequency.value = cut;
+  engineNodes.g.gain.setTargetAtTime(on ? 0.045 : 0, t, 0.05);
 }
 /**
  *
@@ -298,7 +300,7 @@ export function engine(speed, on, kind) {
  */
 export function siren(on) {
   if (sirenGain) {
-    sirenGain.gain.setTargetAtTime(on ? 0.03 : 0, AC.currentTime, 0.05);
+    sirenGain.gain.setTargetAtTime(on ? 0.03 : 0, audioCtx.currentTime, 0.05);
   }
 }
 
@@ -310,8 +312,8 @@ export function siren(on) {
  * @param v
  */
 function kick(t, v = 0.9) {
-  const o = AC.createOscillator();
-  const g = AC.createGain();
+  const o = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
   o.frequency.setValueAtTime(150, t);
   o.frequency.exponentialRampToValueAtTime(42, t + 0.12);
   g.gain.setValueAtTime(v, t);
@@ -356,8 +358,8 @@ function note(
     out = music,
   } = {}
 ) {
-  const g = AC.createGain();
-  const f = AC.createBiquadFilter();
+  const g = audioCtx.createGain();
+  const f = audioCtx.createBiquadFilter();
   f.type = 'lowpass';
   f.Q.value = q;
   f.frequency.setValueAtTime(cut + sweep, t);
@@ -369,7 +371,7 @@ function note(
   g.gain.setValueAtTime(vol, t + Math.max(att, dur * 0.7));
   g.gain.linearRampToValueAtTime(0.0001, t + dur);
   for (const d of det ? [-det, det] : [0]) {
-    const o = AC.createOscillator();
+    const o = audioCtx.createOscillator();
     o.type = type;
     o.frequency.value = midi(n);
     o.detune.value = d;
@@ -383,26 +385,26 @@ const chord = (t, ns, dur, o) => ns.forEach(n => note(t, n, dur, o));
 const on = (pat, i) => pat[i % pat.length] === 'x';
 
 // Kerwa polka: [chord, four eighth notes of melody] per bar, 0 = hold, -1 = rest
-const F = {tuba: [41, 36], pah: [57, 60, 65]};
-const C7 = {tuba: [36, 43], pah: [55, 58, 64]};
-const Bb = {tuba: [34, 41], pah: [58, 62, 65]};
+const CHORD_F = {tuba: [41, 36], pah: [57, 60, 65]};
+const CHORD_C7 = {tuba: [36, 43], pah: [55, 58, 64]};
+const CHORD_BB = {tuba: [34, 41], pah: [58, 62, 65]};
 const POLKA = [
-  [F, 69, 72, 77, 72],
-  [F, 69, 72, 77, 0],
-  [C7, 67, 70, 76, 70],
-  [C7, 67, 70, 76, 0],
-  [C7, 76, 74, 72, 70],
-  [C7, 67, 69, 70, 67],
-  [F, 69, 72, 77, 81],
-  [F, 77, 0, 0, -1],
-  [F, 72, 72, 69, 72],
-  [F, 77, 0, 76, 74],
-  [Bb, 74, 74, 70, 74],
-  [Bb, 79, 0, 77, 74],
-  [C7, 72, 76, 79, 76],
-  [C7, 70, 72, 74, 76],
-  [F, 77, 81, 77, 72],
-  [F, 77, 0, 0, -1],
+  [CHORD_F, 69, 72, 77, 72],
+  [CHORD_F, 69, 72, 77, 0],
+  [CHORD_C7, 67, 70, 76, 70],
+  [CHORD_C7, 67, 70, 76, 0],
+  [CHORD_C7, 76, 74, 72, 70],
+  [CHORD_C7, 67, 69, 70, 67],
+  [CHORD_F, 69, 72, 77, 81],
+  [CHORD_F, 77, 0, 0, -1],
+  [CHORD_F, 72, 72, 69, 72],
+  [CHORD_F, 77, 0, 76, 74],
+  [CHORD_BB, 74, 74, 70, 74],
+  [CHORD_BB, 79, 0, 77, 74],
+  [CHORD_C7, 72, 76, 79, 76],
+  [CHORD_C7, 70, 72, 74, 76],
+  [CHORD_F, 77, 81, 77, 72],
+  [CHORD_F, 77, 0, 0, -1],
 ];
 const FUNK_BASS = {
   0: [40, 2],
@@ -596,18 +598,22 @@ const STATIONS = [
  *
  */
 function tick() {
-  if (station < 0 || AC.state !== 'running') {
+  if (station < 0 || audioCtx.state !== 'running') {
     return;
   }
   const st = STATIONS[station];
   const s = 60 / st.bpm / 4;
-  if (nextT < AC.currentTime) {
-    nextT = AC.currentTime + 0.06;
+  if (nextTime < audioCtx.currentTime) {
+    nextTime = audioCtx.currentTime + 0.06;
   }
-  while (nextT < AC.currentTime + 0.25) {
-    st.step(stepI, nextT + (st.swing && stepI % 2 ? s * st.swing : 0), s);
-    nextT += s;
-    stepI++;
+  while (nextTime < audioCtx.currentTime + 0.25) {
+    st.step(
+      stepIndex,
+      nextTime + (st.swing && stepIndex % 2 ? s * st.swing : 0),
+      s
+    );
+    nextTime += s;
+    stepIndex++;
   }
 }
 /**
@@ -620,8 +626,8 @@ export function radio(i) {
     return;
   }
   station = i;
-  stepI = 0;
-  nextT = 0;
+  stepIndex = 0;
+  nextTime = 0;
 }
 
 /** The names of the radio stations, in dial order. */
@@ -650,8 +656,8 @@ export function mute(m) {
  * @param p
  */
 export function pause(p) {
-  if (AC) {
-    p ? AC.suspend() : AC.resume();
+  if (audioCtx) {
+    p ? audioCtx.suspend() : audioCtx.resume();
   }
 }
 
