@@ -4255,195 +4255,290 @@ byId('how').onclick = () => {
 
 /**
  * Strokes every path of a road layer.
+ * @param {!CanvasRenderingContext2D} g
  * @param {!Array<!Array>} l
  * @param {(string|!CanvasPattern)} style
  * @param {number=} w One width for all, instead of each road's own.
  * @param {number=} grow
  */
-function strokeLayer(l, style, w, grow = 0) {
-  ctx.strokeStyle = style;
+function strokeLayer(g, l, style, w, grow = 0) {
+  g.strokeStyle = style;
   for (const [rw, path] of l) {
-    ctx.lineWidth = (w || rw) + grow;
-    ctx.stroke(path);
+    g.lineWidth = (w || rw) + grow;
+    g.stroke(path);
   }
 }
 
 /**
  * Paints a football pitch, tennis or volleyball court.
+ * @param {!CanvasRenderingContext2D} g
  * @param {!Object} a
  */
-function drawPitch(a) {
+function drawPitch(g, a) {
   const length = a.u1 - a.u0;
   const width = a.v1 - a.v0;
   const line = (x0, y0, x1, y1) => {
-    ctx.beginPath();
-    ctx.moveTo(x0, y0);
-    ctx.lineTo(x1, y1);
-    ctx.stroke();
+    g.beginPath();
+    g.moveTo(x0, y0);
+    g.lineTo(x1, y1);
+    g.stroke();
   };
-  ctx.save();
-  local(a);
-  ctx.strokeStyle = '#e8efe0';
-  ctx.lineWidth = 0.28;
-  ctx.lineCap = 'butt';
+  g.save();
+  g.transform(a.ca, a.sa, -a.sa, a.ca, a.mx, a.my);
+  g.strokeStyle = '#e8efe0';
+  g.lineWidth = 0.28;
+  g.lineCap = 'butt';
   if (a.s === 'soccer') {
     for (let i = 0; i < 10; i++) {
-      ctx.fillStyle = i % 2 ? '#3f8a35' : '#49983d';
-      ctx.fillRect(a.u0 + (length / 10) * i, a.v0, length / 10 + 0.05, width);
+      g.fillStyle = i % 2 ? '#3f8a35' : '#49983d';
+      g.fillRect(a.u0 + (length / 10) * i, a.v0, length / 10 + 0.05, width);
     }
-    ctx.strokeRect(a.u0 + 1.5, a.v0 + 1.5, length - 3, width - 3);
+    g.strokeRect(a.u0 + 1.5, a.v0 + 1.5, length - 3, width - 3);
     line(0, a.v0 + 1.5, 0, a.v1 - 1.5);
-    ctx.beginPath();
-    ctx.arc(0, 0, Math.min(9.15, width * 0.18), 0, TAU);
-    ctx.stroke();
+    g.beginPath();
+    g.arc(0, 0, Math.min(9.15, width * 0.18), 0, TAU);
+    g.stroke();
     for (const s of [-1, 1]) {
       const x = s * (length / 2 - 1.5);
       const bw = Math.min(40, width * 0.6);
       const sw = Math.min(18, width * 0.3);
-      ctx.strokeRect(Math.min(x, x - s * 16.5), -bw / 2, 16.5, bw);
-      ctx.strokeRect(Math.min(x, x - s * 5.5), -sw / 2, 5.5, sw);
-      ctx.fillStyle = '#f4f4ef';
-      ctx.fillRect(Math.min(x, x + s * 1.6), -3.7, 1.6, 7.4);
+      g.strokeRect(Math.min(x, x - s * 16.5), -bw / 2, 16.5, bw);
+      g.strokeRect(Math.min(x, x - s * 5.5), -sw / 2, 5.5, sw);
+      g.fillStyle = '#f4f4ef';
+      g.fillRect(Math.min(x, x + s * 1.6), -3.7, 1.6, 7.4);
     }
   } else {
-    ctx.fillStyle = a.s === 'tennis' ? textures.clay : textures.play;
-    ctx.fill(a.lpath);
+    g.fillStyle = a.s === 'tennis' ? textures.clay : textures.play;
+    g.fill(a.lpath);
     const n = Math.max(1, Math.round(width / 18));
     const ch = width / n; // courts side by side
     for (let i = 0; i < n; i++) {
       const y = a.v0 + ch * i + ch / 2;
       const cl = Math.min(length - 6, 23.8);
       const cw = Math.min(ch - 5, 11);
-      ctx.strokeRect(-cl / 2, y - cw / 2, cl, cw);
-      ctx.strokeStyle = '#30343a';
+      g.strokeRect(-cl / 2, y - cw / 2, cl, cw);
+      g.strokeStyle = '#30343a';
       line(0, y - cw / 2 - 0.8, 0, y + cw / 2 + 0.8);
-      ctx.strokeStyle = '#e8efe0';
+      g.strokeStyle = '#e8efe0';
     }
   }
-  ctx.restore();
-  ctx.lineCap = 'round';
+  g.restore();
+  g.lineCap = 'round';
 }
 
 /**
- * Paints land, water, roads, hedges and fences.
+ * Paints land, roads, hedges and fences: everything on the ground that never
+ * changes. Water is left as a hole, so the drifting water shows through.
+ * @param {!CanvasRenderingContext2D} g
+ * @param {number} x0
+ * @param {number} y0
+ * @param {number} x1
+ * @param {number} y1
+ */
+function paintGround(g, x0, y0, x1, y1) {
+  g.fillStyle = textures.grass;
+  g.fillRect(x0 - 1, y0 - 1, x1 - x0 + 2, y1 - y0 + 2);
+  const seen = a => a.x1 > x0 && a.x0 < x1 && a.y1 > y0 && a.y0 < y1;
+  for (const a of AREAS) {
+    if (seen(a) && a.fill) {
+      g.fillStyle = a.fill;
+      if (a.k === 'water') {
+        g.globalCompositeOperation = 'destination-out';
+        g.fill(a.path);
+        g.globalCompositeOperation = 'source-over';
+      } else if (a.k === 'farm') {
+        g.save();
+        g.transform(a.ca, a.sa, -a.sa, a.ca, a.mx, a.my);
+        g.fill(a.lpath);
+        g.restore();
+      } // furrows run along the field
+      else {
+        g.fill(a.path);
+      }
+      if (a.bays) {
+        g.save();
+        g.clip(a.path);
+        g.strokeStyle = 'rgba(236,236,226,.5)';
+        g.lineWidth = 0.14;
+        g.lineCap = 'butt';
+        g.stroke(a.bays);
+        g.restore();
+      }
+    }
+  }
+  for (const a of AREAS) {
+    if (seen(a) && a.k === 'pitch') {
+      drawPitch(g, a);
+    }
+  }
+  strokeLayer(g, ROADS.stream, '#3a72a2');
+  strokeLayer(g, ROADS.bank, '#3c6829');
+  g.globalCompositeOperation = 'destination-out';
+  strokeLayer(g, ROADS.river, '#000');
+  g.globalCompositeOperation = 'source-over';
+  g.lineCap = 'butt';
+  strokeLayer(g, ROADS.rail, textures.gravel, 3.4);
+  g.setLineDash([0.35, 0.9]);
+  strokeLayer(g, ROADS.rail, '#4a3420', 2.4);
+  g.setLineDash([]);
+  strokeLayer(g, ROADS.rail, '#a8a8a2', 1.5);
+  strokeLayer(g, ROADS.rail, '#6c675d', 1.15);
+  g.lineCap = 'round';
+  strokeLayer(g, ROADS.dirt, textures.dirt);
+  strokeLayer(g, ROADS.foot, '#b9ad8a');
+  strokeLayer(g, ROADS.kerb, '#3a3d36');
+  strokeLayer(g, ROADS.walk, textures.sidewalk);
+  strokeLayer(g, ROADS.road, '#2f3135', 0, 0.5);
+  strokeLayer(g, ROADS.cobble, '#5d5a53', 0, 0.5); // kerbstones
+  strokeLayer(g, ROADS.road, textures.asphalt);
+  strokeLayer(g, ROADS.cobble, textures.cobble);
+  g.setLineDash([3, 5]);
+  g.lineCap = 'butt';
+  strokeLayer(g, ROADS.line, '#d8d4c0', 0.28);
+  g.setLineDash([]);
+  g.lineCap = 'round';
+  {
+    // the building site in Schulstraße: torn-up road, barriers, a heap of
+    // gravel
+    const b = SPOT.roadworks;
+    g.save();
+    g.translate(b.x, b.y);
+    g.rotate(b.a);
+    g.fillStyle = textures.constr;
+    g.fillRect(-16, -1, 32, 7);
+    g.fillStyle = '#6f6a60';
+    g.beginPath();
+    g.arc(11, 3.4, 2.4, 0, TAU);
+    g.fill();
+    g.fillStyle = '#8f897d';
+    g.beginPath();
+    g.arc(10.5, 3, 1.5, 0, TAU);
+    g.fill();
+    for (const x of [-16, 15.4]) {
+      for (let i = 0; i < 7; i++) {
+        g.fillStyle = i % 2 ? '#f4f4ef' : '#c8201c';
+        g.fillRect(x, -1 + i, 0.6, 1);
+      }
+    }
+    for (let i = 0; i < 16; i++) {
+      g.fillStyle = i % 2 ? '#f4f4ef' : '#c8201c';
+      g.fillRect(-16 + i * 2, 5.6, 2, 0.5);
+    }
+    g.restore();
+  }
+  g.strokeStyle = '#2a5a22';
+  g.lineWidth = 1.7;
+  g.stroke(HEDGES);
+  g.strokeStyle = '#3b7d2e';
+  g.lineWidth = 0.9;
+  g.stroke(HEDGES);
+  // Garden fences: a rail with pale pickets, and a thin shadow
+  g.lineCap = 'butt';
+  g.save();
+  g.translate(0.25, 0.25);
+  g.strokeStyle = 'rgba(0,0,0,.22)';
+  g.lineWidth = 0.3;
+  g.stroke(FENCES);
+  g.restore();
+  g.strokeStyle = '#4a3826';
+  g.lineWidth = 0.24;
+  g.stroke(FENCES);
+  g.setLineDash([0.2, 0.5]);
+  g.strokeStyle = '#dccfae';
+  g.lineWidth = 0.44;
+  g.stroke(FENCES);
+  g.setLineDash([]);
+  g.lineCap = 'round';
+}
+
+// The ground never changes, so it is painted once into tiles of 64 m and the
+// tiles are copied to the screen. Painting it afresh every frame was the
+// biggest single cost of a frame.
+const TILE_M = 64;
+const TILE_PX = TILE_M * PX_PER_M;
+const TILE_LIMIT = 40;
+
+// Tile canvases by position, least recently used first.
+const groundTiles = new Map();
+
+/**
+ * The ground tile at a tile position, painted on first use.
+ * @param {number} tx
+ * @param {number} ty
+ * @param {boolean} paint Whether to paint the tile if it is missing.
+ * @param {number} room How many tiles to keep.
+ * @return {?HTMLCanvasElement}
+ */
+function groundTile(tx, ty, paint, room) {
+  const key = (ty + 512) * 4096 + tx + 512;
+  let tile = groundTiles.get(key);
+  if (tile) {
+    groundTiles.delete(key); // back to the young end of the queue
+  } else if (!paint) {
+    return null;
+  } else {
+    tile = canvas(TILE_PX, TILE_PX);
+    const g = tile.getContext('2d');
+    const x = tx * TILE_M;
+    const y = ty * TILE_M;
+    g.setTransform(PX_PER_M, 0, 0, PX_PER_M, -x * PX_PER_M, -y * PX_PER_M);
+    g.lineJoin = g.lineCap = 'round';
+    paintGround(g, x, y, x + TILE_M, y + TILE_M);
+    if (groundTiles.size >= room) {
+      groundTiles.delete(groundTiles.keys().next().value);
+    }
+  }
+  groundTiles.set(key, tile);
+  return tile;
+}
+
+/**
+ * Draws the ground: drifting water, the cached tiles over it, and the marker
+ * of the current mission target.
  * @param {number} x0
  * @param {number} y0
  * @param {number} x1
  * @param {number} y1
  */
 function drawGround(x0, y0, x1, y1) {
-  ctx.fillStyle = textures.grass;
-  ctx.fillRect(x0 - 1, y0 - 1, x1 - x0 + 2, y1 - y0 + 2);
-  const seen = a => a.x1 > x0 && a.x0 < x1 && a.y1 > y0 && a.y0 < y1;
+  const view = ctx.getTransform();
+  const z = view.a;
   textures.water.setTransform(
     new DOMMatrix()
       .scaleSelf(1 / PX_PER_M)
       .translateSelf((state.t * 5) % 64, (state.t * 2) % 64)
-  ); // the water drifts
-  for (const a of AREAS) {
-    if (seen(a) && a.fill) {
-      ctx.fillStyle = a.fill;
-      if (a.k === 'farm') {
-        ctx.save();
-        local(a);
-        ctx.fill(a.lpath);
-        ctx.restore();
-      } // furrows run along the field
-      else {
-        ctx.fill(a.path);
+  );
+  ctx.fillStyle = textures.water;
+  ctx.fillRect(x0 - 1, y0 - 1, x1 - x0 + 2, y1 - y0 + 2);
+  // Tiles go down in whole screen pixels, so neighbours meet without a seam.
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  const tx0 = Math.floor(x0 / TILE_M);
+  const ty0 = Math.floor(y0 / TILE_M);
+  const tx1 = Math.floor(x1 / TILE_M);
+  const ty1 = Math.floor(y1 / TILE_M);
+  // One tile beyond the view is painted ahead of time, one per frame, so
+  // driving into it does not stutter.
+  let ahead = 1;
+  // Never fewer tiles than one screen needs, or they would be repainted
+  // every frame.
+  const room = Math.max(TILE_LIMIT, (tx1 - tx0 + 3) * (ty1 - ty0 + 3));
+  for (let ty = ty0 - 1; ty <= ty1 + 1; ty++) {
+    for (let tx = tx0 - 1; tx <= tx1 + 1; tx++) {
+      const visible = tx >= tx0 && tx <= tx1 && ty >= ty0 && ty <= ty1;
+      const known = groundTiles.has((ty + 512) * 4096 + tx + 512);
+      const paint = visible || (!known && ahead-- > 0);
+      const tile = groundTile(tx, ty, paint, room);
+      if (!tile || !visible) {
+        continue;
       }
-      if (a.bays) {
-        ctx.save();
-        ctx.clip(a.path);
-        ctx.strokeStyle = 'rgba(236,236,226,.5)';
-        ctx.lineWidth = 0.14;
-        ctx.lineCap = 'butt';
-        ctx.stroke(a.bays);
-        ctx.restore();
-      }
+      const sx = Math.round(tx * TILE_M * z + view.e);
+      const sy = Math.round(ty * TILE_M * z + view.f);
+      const sw = Math.round((tx + 1) * TILE_M * z + view.e) - sx;
+      const sh = Math.round((ty + 1) * TILE_M * z + view.f) - sy;
+      ctx.drawImage(tile, sx, sy, sw, sh);
     }
   }
-  for (const a of AREAS) {
-    if (seen(a) && a.k === 'pitch') {
-      drawPitch(a);
-    }
-  }
-  strokeLayer(ROADS.stream, '#3a72a2');
-  strokeLayer(ROADS.bank, '#3c6829');
-  strokeLayer(ROADS.river, textures.water);
-  ctx.lineCap = 'butt';
-  strokeLayer(ROADS.rail, textures.gravel, 3.4);
-  ctx.setLineDash([0.35, 0.9]);
-  strokeLayer(ROADS.rail, '#4a3420', 2.4);
-  ctx.setLineDash([]);
-  strokeLayer(ROADS.rail, '#a8a8a2', 1.5);
-  strokeLayer(ROADS.rail, '#6c675d', 1.15);
-  ctx.lineCap = 'round';
-  strokeLayer(ROADS.dirt, textures.dirt);
-  strokeLayer(ROADS.foot, '#b9ad8a');
-  strokeLayer(ROADS.kerb, '#3a3d36');
-  strokeLayer(ROADS.walk, textures.sidewalk);
-  strokeLayer(ROADS.road, '#2f3135', 0, 0.5);
-  strokeLayer(ROADS.cobble, '#5d5a53', 0, 0.5); // kerbstones
-  strokeLayer(ROADS.road, textures.asphalt);
-  strokeLayer(ROADS.cobble, textures.cobble);
-  ctx.setLineDash([3, 5]);
-  ctx.lineCap = 'butt';
-  strokeLayer(ROADS.line, '#d8d4c0', 0.28);
-  ctx.setLineDash([]);
-  ctx.lineCap = 'round';
-  {
-    // the building site in Schulstraße: torn-up road, barriers, a heap of
-    // gravel
-    const b = SPOT.roadworks;
-    ctx.save();
-    ctx.translate(b.x, b.y);
-    ctx.rotate(b.a);
-    ctx.fillStyle = textures.constr;
-    ctx.fillRect(-16, -1, 32, 7);
-    ctx.fillStyle = '#6f6a60';
-    ctx.beginPath();
-    ctx.arc(11, 3.4, 2.4, 0, TAU);
-    ctx.fill();
-    ctx.fillStyle = '#8f897d';
-    ctx.beginPath();
-    ctx.arc(10.5, 3, 1.5, 0, TAU);
-    ctx.fill();
-    for (const x of [-16, 15.4]) {
-      for (let i = 0; i < 7; i++) {
-        ctx.fillStyle = i % 2 ? '#f4f4ef' : '#c8201c';
-        ctx.fillRect(x, -1 + i, 0.6, 1);
-      }
-    }
-    for (let i = 0; i < 16; i++) {
-      ctx.fillStyle = i % 2 ? '#f4f4ef' : '#c8201c';
-      ctx.fillRect(-16 + i * 2, 5.6, 2, 0.5);
-    }
-    ctx.restore();
-  }
-  ctx.strokeStyle = '#2a5a22';
-  ctx.lineWidth = 1.7;
-  ctx.stroke(HEDGES);
-  ctx.strokeStyle = '#3b7d2e';
-  ctx.lineWidth = 0.9;
-  ctx.stroke(HEDGES);
-  // Garden fences: a rail with pale pickets, and a thin shadow
-  ctx.lineCap = 'butt';
-  ctx.save();
-  ctx.translate(0.25, 0.25);
-  ctx.strokeStyle = 'rgba(0,0,0,.22)';
-  ctx.lineWidth = 0.3;
-  ctx.stroke(FENCES);
-  ctx.restore();
-  ctx.strokeStyle = '#4a3826';
-  ctx.lineWidth = 0.24;
-  ctx.stroke(FENCES);
-  ctx.setLineDash([0.2, 0.5]);
-  ctx.strokeStyle = '#dccfae';
-  ctx.lineWidth = 0.44;
-  ctx.stroke(FENCES);
-  ctx.setLineDash([]);
-  ctx.lineCap = 'round';
+  ctx.setTransform(view);
   const j = state.job;
   const to = j && j.to;
   if (to && to !== j.veh && to !== j.prey) {

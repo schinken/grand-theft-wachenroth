@@ -5,3 +5,4 @@ tools/playtest.js
 tools/perf.js
 .playwright-mcp/
 _site/
+.claude/

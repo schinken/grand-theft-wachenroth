@@ -79,7 +79,15 @@ const rules = {
 };
 
 export default [
-  {ignores: ['map.js', 'node_modules/', '.playwright-mcp/', '_site/']},
+  {
+    ignores: [
+      'map.js',
+      'node_modules/',
+      '.playwright-mcp/',
+      '_site/',
+      '.claude/',
+    ],
+  },
   {
     files: ['**/*.js'],
     languageOptions: {
