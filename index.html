@@ -32,7 +32,8 @@
         background: var(--ink);
         color: var(--paper);
         font-family:
-          Impact, Haettenschweiler, 'Arial Narrow Bold', 'Franklin Gothic Bold', 'Roboto Condensed', sans-serif;
+          Impact, Haettenschweiler, 'Arial Narrow Bold', 'Franklin Gothic Bold',
+          'Roboto Condensed', sans-serif;
         touch-action: none;
         user-select: none;
         -webkit-user-select: none;
@@ -74,7 +75,11 @@
         text-align: center;
         overflow: auto;
         touch-action: pan-y;
-        background: radial-gradient(ellipse at center, rgba(12, 14, 17, 0.45), rgba(12, 14, 17, 0.93));
+        background: radial-gradient(
+          ellipse at center,
+          rgba(12, 14, 17, 0.45),
+          rgba(12, 14, 17, 0.93)
+        );
       }
       h1 {
         margin: 0 0 1vh;
@@ -552,8 +557,9 @@
         </div>
       </div>
       <div id="hint" class="out">
-        PFEILE / WASD fahren &nbsp;·&nbsp; LEERTASTE Handbremse &nbsp;·&nbsp; F ein-/aussteigen &nbsp;·&nbsp; H Hupe
-        &nbsp;·&nbsp; R Radio &nbsp;·&nbsp; TAB Karte &nbsp;·&nbsp; P Pause
+        PFEILE / WASD fahren &nbsp;·&nbsp; LEERTASTE Handbremse &nbsp;·&nbsp; F
+        ein-/aussteigen &nbsp;·&nbsp; H Hupe &nbsp;·&nbsp; R Radio &nbsp;·&nbsp;
+        TAB Karte &nbsp;·&nbsp; P Pause
       </div>
       <div id="zone"></div>
       <div id="stick"><i></i></div>
@@ -562,7 +568,9 @@
         <button id="bB">BREMSE</button>
         <button id="bA">EIN<br />AUS</button>
       </div>
-      <div id="pause" class="out" hidden>PAUSE<small>Tippen oder P drücken</small></div>
+      <div id="pause" class="out" hidden>
+        PAUSE<small>Tippen oder P drücken</small>
+      </div>
     </div>
 
     <canvas id="map" hidden aria-label="Karte von Wachenroth"></canvas>
@@ -573,25 +581,42 @@
       <nav>
         <button id="resume" hidden>Weiterspielen</button>
         <button id="start" autofocus>Neues Spiel</button>
-        <button id="how" aria-expanded="false" aria-controls="help">Steuerung</button>
+        <button id="how" aria-expanded="false" aria-controls="help">
+          Steuerung
+        </button>
       </nav>
       <ul id="help" hidden>
         <li>
-          <kbd>↑</kbd> <kbd>↓</kbd> <kbd>←</kbd> <kbd>→</kbd> oder <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd>
-          <kbd>D</kbd> fahren und laufen
+          <kbd>↑</kbd> <kbd>↓</kbd> <kbd>←</kbd> <kbd>→</kbd> oder <kbd>W</kbd>
+          <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> fahren und laufen
         </li>
-        <li><kbd>Leertaste</kbd> Handbremse &nbsp; <kbd>F</kbd> ein- und aussteigen (auch in fremde Autos)</li>
         <li>
-          <kbd>Tab</kbd> Karte &nbsp; <kbd>H</kbd> Hupe / Blaulicht &nbsp; <kbd>R</kbd> Radiosender &nbsp;
-          <kbd>P</kbd> Pause &nbsp; <kbd>M</kbd> Ton
+          <kbd>Leertaste</kbd> Handbremse &nbsp; <kbd>F</kbd> ein- und
+          aussteigen (auch in fremde Autos)
         </li>
-        <li>Am Handy: links der Daumen-Stick, rechts EIN/AUS, BREMSE und HUPE, oben die Karte.</li>
-        <li>Der Pager piept: Flo Ganzmann hat Aufträge. Der gelbe Pfeil zeigt den Weg.</li>
-        <li>Sterne oben rechts = Polizei. Die Waschstraße beim Murk macht dich wieder sauber.</li>
+        <li>
+          <kbd>Tab</kbd> Karte &nbsp; <kbd>H</kbd> Hupe / Blaulicht &nbsp;
+          <kbd>R</kbd> Radiosender &nbsp; <kbd>P</kbd> Pause &nbsp;
+          <kbd>M</kbd> Ton
+        </li>
+        <li>
+          Am Handy: links der Daumen-Stick, rechts EIN/AUS, BREMSE und HUPE,
+          oben die Karte.
+        </li>
+        <li>
+          Der Pager piept: Flo Ganzmann hat Aufträge. Der gelbe Pfeil zeigt den
+          Weg.
+        </li>
+        <li>
+          Sterne oben rechts = Polizei. Die Waschstraße beim Murk macht dich
+          wieder sauber.
+        </li>
       </ul>
       <footer>
-        Inoffizielle Parodie von und für Wachenröther. Alle Geschichten sind frei erfunden. Kartendaten ©
-        <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>-Mitwirkende.
+        Inoffizielle Parodie von und für Wachenröther. Alle Geschichten sind
+        frei erfunden. Kartendaten ©
+        <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a
+        >-Mitwirkende.
       </footer>
     </section>
 

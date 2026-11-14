@@ -103,7 +103,12 @@ export const MISSIONS = [
       'Hol mir Dosen zum Saufen: Jacky Cola! Die Claudia im Edeka in der Reumannswinder Straße hat welche. Nimm das Auto, das ist ein guter Kilometer.',
     ],
     steps: [
-      {do: 'goto', to: 'shop', foot: true, obj: 'Fahr zum Edeka Claudia und geh zu Fuß rein'},
+      {
+        do: 'goto',
+        to: 'shop',
+        foot: true,
+        obj: 'Fahr zum Edeka Claudia und geh zu Fuß rein',
+      },
       {
         do: 'collect',
         n: 5,
@@ -121,7 +126,10 @@ export const MISSIONS = [
         say: 'Sauber! Jetzt her damit, bevor sie warm werden. Johann-Philipp-Ring 9!',
       },
     ],
-    outro: ['Zisch! Ahh. Des is fei a Dosen zum Saufen.', 'Du bist brauchbar. Ich meld mich.'],
+    outro: [
+      'Zisch! Ahh. Des is fei a Dosen zum Saufen.',
+      'Du bist brauchbar. Ich meld mich.',
+    ],
   },
 
   {
@@ -133,7 +141,12 @@ export const MISSIONS = [
       'Hol Essen bei der Claudia im Edeka.',
     ],
     steps: [
-      {do: 'goto', to: 'shop', foot: true, obj: 'Fahr zum Edeka Claudia und hol das Essen (zu Fuß rein)'},
+      {
+        do: 'goto',
+        to: 'shop',
+        foot: true,
+        obj: 'Fahr zum Edeka Claudia und hol das Essen (zu Fuß rein)',
+      },
       {
         do: 'goto',
         to: 'butcher',
@@ -161,7 +174,12 @@ export const MISSIONS = [
       'Ich hab gesagt, du springst ein. Der Pizza-Flitzer steht vor der Tür, Reumannswinder Straße 5!',
     ],
     steps: [
-      {do: 'steal', veh: 'pizza', at: 'lavite', obj: 'Steig in den Pizza-Flitzer bei La Vite'},
+      {
+        do: 'steal',
+        veh: 'pizza',
+        at: 'lavite',
+        obj: 'Steig in den Pizza-Flitzer bei La Vite',
+      },
       {
         do: 'bring',
         to: 'clubhouse',
@@ -210,7 +228,12 @@ export const MISSIONS = [
       'Beim Röckelein steht ein voller Betonmischer rum. Den leihst du dir aus. Dauerhaft.',
     ],
     steps: [
-      {do: 'steal', veh: 'mixer', at: 'depot', obj: 'Klau den Betonmischer beim Röckelein'},
+      {
+        do: 'steal',
+        veh: 'mixer',
+        at: 'depot',
+        obj: 'Klau den Betonmischer beim Röckelein',
+      },
       {
         do: 'bring',
         to: 'roadworks',
@@ -270,7 +293,12 @@ export const MISSIONS = [
       'Beim Getränkehandel in Kleinwachenroth steht ein voller Bierlaster. Du weißt, was zu tun ist.',
     ],
     steps: [
-      {do: 'steal', veh: 'truck', at: 'drinks', obj: 'Klau den Bierlaster in Kleinwachenroth'},
+      {
+        do: 'steal',
+        veh: 'truck',
+        at: 'drinks',
+        obj: 'Klau den Bierlaster in Kleinwachenroth',
+      },
       {
         do: 'bring',
         to: 'club',
@@ -280,7 +308,10 @@ export const MISSIONS = [
         say: 'Vorsichtig! Jeder Rempler kostet Seidla. Ab zum Schwallclub, gegenüber vom Bäck.',
       },
     ],
-    outro: ['Die Schwaller lassen dich hochleben. Prost!', 'Geselligkeit und Tradition, und du mittendrin.'],
+    outro: [
+      'Die Schwaller lassen dich hochleben. Prost!',
+      'Geselligkeit und Tradition, und du mittendrin.',
+    ],
   },
 
   {
@@ -292,7 +323,12 @@ export const MISSIONS = [
       'Beim Bekleidungshaus Murk hängen die besten Anzüge weit und breit. Hol mir einen. Zahlen tun wir später. Vielleicht.',
     ],
     steps: [
-      {do: 'goto', to: 'murk', foot: true, obj: 'Fahr zum Bekleidungshaus Murk und geh zu Fuß rein'},
+      {
+        do: 'goto',
+        to: 'murk',
+        foot: true,
+        obj: 'Fahr zum Bekleidungshaus Murk und geh zu Fuß rein',
+      },
       {
         do: 'lose',
         to: 'carwash',
@@ -300,7 +336,12 @@ export const MISSIONS = [
         obj: 'Häng die Polizei ab (Tipp: Waschstraße beim Murk)',
         say: 'Der Alarm! Die Polizei aus Höchstadt ist unterwegs. Fahr durch die Waschstraße beim Murk, dann erkennt dich keiner!',
       },
-      {do: 'goto', to: 'hq', obj: 'Bring den Anzug zum Flo', say: 'Sauber abgehängt. Jetzt bring mir den Anzug.'},
+      {
+        do: 'goto',
+        to: 'hq',
+        obj: 'Bring den Anzug zum Flo',
+        say: 'Sauber abgehängt. Jetzt bring mir den Anzug.',
+      },
     ],
     outro: ['Passt wie angegossen. Mode, Marken, Menschen!'],
   },
@@ -315,7 +356,12 @@ export const MISSIONS = [
       'Die Feuerwehr sitzt noch beim Frühschoppen. Nimm ihr Löschfahrzeug, Am Graben 7!',
     ],
     steps: [
-      {do: 'steal', veh: 'fire', at: 'firestation', obj: 'Klau das Löschfahrzeug bei der Feuerwehr'},
+      {
+        do: 'steal',
+        veh: 'fire',
+        at: 'firestation',
+        obj: 'Klau das Löschfahrzeug bei der Feuerwehr',
+      },
       {
         do: 'bring',
         to: 'pitch',
@@ -374,8 +420,19 @@ export const MISSIONS = [
       'Die fahren mit dem Baam durchs Dorf. Ramm den Bulldog, bis sie aufgeben!',
     ],
     steps: [
-      {do: 'chase', veh: 'tractor', trailer: 'log', at: 'townhall', hits: 4, obj: 'Ramm den Bulldog mit dem Maibaum'},
-      {do: 'take', obj: 'Steig in den Bulldog mit dem Maibaum', say: 'Sie rennen! Jetzt schnapp dir den Bulldog.'},
+      {
+        do: 'chase',
+        veh: 'tractor',
+        trailer: 'log',
+        at: 'townhall',
+        hits: 4,
+        obj: 'Ramm den Bulldog mit dem Maibaum',
+      },
+      {
+        do: 'take',
+        obj: 'Steig in den Bulldog mit dem Maibaum',
+        say: 'Sie rennen! Jetzt schnapp dir den Bulldog.',
+      },
       {
         do: 'bring',
         to: 'townhall',
@@ -397,7 +454,15 @@ export const MISSIONS = [
       'Zwei mit Wasser, eins mit Bier. Find alle drei, bevor es die Kerwasburschen tun.',
     ],
     steps: [
-      {do: 'collect', n: 3, near: 'church', r: 420, item: 'barrel', time: 160, obj: 'Finde die 3 Kerwa-Fässer'},
+      {
+        do: 'collect',
+        n: 3,
+        near: 'church',
+        r: 420,
+        item: 'barrel',
+        time: 160,
+        obj: 'Finde die 3 Kerwa-Fässer',
+      },
       {
         do: 'goto',
         to: 'fairground',

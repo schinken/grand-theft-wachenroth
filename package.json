@@ -4,9 +4,13 @@
   "type": "module",
   "scripts": {
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "lint": "eslint .",
+    "check": "prettier --check . && eslint ."
   },
   "devDependencies": {
+    "eslint": "^10.15.0",
+    "eslint-plugin-jsdoc": "^65.4.7",
+    "globals": "^17.14.0",
     "prettier": "^3.10.1"
   }
 }

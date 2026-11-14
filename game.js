@@ -9,16 +9,16 @@ import {MAP} from './map.js';
 import {MISSIONS, PLACES, RANKS, SIGNS, TALK} from './missions.js';
 
 const $ = id => document.getElementById(id);
-const cv = $('game'),
-  ctx = cv.getContext('2d');
-const TAU = Math.PI * 2,
-  PPM = 8,
-  W = MAP.w,
-  H = MAP.h,
-  EDGE = 80;
+const cv = $('game');
+const ctx = cv.getContext('2d');
+const TAU = Math.PI * 2;
+const PPM = 8;
+const W = MAP.w;
+const H = MAP.h;
+const EDGE = 80;
 const DEBUG = location.search.includes('debug');
-let VW = 800,
-  VH = 450;
+let VW = 800;
+let VH = 450;
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -26,17 +26,21 @@ const rand = (a, b) => a + Math.random() * (b - a);
 const pick = a => a[(Math.random() * a.length) | 0];
 const wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
-const canvas = (w, h) => Object.assign(document.createElement('canvas'), {width: w, height: h});
+const canvas = (w, h) =>
+  Object.assign(document.createElement('canvas'), {width: w, height: h});
 const shade = (hex, f) =>
-  '#' +
-  [1, 3, 5]
+  `#${[1, 3, 5]
     .map(i =>
       clamp(Math.round(parseInt(hex.slice(i, i + 2), 16) * f), 0, 255)
         .toString(16)
-        .padStart(2, '0'),
+        .padStart(2, '0')
     )
-    .join('');
+    .join('')}`;
 
+/**
+ *
+ * @param seed
+ */
 function rng(seed) {
   // mulberry32, so the scenery is the same on every load
   return () => {
@@ -49,96 +53,177 @@ function rng(seed) {
 
 // ---------- geometry
 
+/**
+ *
+ * @param x
+ * @param y
+ * @param ax
+ * @param ay
+ * @param bx
+ * @param by
+ */
 function nearest(x, y, ax, ay, bx, by) {
   // closest point to (x, y) on segment a-b
-  const dx = bx - ax,
-    dy = by - ay,
-    t = clamp(((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy || 1), 0, 1);
+  const dx = bx - ax;
+  const dy = by - ay;
+  const t = clamp(
+    ((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy || 1),
+    0,
+    1
+  );
   return [ax + dx * t, ay + dy * t];
 }
 
+/**
+ *
+ * @param x
+ * @param y
+ * @param p
+ */
 function pip(x, y, p) {
   let inside = false;
-  for (let i = 0, j = p.length - 2; i < p.length; j = i, i += 2)
-    if (p[i + 1] > y !== p[j + 1] > y && x < ((p[j] - p[i]) * (y - p[i + 1])) / (p[j + 1] - p[i + 1]) + p[i])
+  for (let i = 0, j = p.length - 2; i < p.length; j = i, i += 2) {
+    if (
+      p[i + 1] > y !== p[j + 1] > y &&
+      x < ((p[j] - p[i]) * (y - p[i + 1])) / (p[j + 1] - p[i + 1]) + p[i]
+    ) {
       inside = !inside;
+    }
+  }
   return inside;
 }
 
 // Circle vs polygon: [nx, ny, depth] that pushes the circle out, or null when they do not touch.
+/**
+ *
+ * @param x
+ * @param y
+ * @param r
+ * @param p
+ */
 function pushOut(x, y, r, p) {
-  let best = 1e9,
-    qx = 0,
-    qy = 0;
+  let best = 1e9;
+  let qx = 0;
+  let qy = 0;
   for (let i = 0, j = p.length - 2; i < p.length; j = i, i += 2) {
-    const q = nearest(x, y, p[j], p[j + 1], p[i], p[i + 1]),
-      d = (x - q[0]) ** 2 + (y - q[1]) ** 2;
+    const q = nearest(x, y, p[j], p[j + 1], p[i], p[i + 1]);
+    const d = (x - q[0]) ** 2 + (y - q[1]) ** 2;
     if (d < best) {
       best = d;
       qx = q[0];
       qy = q[1];
     }
   }
-  const d = Math.sqrt(best),
-    inside = pip(x, y, p);
-  if (!inside && d >= r) return null;
-  const nx = (x - qx) / (d || 1),
-    ny = (y - qy) / (d || 1);
+  const d = Math.sqrt(best);
+  const inside = pip(x, y, p);
+  if (!inside && d >= r) {
+    return null;
+  }
+  const nx = (x - qx) / (d || 1);
+  const ny = (y - qy) / (d || 1);
   return inside ? [-nx, -ny, d + r] : [nx, ny, r - d];
 }
 
 // Uniform grid for buildings and trees.
-const CELL = 40,
-  GX = Math.ceil(W / CELL) + 4,
-  GY = Math.ceil(H / CELL) + 4;
+const CELL = 40;
+const GX = Math.ceil(W / CELL) + 4;
+const GY = Math.ceil(H / CELL) + 4;
 const cell = (v, n) => clamp(Math.floor(v / CELL) + 2, 0, n - 1);
 const grid = () => Array.from({length: GX * GY}, () => []);
 const at = (g, x, y) => g[cell(y, GY) * GX + cell(x, GX)];
+/**
+ *
+ * @param g
+ * @param o
+ * @param x0
+ * @param y0
+ * @param x1
+ * @param y1
+ */
 function gridAdd(g, o, x0, y0, x1, y1) {
-  for (let y = cell(y0, GY); y <= cell(y1, GY); y++)
-    for (let x = cell(x0, GX); x <= cell(x1, GX); x++) g[y * GX + x].push(o);
+  for (let y = cell(y0, GY); y <= cell(y1, GY); y++) {
+    for (let x = cell(x0, GX); x <= cell(x1, GX); x++) {
+      g[y * GX + x].push(o);
+    }
+  }
 }
 let stamp = 0;
+/**
+ *
+ * @param g
+ * @param x0
+ * @param y0
+ * @param x1
+ * @param y1
+ */
 function gridFind(g, x0, y0, x1, y1) {
   const out = [];
   stamp++;
-  for (let y = cell(y0, GY); y <= cell(y1, GY); y++)
-    for (let x = cell(x0, GX); x <= cell(x1, GX); x++)
-      for (const o of g[y * GX + x])
+  for (let y = cell(y0, GY); y <= cell(y1, GY); y++) {
+    for (let x = cell(x0, GX); x <= cell(x1, GX); x++) {
+      for (const o of g[y * GX + x]) {
         if (o.stamp !== stamp) {
           o.stamp = stamp;
           out.push(o);
         }
+      }
+    }
+  }
   return out;
 }
 
 // ---------- textures (all drawn here, 8 px per metre)
 
+/**
+ *
+ * @param base
+ * @param draw
+ * @param n
+ */
 function tex(base, draw, n = 64) {
   // n pixels square; the big ground textures use 128 so they repeat less
-  const c = canvas(n, n),
-    g = c.getContext('2d');
+  const c = canvas(n, n);
+  const g = c.getContext('2d');
   g.fillStyle = base;
   g.fillRect(0, 0, n, n);
-  if (draw) draw(g, rng(parseInt(base.slice(1), 16)), n);
+  if (draw) {
+    draw(g, rng(parseInt(base.slice(1), 16)), n);
+  }
   const p = ctx.createPattern(c, 'repeat');
   p.setTransform(new DOMMatrix().scaleSelf(1 / PPM));
   return p;
 }
+/**
+ *
+ * @param g
+ * @param r
+ * @param n
+ * @param cols
+ * @param w
+ * @param size
+ */
 function dots(g, r, n, cols, w = 1, size = 64) {
   for (let i = 0; i < n; i++) {
     g.fillStyle = cols[(r() * cols.length) | 0];
     g.fillRect((r() * size) | 0, (r() * size) | 0, w + ((r() * 2) | 0), 1);
   }
 }
+/**
+ *
+ * @param g
+ * @param r
+ * @param n
+ * @param cols
+ * @param size
+ */
 function blots(g, r, n, cols, size) {
   // soft patches, so lawns and tarmac are not one flat colour
   g.globalAlpha = 0.35;
   for (let i = 0; i < n; i++) {
     g.fillStyle = cols[(r() * cols.length) | 0];
-    const x = r() * size,
-      y = r() * size,
-      rad = 4 + r() * 9;
+    const x = r() * size;
+    const y = r() * size;
+    const rad = 4 + r() * 9;
     for (const [ox, oy] of [
       [0, 0],
       [size, 0],
@@ -153,6 +238,14 @@ function blots(g, r, n, cols, size) {
   }
   g.globalAlpha = 1;
 }
+/**
+ *
+ * @param g
+ * @param r
+ * @param n
+ * @param cols
+ * @param size
+ */
 function tufts(g, r, n, cols, size) {
   for (let i = 0; i < n; i++) {
     g.fillStyle = cols[(r() * cols.length) | 0];
@@ -166,9 +259,11 @@ const lawn = (base, blot, speck, tuft, flowers) =>
       blots(g, r, 26, blot, n);
       dots(g, r, 2600, speck, 1, n);
       tufts(g, r, 110, tuft, n);
-      if (flowers) dots(g, r, flowers, ['#e8e06a', '#f2f2e6', '#d86a8a', '#f2f2e6'], 1, n);
+      if (flowers) {
+        dots(g, r, flowers, ['#e8e06a', '#f2f2e6', '#d86a8a', '#f2f2e6'], 1, n);
+      }
     },
-    128,
+    128
   );
 const rows = (base, line, speck, plants) =>
   tex(
@@ -181,23 +276,24 @@ const rows = (base, line, speck, plants) =>
         g.fillRect(0, y, n, 1);
         g.fillStyle = shade(base, 1.1);
         g.fillRect(0, y + 1, n, 1); // every furrow has a dark and a sunny side
-        if (plants)
+        if (plants) {
           for (let x = (y % 8) / 2; x < n; x += 4) {
             g.fillStyle = plants[(r() * plants.length) | 0];
             g.fillRect(x, y + 2, 2, 2);
           }
+        }
       }
       dots(g, r, 900, speck, 2, n);
       g.fillStyle = shade(base, 0.72);
       g.fillRect(0, 49, n, 2);
       g.fillRect(0, 65, n, 2);
     },
-    128,
+    128
   );
 const tiles = (base, dark, light) =>
   tex(base, (g, r) => {
     // roof tiles, every one a slightly different red; rows run along the ridge
-    for (let y = 0; y < 64; y += 4)
+    for (let y = 0; y < 64; y += 4) {
       for (let x = ((y / 4) % 2) * 2 - 2; x < 64; x += 4) {
         g.fillStyle = shade(base, 0.86 + r() * 0.28);
         g.fillRect(x, y, 4, 4);
@@ -209,6 +305,7 @@ const tiles = (base, dark, light) =>
           g.fillRect(x + 1, y, 3, 1);
         }
       }
+    }
   });
 const slabs = (base, line, speck, step) =>
   tex(base, (g, r) => {
@@ -223,7 +320,9 @@ const sheet = (base, line, step) =>
   tex(base, g => {
     // corrugated metal, ribs run down the slope
     g.fillStyle = line;
-    for (let x = 0; x < 64; x += step) g.fillRect(x, 0, 1, 64);
+    for (let x = 0; x < 64; x += step) {
+      g.fillRect(x, 0, 1, 64);
+    }
   });
 
 const TEX = {
@@ -231,51 +330,73 @@ const TEX = {
     '#417a2e',
     ['#376f28', '#4b8935', '#3c782b'],
     ['#39702a', '#4a8634', '#346826', '#52913a'],
-    ['#2d6022', '#5c9c42'],
+    ['#2d6022', '#5c9c42']
   ),
   meadow: lawn(
     '#5b9440',
     ['#52893a', '#68a24a', '#5f9a42'],
     ['#538a3a', '#66a048', '#6fa84e', '#4c8236'],
     ['#467c32', '#7cb458'],
-    40,
+    40
   ),
-  forest: tex('#2c4f22', (g, r) => dots(g, r, 600, ['#25441c', '#335a27', '#1f3b18'], 2)),
-  scrub: tex('#4b7a34', (g, r) => dots(g, r, 500, ['#3c6829', '#5a8a3c', '#34591f'], 2)),
-  orchard: tex('#55903c', (g, r) => dots(g, r, 400, ['#4c8236', '#63a046', '#467a30'])),
+  forest: tex('#2c4f22', (g, r) =>
+    dots(g, r, 600, ['#25441c', '#335a27', '#1f3b18'], 2)
+  ),
+  scrub: tex('#4b7a34', (g, r) =>
+    dots(g, r, 500, ['#3c6829', '#5a8a3c', '#34591f'], 2)
+  ),
+  orchard: tex('#55903c', (g, r) =>
+    dots(g, r, 400, ['#4c8236', '#63a046', '#467a30'])
+  ),
   resi: lawn(
     '#4d8436',
     ['#457c31', '#58923e', '#4a8234'],
     ['#447a30', '#57903d', '#3e7029', '#5a9440'],
     ['#356a27', '#66a048'],
-    26,
+    26
   ),
   ind: slabs('#8b8b86', '#7b7b76', ['#84847f', '#93938e', '#7e7e79'], 32),
   com: slabs('#9c9a92', '#8c8a82', ['#94928a', '#a6a49c'], 16),
   school: slabs('#b3a98f', '#a09679', ['#a99f85', '#bdb399'], 8),
-  yard: tex('#94896c', (g, r) => dots(g, r, 600, ['#857a5e', '#a39878', '#7a7056', '#8b8b86'], 2)),
-  dump: tex('#8d867a', (g, r) => dots(g, r, 700, ['#6f6a60', '#a59e90', '#b56a4a', '#c9c5b9', '#5a564e'], 2)),
+  yard: tex('#94896c', (g, r) =>
+    dots(g, r, 600, ['#857a5e', '#a39878', '#7a7056', '#8b8b86'], 2)
+  ),
+  dump: tex('#8d867a', (g, r) =>
+    dots(g, r, 700, ['#6f6a60', '#a59e90', '#b56a4a', '#c9c5b9', '#5a564e'], 2)
+  ),
   cem: tex('#467a34', (g, r) => {
     dots(g, r, 400, ['#3e7029', '#52913a']);
-    for (let y = 6; y < 64; y += 16)
+    for (let y = 6; y < 64; y += 16) {
       for (let x = 4 + (y % 32 ? 8 : 0); x < 60; x += 16) {
         g.fillStyle = '#5b4a3a';
         g.fillRect(x, y + 4, 6, 8);
         g.fillStyle = r() < 0.5 ? '#b9b9b4' : '#8f8f8a';
         g.fillRect(x + 1, y, 4, 3);
       }
+    }
   }),
-  constr: tex('#9a8662', (g, r) => dots(g, r, 500, ['#8a7654', '#a8946e', '#7c6a4a'], 2)),
-  park: tex('#58585d', (g, r) => dots(g, r, 400, ['#505055', '#606065', '#4a4a4f'])),
+  constr: tex('#9a8662', (g, r) =>
+    dots(g, r, 500, ['#8a7654', '#a8946e', '#7c6a4a'], 2)
+  ),
+  park: tex('#58585d', (g, r) =>
+    dots(g, r, 400, ['#505055', '#606065', '#4a4a4f'])
+  ),
   play: tex('#c9b27a', (g, r) => dots(g, r, 300, ['#bba46c', '#d6c08a'])),
   clay: tex('#b5573a', (g, r) => dots(g, r, 300, ['#a84e33', '#c06343'])),
   water: tex('#2d6190', (g, r) => {
     g.fillStyle = '#4079aa';
-    for (let i = 0; i < 40; i++) g.fillRect((r() * 60) | 0, (r() * 64) | 0, 5, 1);
+    for (let i = 0; i < 40; i++) {
+      g.fillRect((r() * 60) | 0, (r() * 64) | 0, 5, 1);
+    }
   }),
   farmA: rows('#a39343', '#7f7030', ['#b3a350', '#8f823f']),
   farmB: rows('#6f5637', '#523d25', ['#7b6140', '#584226']),
-  farmC: rows('#5b4a30', '#4a3a24', ['#66543a'], ['#4f9a34', '#5fae3e', '#3f8a2c']),
+  farmC: rows(
+    '#5b4a30',
+    '#4a3a24',
+    ['#66543a'],
+    ['#4f9a34', '#5fae3e', '#3f8a2c']
+  ),
   farmD: rows('#c9ad4a', '#9f8636', ['#d8bf5c', '#b39a44']),
   asphalt: tex(
     '#48484d',
@@ -288,8 +409,8 @@ const TEX = {
       g.strokeStyle = '#38383c';
       g.lineWidth = 1;
       for (let i = 0; i < 5; i++) {
-        let x = r() * n,
-          y = r() * n;
+        let x = r() * n;
+        let y = r() * n;
         g.beginPath();
         g.moveTo(x, y);
         for (let k = 0; k < 5; k++) {
@@ -308,19 +429,25 @@ const TEX = {
       g.arc(90, 38, 3.2, 0, TAU);
       g.stroke();
     },
-    128,
+    128
   ),
   cobble: tex('#8a867c', (g, r) => {
     g.fillStyle = '#726e66';
     for (let y = 0; y < 64; y += 4) {
       g.fillRect(0, y, 64, 1);
-      for (let x = ((y / 4) % 2) * 4; x < 64; x += 8) g.fillRect(x, y, 1, 4);
+      for (let x = ((y / 4) % 2) * 4; x < 64; x += 8) {
+        g.fillRect(x, y, 1, 4);
+      }
     }
     dots(g, r, 120, ['#98948a', '#7e7a70']);
   }),
   sidewalk: slabs('#a09f97', '#8a8981', ['#96958d', '#aaa9a1'], 8),
-  dirt: tex('#8b7350', (g, r) => dots(g, r, 500, ['#7d6645', '#99815c', '#735d3e'], 2)),
-  gravel: tex('#7d776c', (g, r) => dots(g, r, 600, ['#6c675d', '#8f897d', '#5f5a51'])),
+  dirt: tex('#8b7350', (g, r) =>
+    dots(g, r, 500, ['#7d6645', '#99815c', '#735d3e'], 2)
+  ),
+  gravel: tex('#7d776c', (g, r) =>
+    dots(g, r, 600, ['#6c675d', '#8f897d', '#5f5a51'])
+  ),
   tile1: tiles('#a5432b', '#8a3421', '#b8553a'),
   tile2: tiles('#b5622f', '#964c20', '#c8773f'),
   tile3: tiles('#7c3c2b', '#652e20', '#8f4a36'),
@@ -338,11 +465,15 @@ const TEX = {
   slab: tex('#bcbcb4', (g, r) => {
     dots(g, r, 200, ['#aeaea6', '#c8c8c0']);
     g.fillStyle = '#8e8e86';
-    for (let y = 0; y < 64; y += 5) g.fillRect(0, y, 64, 1);
+    for (let y = 0; y < 64; y += 5) {
+      g.fillRect(0, y, 64, 1);
+    }
   }),
-  concrete: tex('#b4b4ae', (g, r) => dots(g, r, 300, ['#a8a8a2', '#c0c0ba'], 2)),
+  concrete: tex('#b4b4ae', (g, r) =>
+    dots(g, r, 300, ['#a8a8a2', '#c0c0ba'], 2)
+  ),
   solar: tex('#9a9ca2', g => {
-    for (let y = 2; y < 64; y += 16)
+    for (let y = 2; y < 64; y += 16) {
       for (let x = 1; x < 64; x += 16) {
         g.fillStyle = '#1d2c4d';
         g.fillRect(x, y, 14, 11);
@@ -350,6 +481,7 @@ const TEX = {
         g.fillRect(x, y, 14, 1);
         g.fillRect(x + 7, y, 1, 11);
       }
+    }
   }),
 };
 
@@ -359,23 +491,34 @@ const CANOPY = [
   ['#24521f', '#327029', '#44883a', '#5c9f45'],
   ['#2a4a16', '#3e6a1e', '#557f28', '#6f9932'],
 ].map((cols, n) => {
-  const c = canvas(40, 40),
-    g = c.getContext('2d'),
-    r = rng(90 + n);
-  for (let k = 0; k < 4; k++)
+  const c = canvas(40, 40);
+  const g = c.getContext('2d');
+  const r = rng(90 + n);
+  for (let k = 0; k < 4; k++) {
     for (let i = 0; i < 12 - k * 2; i++) {
-      const a = r() * TAU,
-        d = r() * (13 - k * 3.4);
+      const a = r() * TAU;
+      const d = r() * (13 - k * 3.4);
       g.fillStyle = cols[k];
       g.beginPath();
-      g.arc(20 + Math.cos(a) * d - k * 1.5, 20 + Math.sin(a) * d - k * 1.5, 6 - k, 0, TAU);
+      g.arc(
+        20 + Math.cos(a) * d - k * 1.5,
+        20 + Math.sin(a) * d - k * 1.5,
+        6 - k,
+        0,
+        TAU
+      );
       g.fill();
     }
+  }
   return c;
 });
 
 // ---------- world
 
+/**
+ *
+ * @param o
+ */
 function prepPoly(o) {
   // path, bounding box, area and the direction of the longest edge
   const p = o.p;
@@ -385,13 +528,16 @@ function prepPoly(o) {
   o.area = 0;
   let len = 0;
   for (let i = 0; i < p.length; i += 2) {
-    const x = p[i],
-      y = p[i + 1],
-      j = (i + 2) % p.length,
-      ex = p[j] - x,
-      ey = p[j + 1] - y;
-    if (i) o.path.lineTo(x, y);
-    else o.path.moveTo(x, y);
+    const x = p[i];
+    const y = p[i + 1];
+    const j = (i + 2) % p.length;
+    const ex = p[j] - x;
+    const ey = p[j + 1] - y;
+    if (i) {
+      o.path.lineTo(x, y);
+    } else {
+      o.path.moveTo(x, y);
+    }
     o.x0 = Math.min(o.x0, x);
     o.y0 = Math.min(o.y0, y);
     o.x1 = Math.max(o.x1, x);
@@ -406,15 +552,16 @@ function prepPoly(o) {
   o.mx = (o.x0 + o.x1) / 2;
   o.my = (o.y0 + o.y1) / 2;
   // a local frame along the longest edge, text in it reads upright
-  const a = Math.abs(o.ang) > Math.PI / 2 ? o.ang - Math.sign(o.ang) * Math.PI : o.ang;
+  const a =
+    Math.abs(o.ang) > Math.PI / 2 ? o.ang - Math.sign(o.ang) * Math.PI : o.ang;
   o.ca = Math.cos(a);
   o.sa = Math.sin(a);
   o.lp = [];
   o.u0 = o.v0 = 1e9;
   o.u1 = o.v1 = -1e9;
   for (let i = 0; i < p.length; i += 2) {
-    const u = (p[i] - o.mx) * o.ca + (p[i + 1] - o.my) * o.sa,
-      v = (p[i + 1] - o.my) * o.ca - (p[i] - o.mx) * o.sa;
+    const u = (p[i] - o.mx) * o.ca + (p[i + 1] - o.my) * o.sa;
+    const v = (p[i + 1] - o.my) * o.ca - (p[i] - o.mx) * o.sa;
     o.lp.push(u, v);
     o.u0 = Math.min(o.u0, u);
     o.u1 = Math.max(o.u1, u);
@@ -424,41 +571,69 @@ function prepPoly(o) {
 }
 const local = o => ctx.transform(o.ca, o.sa, -o.sa, o.ca, o.mx, o.my);
 
-const AREAS = MAP.areas,
-  FARM = [TEX.farmA, TEX.farmB, TEX.farmC, TEX.farmD];
+const AREAS = MAP.areas;
+const FARM = [TEX.farmA, TEX.farmB, TEX.farmC, TEX.farmD];
 AREAS.forEach((a, i) => {
   prepPoly(a);
   a.fill = a.k === 'farm' ? FARM[i % 4] : a.k === 'pitch' ? null : TEX[a.k];
   a.lpath = new Path2D(`M${a.lp.join(' ')}Z`);
-  if (a.k !== 'park') return;
-  const ca = Math.cos(a.ang),
-    sa = Math.sin(a.ang),
-    R = Math.hypot(a.x1 - a.x0, a.y1 - a.y0) / 2; // bay lines, on the grid parkCars() fills
+  if (a.k !== 'park') {
+    return;
+  }
+  const ca = Math.cos(a.ang);
+  const sa = Math.sin(a.ang);
+  const R = Math.hypot(a.x1 - a.x0, a.y1 - a.y0) / 2; // bay lines, on the grid parkCars() fills
   a.bays = new Path2D();
-  for (let v = -R; v < R; v += 5.8)
+  for (let v = -R; v < R; v += 5.8) {
     for (let u = -R - 1.4; u < R; u += 2.8) {
-      a.bays.moveTo(a.mx + ca * u - sa * (v - 2.6), a.my + sa * u + ca * (v - 2.6));
-      a.bays.lineTo(a.mx + ca * u - sa * (v + 2.6), a.my + sa * u + ca * (v + 2.6));
+      a.bays.moveTo(
+        a.mx + ca * u - sa * (v - 2.6),
+        a.my + sa * u + ca * (v - 2.6)
+      );
+      a.bays.lineTo(
+        a.mx + ca * u - sa * (v + 2.6),
+        a.my + sa * u + ca * (v + 2.6)
+      );
     }
+  }
 });
 
-const DRIVE = ['secondary', 'tertiary', 'unclassified', 'residential', 'living_street', 'service'];
+const DRIVE = [
+  'secondary',
+  'tertiary',
+  'unclassified',
+  'residential',
+  'living_street',
+  'service',
+];
 const FOOT = ['path', 'footway', 'steps', 'cycleway'];
 const town = r => r.n && !/^(St|ERH|BA) /.test(r.n); // a street with a name, so it has pavements and people
 for (const r of MAP.roads) {
   r.path = new Path2D();
-  for (let i = 0; i < r.p.length; i += 2)
-    if (i) r.path.lineTo(r.p[i], r.p[i + 1]);
-    else r.path.moveTo(r.p[i], r.p[i + 1]);
+  for (let i = 0; i < r.p.length; i += 2) {
+    if (i) {
+      r.path.lineTo(r.p[i], r.p[i + 1]);
+    } else {
+      r.path.moveTo(r.p[i], r.p[i + 1]);
+    }
+  }
 }
+/**
+ *
+ * @param ok
+ * @param extra
+ */
 function layer(ok, extra = 0) {
   // one path per stroke width
   const out = new Map();
-  for (const r of MAP.roads)
+  for (const r of MAP.roads) {
     if (ok(r)) {
-      if (!out.has(r.w + extra)) out.set(r.w + extra, new Path2D());
+      if (!out.has(r.w + extra)) {
+        out.set(r.w + extra, new Path2D());
+      }
       out.get(r.w + extra).addPath(r.path);
     }
+  }
   return [...out];
 }
 const is =
@@ -480,24 +655,36 @@ const ROADS = {
 };
 
 // Road graph: `car` links carry the through traffic, `gps` links are everything you can drive, `walk` is for people.
-const NODES = [],
-  LINKS = [];
-for (let i = 0; i < MAP.nodes.length; i += 2)
-  NODES.push({x: MAP.nodes[i], y: MAP.nodes[i + 1], w: 0, car: [], walk: [], gps: []});
+const NODES = [];
+const LINKS = [];
+for (let i = 0; i < MAP.nodes.length; i += 2) {
+  NODES.push({
+    x: MAP.nodes[i],
+    y: MAP.nodes[i + 1],
+    w: 0,
+    car: [],
+    walk: [],
+    gps: [],
+  });
+}
 for (let i = 0; i < MAP.edges.length; i += 4) {
-  const a = MAP.edges[i],
-    b = MAP.edges[i + 1],
-    road = MAP.roads[MAP.edges[i + 2]],
-    f = MAP.edges[i + 3],
-    len = dist(NODES[a], NODES[b]);
+  const a = MAP.edges[i];
+  const b = MAP.edges[i + 1];
+  const road = MAP.roads[MAP.edges[i + 2]];
+  const f = MAP.edges[i + 3];
+  const len = dist(NODES[a], NODES[b]);
   if (f & 2) {
     NODES[a].car.push({n: b, w: road.w});
-    if (!(f & 4)) NODES[b].car.push({n: a, w: road.w});
+    if (!(f & 4)) {
+      NODES[b].car.push({n: a, w: road.w});
+    }
   }
   if (f & 9) {
     // the sat-nav likes main roads and avoids farm tracks, like somebody who lives here
     const l = [a, b];
-    l.k = {track: 3, service: 1.5, living_street: 1.25, residential: 1.1}[road.t] || 1;
+    l.k =
+      {track: 3, service: 1.5, living_street: 1.25, residential: 1.1}[road.t] ||
+      1;
     NODES[a].gps.push({n: b, cost: len * l.k});
     NODES[b].gps.push({n: a, cost: len * l.k});
     LINKS.push(l);
@@ -511,8 +698,8 @@ for (let i = 0; i < MAP.edges.length; i += 4) {
 }
 
 // Low-res ground lookup, 2 m per cell. Bits: 1 = hard surface, 2 = passage under a building, 4 = road, 8 = deep water.
-const SW = (W + 2 * EDGE) >> 1,
-  SH = (H + 2 * EDGE) >> 1;
+const SW = (W + 2 * EDGE) >> 1;
+const SH = (H + 2 * EDGE) >> 1;
 const SURF = (() => {
   const sheet = () => {
     const g = canvas(SW, SH).getContext('2d', {willReadFrequently: true});
@@ -520,53 +707,76 @@ const SURF = (() => {
     g.lineJoin = g.lineCap = 'round';
     return g;
   };
-  const g = sheet(),
-    w = sheet();
+  const g = sheet();
+  const w = sheet();
   g.globalCompositeOperation = 'lighter';
   g.fillStyle = '#f00';
-  for (const a of AREAS) if (['park', 'ind', 'com', 'school', 'yard'].includes(a.k)) g.fill(a.path);
+  for (const a of AREAS) {
+    if (['park', 'ind', 'com', 'school', 'yard'].includes(a.k)) {
+      g.fill(a.path);
+    }
+  }
   w.fillStyle = w.strokeStyle = '#fff';
-  for (const a of AREAS) if (a.k === 'water') w.fill(a.path);
-  for (const r of MAP.roads)
+  for (const a of AREAS) {
+    if (a.k === 'water') {
+      w.fill(a.path);
+    }
+  }
+  for (const r of MAP.roads) {
     if (r.t === 'river') {
       w.lineWidth = r.w - 1.5;
       w.stroke(r.path);
     }
+  }
   w.strokeStyle = '#000';
   for (const r of MAP.roads) {
-    const road = DRIVE.includes(r.t),
-      way = road || r.t === 'track' || FOOT.includes(r.t);
+    const road = DRIVE.includes(r.t);
+    const way = road || r.t === 'track' || FOOT.includes(r.t);
     if (way) {
       w.lineWidth = r.w + 5;
       w.stroke(r.path);
     } // every road and path bridges the water
-    if (!road && r.t !== 'track') continue;
+    if (!road && r.t !== 'track') {
+      continue;
+    }
     g.lineWidth = r.w + (road ? 4 : 1);
     g.strokeStyle = '#f00';
     g.stroke(r.path); // kerbs and pavements are hard ground too
-    if (!road) continue;
+    if (!road) {
+      continue;
+    }
     g.lineWidth = r.w + 1;
     g.strokeStyle = r.u ? '#0ff' : '#00f';
     g.stroke(r.path);
   }
-  const d = g.getImageData(0, 0, SW, SH).data,
-    dw = w.getImageData(0, 0, SW, SH).data,
-    out = new Uint8Array(SW * SH);
-  for (let i = 0; i < out.length; i++)
-    out[i] = (d[i * 4] > 99) | ((d[i * 4 + 1] > 99) << 1) | ((d[i * 4 + 2] > 99) << 2) | ((dw[i * 4] > 140) << 3);
+  const d = g.getImageData(0, 0, SW, SH).data;
+  const dw = w.getImageData(0, 0, SW, SH).data;
+  const out = new Uint8Array(SW * SH);
+  for (let i = 0; i < out.length; i++) {
+    out[i] =
+      (d[i * 4] > 99) |
+      ((d[i * 4 + 1] > 99) << 1) |
+      ((d[i * 4 + 2] > 99) << 2) |
+      ((dw[i * 4] > 140) << 3);
+  }
   return out;
 })();
+/**
+ *
+ * @param x
+ * @param y
+ */
 function surfAt(x, y) {
-  const ix = (x + EDGE) >> 1,
-    iy = (y + EDGE) >> 1;
+  const ix = (x + EDGE) >> 1;
+  const iy = (y + EDGE) >> 1;
   return ix < 0 || iy < 0 || ix >= SW || iy >= SH ? 0 : SURF[iy * SW + ix];
 }
 
 // Every stretch of road: [ax, ay, bx, by, width, length, road].
 const SEGS = [];
-for (const r of MAP.roads)
-  if (DRIVE.includes(r.t) || r.t === 'track')
-    for (let i = 0; i + 3 < r.p.length; i += 2)
+for (const r of MAP.roads) {
+  if (DRIVE.includes(r.t) || r.t === 'track') {
+    for (let i = 0; i + 3 < r.p.length; i += 2) {
       SEGS.push([
         r.p[i],
         r.p[i + 1],
@@ -576,15 +786,28 @@ for (const r of MAP.roads)
         Math.hypot(r.p[i + 2] - r.p[i], r.p[i + 3] - r.p[i + 1]),
         r,
       ]);
+    }
+  }
+}
 const SEGMAX = Math.max(...SEGS.map(s => s[5]));
 
 // ---------- buildings: walls lean away from the camera, roofs get a ridge and two slopes
 
-const BUILD = MAP.buildings,
-  BG = grid(),
-  LIGHT = [0.6, 0.8]; // faces turned south-east lie in shadow
+const BUILD = MAP.buildings;
+const BG = grid();
+const LIGHT = [0.6, 0.8]; // faces turned south-east lie in shadow
 const WALLS = {
-  h: ['#e8dfc8', '#f1ead8', '#d9c9a4', '#e3d0c0', '#f0e6b8', '#efe9df', '#dfe3d8', '#e6c79c', '#d6b596'],
+  h: [
+    '#e8dfc8',
+    '#f1ead8',
+    '#d9c9a4',
+    '#e3d0c0',
+    '#f0e6b8',
+    '#efe9df',
+    '#dfe3d8',
+    '#e6c79c',
+    '#d6b596',
+  ],
   y: ['#cdbf9f', '#b99f7a', '#8f7152', '#d9cfb8'],
   i: ['#c8ccd2', '#d9dbde', '#b7bcc4', '#c4c8bc'],
   g: ['#d8d4c8', '#c9c5b9', '#e2ddd0'],
@@ -596,21 +819,28 @@ const WALLS = {
   x: ['#b9b9b2', '#a9a9a2'],
   d: ['#8a6a48', '#a07a50', '#6f7f5a', '#7a5a3c', '#9a8f7a'],
 };
+/**
+ *
+ * @param b
+ * @param rise
+ */
 function ridge(b, rise) {
   // split the outline along its long axis into the two slopes of a gable roof
-  const mid = (b.v0 + b.v1) / 2,
-    lp = b.lp,
-    n = lp.length;
+  const mid = (b.v0 + b.v1) / 2;
+  const lp = b.lp;
+  const n = lp.length;
   b.halves = [[], []];
   b.gables = [];
   for (let i = 0, k = 0; i < n; i += 2, k++) {
-    const j = (i + 2) % n,
-      da = lp[i + 1] - mid,
-      db = lp[j + 1] - mid;
+    const j = (i + 2) % n;
+    const da = lp[i + 1] - mid;
+    const db = lp[j + 1] - mid;
     b.halves[da >= 0 ? 0 : 1].push(lp[i], lp[i + 1], 0);
-    if (da >= 0 === db >= 0) continue;
-    const t = da / (da - db),
-      x = lp[i] + (lp[j] - lp[i]) * t;
+    if (da >= 0 === db >= 0) {
+      continue;
+    }
+    const t = da / (da - db);
+    const x = lp[i] + (lp[j] - lp[i]) * t;
     b.halves[0].push(x, mid, 1);
     b.halves[1].push(x, mid, 1);
     b.gables.push([k, lp[i], lp[i + 1], x, mid, lp[j], lp[j + 1]]);
@@ -618,37 +848,50 @@ function ridge(b, rise) {
   b.rh = rise;
   const lit = -b.sa * LIGHT[0] + b.ca * LIGHT[1]; // how much the first slope faces the dark side
   b.tint = [lit, -lit].map(v =>
-    v > 0 ? `rgba(0,0,0,${(0.3 * v).toFixed(2)})` : `rgba(255,240,210,${(-0.18 * v).toFixed(2)})`,
+    v > 0
+      ? `rgba(0,0,0,${(0.3 * v).toFixed(2)})`
+      : `rgba(255,240,210,${(-0.18 * v).toFixed(2)})`
   );
   const xs = b.gables.map(g => g[3]);
   b.rx0 = Math.min(...xs);
   b.rx1 = Math.max(...xs);
   b.ry = mid;
 }
+/**
+ *
+ * @param b
+ * @param r
+ */
 function prepBuilding(b, r) {
   prepPoly(b);
-  const base = pick2(WALLS[b.k] || WALLS.h, r),
-    wide = b.v1 - b.v0;
+  const base = pick2(WALLS[b.k] || WALLS.h, r);
+  const wide = b.v1 - b.v0;
   b.nx = [];
   b.ny = [];
   b.wall = [];
   for (let i = 0; i < b.p.length; i += 2) {
-    const j = (i + 2) % b.p.length,
-      ex = b.p[j] - b.p[i],
-      ey = b.p[j + 1] - b.p[i + 1],
-      l = Math.hypot(ex, ey) || 1;
+    const j = (i + 2) % b.p.length;
+    const ex = b.p[j] - b.p[i];
+    const ey = b.p[j + 1] - b.p[i + 1];
+    const l = Math.hypot(ex, ey) || 1;
     b.nx.push(ey / l);
     b.ny.push(-ex / l); // outward, polygons are clockwise
-    b.wall.push(shade(base, 0.78 - 0.22 * ((ey / l) * LIGHT[0] - (ex / l) * LIGHT[1])));
+    b.wall.push(
+      shade(base, 0.78 - 0.22 * ((ey / l) * LIGHT[0] - (ex / l) * LIGHT[1]))
+    );
   }
   b.lpath = new Path2D();
-  for (let i = 0; i < b.lp.length; i += 2)
-    if (i) b.lpath.lineTo(b.lp[i], b.lp[i + 1]);
-    else b.lpath.moveTo(b.lp[i], b.lp[i + 1]);
+  for (let i = 0; i < b.lp.length; i += 2) {
+    if (i) {
+      b.lpath.lineTo(b.lp[i], b.lp[i + 1]);
+    } else {
+      b.lpath.moveTo(b.lp[i], b.lp[i + 1]);
+    }
+  }
   b.lpath.closePath();
-  const k = b.k,
-    big = b.a > 900,
-    v = r();
+  const k = b.k;
+  const big = b.a > 900;
+  const v = r();
   let gable = b.p.length <= 28 && wide > 2.5;
   if (k === 's' || k === 't') {
     b.roof = k === 's' ? TEX.concrete : TEX.slate;
@@ -663,114 +906,182 @@ function prepBuilding(b, r) {
   } else if (k === 'o') {
     b.roof = TEX.flatLight;
     gable = false;
-  } else if (k === 'c') b.roof = TEX.slate;
-  else if (k === 'm') {
+  } else if (k === 'c') {
+    b.roof = TEX.slate;
+  } else if (k === 'm') {
     b.roof = b.a > 1500 ? TEX.flatLight : TEX.flat;
     gable = false;
   } else if (k === 'i') {
-    b.roof = big ? [TEX.solar, TEX.flatLight, TEX.metal, TEX.flat][(v * 4) | 0] : TEX.metal;
+    b.roof = big
+      ? [TEX.solar, TEX.flatLight, TEX.metal, TEX.flat][(v * 4) | 0]
+      : TEX.metal;
     gable = !big || b.roof === TEX.metal;
   } else if (k === 'g') {
     b.roof = v < 0.5 ? TEX.tar : v < 0.75 ? TEX.flat : TEX.tile3;
     gable = gable && v >= 0.75;
-  } else if (k === 'y')
+  } else if (k === 'y') {
     b.roof =
-      b.a > 350 ? [TEX.metalRed, TEX.metal, TEX.tile3][(v * 3) | 0] : [TEX.tile3, TEX.tile2, TEX.tile4][(v * 3) | 0];
-  else if (big) {
+      b.a > 350
+        ? [TEX.metalRed, TEX.metal, TEX.tile3][(v * 3) | 0]
+        : [TEX.tile3, TEX.tile2, TEX.tile4][(v * 3) | 0];
+  } else if (big) {
     b.roof = v < 0.5 ? TEX.flat : TEX.flatLight;
     gable = false;
-  } else
+  } else {
     b.roof =
       b.a > 350
         ? [TEX.tile3, TEX.tile4, TEX.metalRed, TEX.slate][(v * 4) | 0]
-        : [TEX.tile1, TEX.tile1, TEX.tile2, TEX.tile4, TEX.tile3, TEX.slate][(v * 6) | 0];
+        : [TEX.tile1, TEX.tile1, TEX.tile2, TEX.tile4, TEX.tile3, TEX.slate][
+            (v * 6) | 0
+          ];
+  }
   const metal = b.roof === TEX.metal || b.roof === TEX.metalRed;
-  if (gable) ridge(b, k === 'c' ? clamp(wide * 0.45, 2, 6) : clamp(wide * (metal ? 0.14 : 0.27), 0.7, 3.4));
-  if (b.halves && b.gables.length < 2) b.halves = null;
-  if (b.halves && k === 'h' && b.a > 60) b.chim = [lerp(b.rx0, b.rx1, 0.25 + r() * 0.5), b.ry + (r() < 0.5 ? -1 : 1)];
-  if (b.halves && k === 'h' && b.a > 80 && r() < 0.22) b.pv = r() < 0.5 ? 0 : 1; // solar panels on one slope
+  if (gable) {
+    ridge(
+      b,
+      k === 'c'
+        ? clamp(wide * 0.45, 2, 6)
+        : clamp(wide * (metal ? 0.14 : 0.27), 0.7, 3.4)
+    );
+  }
+  if (b.halves && b.gables.length < 2) {
+    b.halves = null;
+  }
+  if (b.halves && k === 'h' && b.a > 60) {
+    b.chim = [
+      lerp(b.rx0, b.rx1, 0.25 + r() * 0.5),
+      b.ry + (r() < 0.5 ? -1 : 1),
+    ];
+  }
+  if (b.halves && k === 'h' && b.a > 80 && r() < 0.22) {
+    b.pv = r() < 0.5 ? 0 : 1;
+  } // solar panels on one slope
   if (!b.halves && !b.apex && b.a > 400 && k !== 'o')
-    // vents and air conditioning on flat roofs
+  // vents and air conditioning on flat roofs
+  {
     b.units = Array.from({length: Math.min(6, (b.a / 500) | 0) + 1}, () => [
       lerp(b.u0, b.u1, 0.15 + r() * 0.7),
       lerp(b.v0, b.v1, 0.2 + r() * 0.6),
       1.5 + r() * 2,
     ]);
+  }
   b.floors = clamp(Math.round(b.h / 3), 1, 3);
-  if (k !== 'o') gridAdd(BG, b, b.x0 - 3, b.y0 - 3, b.x1 + 3, b.y1 + 3);
+  if (k !== 'o') {
+    gridAdd(BG, b, b.x0 - 3, b.y0 - 3, b.x1 + 3, b.y1 + 3);
+  }
 }
 const pick2 = (a, r) => a[(r() * a.length) | 0];
 {
   // Not on the map, so made up: Röckelein's yard with silos and stacks of concrete slabs, and garden sheds
-  const r = rng(7),
-    [wx, wy] = MAP.pois.works,
-    [mx, my] = MAP.pois.depot,
-    yard = AREAS.find(a => a.k === 'ind' && pip(wx, wy, a.p));
+  const r = rng(7);
+  const [wx, wy] = MAP.pois.works;
+  const [mx, my] = MAP.pois.depot;
+  const yard = AREAS.find(a => a.k === 'ind' && pip(wx, wy, a.p));
   const boxes = BUILD.map(b => {
-    const xs = b.p.filter((v, i) => i % 2 === 0),
-      ys = b.p.filter((v, i) => i % 2);
+    const xs = b.p.filter((v, i) => i % 2 === 0);
+    const ys = b.p.filter((v, i) => i % 2);
     return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
   });
   const free = (x, y, rad) =>
-    !boxes.some(b => x > b[0] - rad && x < b[2] + rad && y > b[1] - rad && y < b[3] + rad) &&
+    !boxes.some(
+      b => x > b[0] - rad && x < b[2] + rad && y > b[1] - rad && y < b[3] + rad
+    ) &&
     ![0, 1, 2, 3, 4, 5, 6, 7].some(
-      i => surfAt(x + Math.cos((i * TAU) / 8) * rad, y + Math.sin((i * TAU) / 8) * rad) & 4,
+      i =>
+        surfAt(
+          x + Math.cos((i * TAU) / 8) * rad,
+          y + Math.sin((i * TAU) / 8) * rad
+        ) & 4
     );
   const add = (pts, h, k) => {
     BUILD.push({p: pts, h, a: 20, k});
     boxes.push([pts[0] - 8, pts[1] - 8, pts[0] + 8, pts[1] + 8]);
   };
   const spots = [];
-  for (let y = yard ? yard.y0 : 0; yard && y < yard.y1; y += 9)
-    for (let x = yard.x0; x < yard.x1; x += 11)
-      if (pip(x, y, yard.p) && free(x, y, 7)) spots.push([x, y, Math.hypot(x - mx, y - my)]);
+  for (let y = yard ? yard.y0 : 0; yard && y < yard.y1; y += 9) {
+    for (let x = yard.x0; x < yard.x1; x += 11) {
+      if (pip(x, y, yard.p) && free(x, y, 7)) {
+        spots.push([x, y, Math.hypot(x - mx, y - my)]);
+      }
+    }
+  }
   spots.sort((a, b) => a[2] - b[2]);
-  for (const [x, y] of spots.filter(q => q[2] > 16).slice(0, 2))
+  for (const [x, y] of spots.filter(q => q[2] > 16).slice(0, 2)) {
     for (let i = -1; i < 2; i++) {
       // two clusters of three silos
       const pts = [];
-      for (let k = 0; k < 10; k++)
-        pts.push(x + i * 6.4 + Math.cos((k * TAU) / 10) * 2.9, y + Math.sin((k * TAU) / 10) * 2.9);
+      for (let k = 0; k < 10; k++) {
+        pts.push(
+          x + i * 6.4 + Math.cos((k * TAU) / 10) * 2.9,
+          y + Math.sin((k * TAU) / 10) * 2.9
+        );
+      }
       add(pts, 13, 's');
     }
-  for (const [x, y, d] of spots)
+  }
+  for (const [x, y, d] of spots) {
     if (d > 30 && free(x, y, 6) && r() < 0.45) {
-      const w = 2.6 + r() * 2.2,
-        l = 1.3;
-      add([x - w, y - l, x + w, y - l, x + w, y + l, x - w, y + l], 0.8 + r() * 1.8, 'x');
+      const w = 2.6 + r() * 2.2;
+      const l = 1.3;
+      add(
+        [x - w, y - l, x + w, y - l, x + w, y + l, x - w, y + l],
+        0.8 + r() * 1.8,
+        'x'
+      );
     }
+  }
   for (const b of [...BUILD]) {
     // every house remembers its street; every third one gets a shed in the back garden
-    if (b.k !== 'h' || b.a < 50 || b.a > 420) continue;
-    const n = b.p.length / 2,
-      cx = b.p.reduce((sum, v, i) => (i % 2 ? sum : sum + v), 0) / n,
-      cy = b.p.reduce((sum, v, i) => (i % 2 ? sum + v : sum), 0) / n;
-    let far = 32,
-      q = null,
-      seg = null;
+    if (b.k !== 'h' || b.a < 50 || b.a > 420) {
+      continue;
+    }
+    const n = b.p.length / 2;
+    const cx = b.p.reduce((sum, v, i) => (i % 2 ? sum : sum + v), 0) / n;
+    const cy = b.p.reduce((sum, v, i) => (i % 2 ? sum + v : sum), 0) / n;
+    let far = 32;
+    let q = null;
+    let seg = null;
     for (const sg of SEGS) {
-      if (Math.abs(sg[0] - cx) > 160 || Math.abs(sg[1] - cy) > 160 || !town(sg[6])) continue;
-      const pt = nearest(cx, cy, sg[0], sg[1], sg[2], sg[3]),
-        d = Math.hypot(cx - pt[0], cy - pt[1]);
+      if (
+        Math.abs(sg[0] - cx) > 160 ||
+        Math.abs(sg[1] - cy) > 160 ||
+        !town(sg[6])
+      ) {
+        continue;
+      }
+      const pt = nearest(cx, cy, sg[0], sg[1], sg[2], sg[3]);
+      const d = Math.hypot(cx - pt[0], cy - pt[1]);
       if (d < far) {
         far = d;
         q = pt;
         seg = sg;
       }
     }
-    if (!seg) continue;
-    b.rd = [q[0], q[1], seg, far];
-    const ux = (cx - q[0]) / far,
-      uy = (cy - q[1]) / far,
-      back = Math.sqrt(b.a) / 2 + 4.5 + r() * 3,
-      side = (r() - 0.5) * 9,
-      keep = r() < 0.36;
-    const sx = cx + ux * back - uy * side,
-      sy = cy + uy * back + ux * side,
-      w = 1.3 + r() * 0.5,
-      l = 1.6 + r() * 0.7;
-    if (!keep || b.a < 70 || !free(sx, sy, 3.6) || surfAt(sx, sy) || sx < 8 || sy < 8 || sx > W - 8 || sy > H - 8)
+    if (!seg) {
       continue;
+    }
+    b.rd = [q[0], q[1], seg, far];
+    const ux = (cx - q[0]) / far;
+    const uy = (cy - q[1]) / far;
+    const back = Math.sqrt(b.a) / 2 + 4.5 + r() * 3;
+    const side = (r() - 0.5) * 9;
+    const keep = r() < 0.36;
+    const sx = cx + ux * back - uy * side;
+    const sy = cy + uy * back + ux * side;
+    const w = 1.3 + r() * 0.5;
+    const l = 1.6 + r() * 0.7;
+    if (
+      !keep ||
+      b.a < 70 ||
+      !free(sx, sy, 3.6) ||
+      surfAt(sx, sy) ||
+      sx < 8 ||
+      sy < 8 ||
+      sx > W - 8 ||
+      sy > H - 8
+    ) {
+      continue;
+    }
     add(
       [
         [-w, -l],
@@ -779,7 +1090,7 @@ const pick2 = (a, r) => a[(r() * a.length) | 0];
         [-w, l],
       ].flatMap(([u, v]) => [sx + u * ux - v * uy, sy + u * uy + v * ux]),
       2.1 + r() * 0.5,
-      'd',
+      'd'
     );
   }
 }
@@ -787,19 +1098,22 @@ const pick2 = (a, r) => a[(r() * a.length) | 0];
   const r = rng(42);
   for (const b of [...BUILD]) {
     prepBuilding(b, r);
-    if (b.k !== 'c' || b.a < 250) continue;
+    if (b.k !== 'c' || b.a < 250) {
+      continue;
+    }
     // every church gets a tower at its western end
-    const west = b.ca > 0 ? b.u0 + 3.4 : b.u1 - 3.4,
-      cx = b.mx + west * b.ca,
-      cy = b.my + west * b.sa,
-      q = [];
+    const west = b.ca > 0 ? b.u0 + 3.4 : b.u1 - 3.4;
+    const cx = b.mx + west * b.ca;
+    const cy = b.my + west * b.sa;
+    const q = [];
     for (const [u, v] of [
       [-3.4, -3.4],
       [3.4, -3.4],
       [3.4, 3.4],
       [-3.4, 3.4],
-    ])
+    ]) {
       q.push(cx + u * b.ca - v * b.sa, cy + u * b.sa + v * b.ca);
+    }
     const t = {p: q, h: 15, a: 46, k: 't'};
     BUILD.push(t);
     prepBuilding(t, r);
@@ -807,8 +1121,8 @@ const pick2 = (a, r) => a[(r() * a.length) | 0];
 }
 const SOLID = BUILD.filter(b => b.k !== 'o');
 
-const TREES = [],
-  TG = grid();
+const TREES = [];
+const TG = grid();
 {
   const r = rng(3);
   const add = (tx, ty, size) => {
@@ -820,68 +1134,121 @@ const TREES = [],
         [0, 3],
         [0, -3],
       ].some(o => surfAt(tx + o[0], ty + o[1]))
-    )
+    ) {
       return;
-    if (at(BG, tx, ty).some(b => pushOut(tx, ty, 3, b.p))) return;
-    const t = {x: tx, y: ty, r: size + r() * 1.8, h: 4 + r() * 5, s: (r() * 3) | 0};
+    }
+    if (at(BG, tx, ty).some(b => pushOut(tx, ty, 3, b.p))) {
+      return;
+    }
+    const t = {
+      x: tx,
+      y: ty,
+      r: size + r() * 1.8,
+      h: 4 + r() * 5,
+      s: (r() * 3) | 0,
+    };
     TREES.push(t);
     gridAdd(TG, t, tx - 1.6, ty - 1.6, tx + 1.6, ty + 1.6);
   };
   const plant = (a, step, chance, size, jitter = 1) => {
-    for (let y = Math.max(a.y0, -EDGE); y < Math.min(a.y1, H + EDGE); y += step)
-      for (let x = Math.max(a.x0, -EDGE); x < Math.min(a.x1, W + EDGE); x += step) {
-        const tx = x + r() * step * jitter,
-          ty = y + r() * step * jitter;
-        if (r() < chance && pip(tx, ty, a.p)) add(tx, ty, size);
+    for (
+      let y = Math.max(a.y0, -EDGE);
+      y < Math.min(a.y1, H + EDGE);
+      y += step
+    ) {
+      for (
+        let x = Math.max(a.x0, -EDGE);
+        x < Math.min(a.x1, W + EDGE);
+        x += step
+      ) {
+        const tx = x + r() * step * jitter;
+        const ty = y + r() * step * jitter;
+        if (r() < chance && pip(tx, ty, a.p)) {
+          add(tx, ty, size);
+        }
       }
+    }
   };
   for (const a of AREAS) {
-    if (a.k === 'forest') plant(a, 9, 0.85, 2.4);
-    if (a.k === 'scrub') plant(a, 11, 0.6, 1.6);
-    if (a.k === 'resi') plant(a, 24, 0.45, 2);
-    if (a.k === 'meadow') plant(a, 38, 0.25, 2.2);
-    if (a.k === 'orchard') plant(a, 8, 1, 1.4, 0.2);
-    if (a.k === 'cem') plant(a, 18, 0.5, 1.8);
+    if (a.k === 'forest') {
+      plant(a, 9, 0.85, 2.4);
+    }
+    if (a.k === 'scrub') {
+      plant(a, 11, 0.6, 1.6);
+    }
+    if (a.k === 'resi') {
+      plant(a, 24, 0.45, 2);
+    }
+    if (a.k === 'meadow') {
+      plant(a, 38, 0.25, 2.2);
+    }
+    if (a.k === 'orchard') {
+      plant(a, 8, 1, 1.4, 0.2);
+    }
+    if (a.k === 'cem') {
+      plant(a, 18, 0.5, 1.8);
+    }
   }
-  for (let i = 0; i < MAP.trees.length; i += 2) add(MAP.trees[i], MAP.trees[i + 1], 2.4);
+  for (let i = 0; i < MAP.trees.length; i += 2) {
+    add(MAP.trees[i], MAP.trees[i + 1], 2.4);
+  }
 }
 const HEDGES = new Path2D();
-for (const h of MAP.hedges)
-  for (let i = 0; i < h.length; i += 2)
-    if (i) HEDGES.lineTo(h[i], h[i + 1]);
-    else HEDGES.moveTo(h[i], h[i + 1]);
+for (const h of MAP.hedges) {
+  for (let i = 0; i < h.length; i += 2) {
+    if (i) {
+      HEDGES.lineTo(h[i], h[i + 1]);
+    } else {
+      HEDGES.moveTo(h[i], h[i + 1]);
+    }
+  }
+}
 
 const blocked = (x, y, r) => at(BG, x, y).some(b => pushOut(x, y, r, b.p));
 
 // Street furniture. Fences are painted on; lanterns and hydrants give way when a car hits them.
-const FENCES = new Path2D(),
-  PROPS = [],
-  PG = grid();
-for (const f of MAP.fences || [])
-  for (let i = 0; i < f.length; i += 2)
-    if (i) FENCES.lineTo(f[i], f[i + 1]);
-    else FENCES.moveTo(f[i], f[i + 1]);
+const FENCES = new Path2D();
+const PROPS = [];
+const PG = grid();
+for (const f of MAP.fences || []) {
+  for (let i = 0; i < f.length; i += 2) {
+    if (i) {
+      FENCES.lineTo(f[i], f[i + 1]);
+    } else {
+      FENCES.moveTo(f[i], f[i + 1]);
+    }
+  }
+}
 {
   const r = rng(5);
   for (const b of BUILD) {
     // a garden fence along the street in front of most houses, with a gap for the gate
-    if (!b.rd || r() > 0.75) continue;
-    const [qx, qy, sg, far] = b.rd,
-      dx = (sg[2] - sg[0]) / sg[5],
-      dy = (sg[3] - sg[1]) / sg[5],
-      off = sg[4] / 2 + 2.3;
-    if (far < off + 3) continue; // the house stands right at the kerb
-    const side = Math.sign((b.mx - qx) * -dy + (b.my - qy) * dx) || 1,
-      along = (qx - sg[0]) * dx + (qy - sg[1]) * dy;
-    const half = Math.max(b.u1 - b.u0, b.v1 - b.v0) / 2 + 1.5,
-      gate = along + (r() - 0.5) * half;
+    if (!b.rd || r() > 0.75) {
+      continue;
+    }
+    const [qx, qy, sg, far] = b.rd;
+    const dx = (sg[2] - sg[0]) / sg[5];
+    const dy = (sg[3] - sg[1]) / sg[5];
+    const off = sg[4] / 2 + 2.3;
+    if (far < off + 3) {
+      continue;
+    } // the house stands right at the kerb
+    const side = Math.sign((b.mx - qx) * -dy + (b.my - qy) * dx) || 1;
+    const along = (qx - sg[0]) * dx + (qy - sg[1]) * dy;
+    const half = Math.max(b.u1 - b.u0, b.v1 - b.v0) / 2 + 1.5;
+    const gate = along + (r() - 0.5) * half;
     let from = null;
     for (let t = Math.max(1, along - half); ; t += 0.5) {
-      const x = sg[0] + dx * t - dy * off * side,
-        y = sg[1] + dy * t + dx * off * side;
+      const x = sg[0] + dx * t - dy * off * side;
+      const y = sg[1] + dy * t + dx * off * side;
       const ok =
-        t < Math.min(sg[5] - 1, along + half) && Math.abs(t - gate) > 1.5 && !(surfAt(x, y) & 4) && !blocked(x, y, 0.7);
-      if (ok && !from) from = [x, y];
+        t < Math.min(sg[5] - 1, along + half) &&
+        Math.abs(t - gate) > 1.5 &&
+        !(surfAt(x, y) & 4) &&
+        !blocked(x, y, 0.7);
+      if (ok && !from) {
+        from = [x, y];
+      }
       if (!ok && from) {
         if (Math.hypot(x - from[0], y - from[1]) > 2) {
           FENCES.moveTo(from[0], from[1]);
@@ -889,7 +1256,9 @@ for (const f of MAP.fences || [])
         }
         from = null;
       }
-      if (t > along + half) break;
+      if (t > along + half) {
+        break;
+      }
     }
   }
   const crossings = NODES.filter(n => n.gps.length > 2);
@@ -901,68 +1270,89 @@ for (const f of MAP.fences || [])
       x > W - 6 ||
       y > H - 6 ||
       crossings.some(n => Math.hypot(n.x - x, n.y - y) < 8)
-    )
+    ) {
       return;
+    }
     const o = {k, x, y, a, down: 0, fa: 0};
     PROPS.push(o);
     gridAdd(PG, o, x - 1, y - 1, x + 1, y + 1);
   };
-  for (const road of MAP.roads)
+  for (const road of MAP.roads) {
     if (DRIVE.includes(road.t) && town(road)) {
       // a lantern every 36 m, changing sides; now and then a hydrant
-      let run = r() * 30,
-        n = (r() * 5) | 0;
+      let run = r() * 30;
+      let n = (r() * 5) | 0;
       for (let i = 0; i + 3 < road.p.length; i += 2) {
-        const ax = road.p[i],
-          ay = road.p[i + 1],
-          len = Math.hypot(road.p[i + 2] - ax, road.p[i + 3] - ay) || 1,
-          dx = (road.p[i + 2] - ax) / len,
-          dy = (road.p[i + 3] - ay) / len;
+        const ax = road.p[i];
+        const ay = road.p[i + 1];
+        const len = Math.hypot(road.p[i + 2] - ax, road.p[i + 3] - ay) || 1;
+        const dx = (road.p[i + 2] - ax) / len;
+        const dy = (road.p[i + 3] - ay) / len;
         for (; run < len; run += 36, n++) {
-          const side = n % 2 ? 1 : -1,
-            off = road.w / 2 + 1.1;
+          const side = n % 2 ? 1 : -1;
+          const off = road.w / 2 + 1.1;
           put(
             'lamp',
             ax + dx * run - dy * off * side,
             ay + dy * run + dx * off * side,
-            Math.atan2(-dx * side, dy * side),
+            Math.atan2(-dx * side, dy * side)
           );
-          if (n % 4 === 1 && run + 15 < len)
+          if (n % 4 === 1 && run + 15 < len) {
             put(
               'hydrant',
               ax + dx * (run + 15) + dy * (off - 0.2) * side,
               ay + dy * (run + 15) - dx * (off - 0.2) * side,
-              0,
+              0
             );
+          }
         }
         run -= len;
       }
     }
+  }
 }
+/**
+ *
+ * @param p
+ * @param c
+ */
 function knock(p, c) {
   // a car takes a lantern or a hydrant with it
-  if (Math.hypot(c.vx, c.vy) < 2.5) return;
+  if (Math.hypot(c.vx, c.vy) < 2.5) {
+    return;
+  }
   p.down = 1;
   p.fa = Math.atan2(c.vy, c.vx);
   c.vx *= 0.88;
   c.vy *= 0.88;
   damage(c, 8);
-  for (let i = 0; i < 5; i++) puff(p.x, p.y, 'spark');
+  for (let i = 0; i < 5; i++) {
+    puff(p.x, p.y, 'spark');
+  }
   if (p.k === 'hydrant') {
     S.sprays.push({x: p.x, y: p.y, t: 10});
-    if (dist(p, S.P) < 90) audio.play('splash');
+    if (dist(p, S.P) < 90) {
+      audio.play('splash');
+    }
   }
-  if (c === S.P.car) float(p, p.k === 'hydrant' ? 'PLATSCH!' : 'KLONK!', '#ff5a1f');
+  if (c === S.P.car) {
+    float(p, p.k === 'hydrant' ? 'PLATSCH!' : 'KLONK!', '#ff5a1f');
+  }
 }
 
 // Where you pull up for a place: at the edge of the nearest road, on the side the place is on.
+/**
+ *
+ * @param x
+ * @param y
+ */
 function roadside(x, y) {
-  let best = 1e9,
-    q = null,
-    seg = null;
+  let best = 1e9;
+  let q = null;
+  let seg = null;
   for (const s of SEGS) {
-    const p = nearest(x, y, s[0], s[1], s[2], s[3]),
-      d = Math.hypot(x - p[0], y - p[1]);
+    const p = nearest(x, y, s[0], s[1], s[2], s[3]);
+    const d = Math.hypot(x - p[0], y - p[1]);
     if (d < best) {
       best = d;
       q = p;
@@ -971,20 +1361,27 @@ function roadside(x, y) {
   }
   const a = Math.atan2(seg[3] - seg[1], seg[2] - seg[0]);
   for (let off = Math.min(best, seg[4] / 2 + 2); off > 0; off -= 1) {
-    const sx = q[0] + ((x - q[0]) / (best || 1)) * off,
-      sy = q[1] + ((y - q[1]) / (best || 1)) * off;
-    if (!blocked(sx, sy, 2.2)) return {x: sx, y: sy, a};
+    const sx = q[0] + ((x - q[0]) / (best || 1)) * off;
+    const sy = q[1] + ((y - q[1]) / (best || 1)) * off;
+    if (!blocked(sx, sy, 2.2)) {
+      return {x: sx, y: sy, a};
+    }
   }
   return {x: q[0], y: q[1], a};
 }
 const SPOT = {};
-for (const k in MAP.pois) SPOT[k] = Object.assign(roadside(...MAP.pois[k]), {key: k, name: PLACES[k] || k});
+for (const k in MAP.pois) {
+  SPOT[k] = Object.assign(roadside(...MAP.pois[k]), {
+    key: k,
+    name: PLACES[k] || k,
+  });
+}
 
 // Signs on the roofs of the big landmarks.
 for (const [key, text] of Object.entries(SIGNS)) {
   const [x, y] = MAP.pois[key];
-  let best = null,
-    bd = 60;
+  let best = null;
+  let bd = 60;
   for (const b of SOLID) {
     const d = pip(x, y, b.p) ? 0 : Math.hypot(b.mx - x, b.my - y);
     if (d < bd && b.k !== 't') {
@@ -992,33 +1389,51 @@ for (const [key, text] of Object.entries(SIGNS)) {
       best = b;
     }
   }
-  if (best) best.label = text;
+  if (best) {
+    best.label = text;
+  }
 }
 
 // Road distance from every junction to one place, for the yellow arrow and the police.
+/**
+ *
+ * @param o
+ * @param links
+ */
 function nearNode(o, links) {
-  let best = 0,
-    bd = 1e9;
+  let best = 0;
+  let bd = 1e9;
   NODES.forEach((n, i) => {
     const d = dist(n, o);
-    if (n[links].length && d < bd && n.x > 20 && n.y > 20 && n.x < W - 20 && n.y < H - 20) {
+    if (
+      n[links].length &&
+      d < bd &&
+      n.x > 20 &&
+      n.y > 20 &&
+      n.x < W - 20 &&
+      n.y < H - 20
+    ) {
       bd = d;
       best = i;
     }
   });
   return best;
 }
+/**
+ *
+ * @param o
+ */
 function nearLink(o) {
   // the stretch of road next to `o`: [link, x, y of the closest point on it]
-  let best = 1e9,
-    link = null,
-    qx = 0,
-    qy = 0;
+  let best = 1e9;
+  let link = null;
+  let qx = 0;
+  let qy = 0;
   for (const l of LINKS) {
-    const a = NODES[l[0]],
-      b = NODES[l[1]],
-      q = nearest(o.x, o.y, a.x, a.y, b.x, b.y),
-      d = (o.x - q[0]) ** 2 + (o.y - q[1]) ** 2;
+    const a = NODES[l[0]];
+    const b = NODES[l[1]];
+    const q = nearest(o.x, o.y, a.x, a.y, b.x, b.y);
+    const d = (o.x - q[0]) ** 2 + (o.y - q[1]) ** 2;
     if (d < best) {
       best = d;
       link = l;
@@ -1028,49 +1443,75 @@ function nearLink(o) {
   }
   return [link, qx, qy];
 }
+/**
+ *
+ * @param o
+ */
 function field(o) {
-  const d = new Float32Array(NODES.length).fill(1e9),
-    [link, x, y] = nearLink(o),
-    q = [...link];
-  for (const n of link) d[n] = Math.hypot(NODES[n].x - x, NODES[n].y - y) * link.k;
+  const d = new Float32Array(NODES.length).fill(1e9);
+  const [link, x, y] = nearLink(o);
+  const q = [...link];
+  for (const n of link) {
+    d[n] = Math.hypot(NODES[n].x - x, NODES[n].y - y) * link.k;
+  }
   while (q.length) {
     const i = q.shift();
-    for (const e of NODES[i].gps)
+    for (const e of NODES[i].gps) {
       if (d[i] + e.cost < d[e.n]) {
         d[e.n] = d[i] + e.cost;
         q.push(e.n);
       }
+    }
   }
   return d;
 }
+/**
+ *
+ * @param f
+ * @param n
+ */
 function downhill(f, n) {
   // the next junction on the shortest way to the field's origin
-  let best = -1,
-    cost = 1e9;
-  for (const e of NODES[n].gps)
+  let best = -1;
+  let cost = 1e9;
+  for (const e of NODES[n].gps) {
     if (f[e.n] < f[n] && f[e.n] + e.cost < cost) {
       cost = f[e.n] + e.cost;
       best = e.n;
     }
+  }
   return best;
 }
+/**
+ *
+ * @param f
+ * @param o
+ * @param ahead
+ */
 function waypoint(f, o, ahead) {
   // the point `ahead` metres down the road from `o`, or null where no road leads on
-  const [link, qx, qy] = nearLink(o),
-    cost = n => f[n] + Math.hypot(NODES[n].x - qx, NODES[n].y - qy) * link.k;
-  let n = cost(link[0]) < cost(link[1]) ? link[0] : link[1],
-    x = qx,
-    y = qy;
-  if (f[n] > 1e8) return null;
+  const [link, qx, qy] = nearLink(o);
+  const cost = n =>
+    f[n] + Math.hypot(NODES[n].x - qx, NODES[n].y - qy) * link.k;
+  let n = cost(link[0]) < cost(link[1]) ? link[0] : link[1];
+  let x = qx;
+  let y = qy;
+  if (f[n] > 1e8) {
+    return null;
+  }
   for (let go = ahead; ;) {
-    const N = NODES[n],
-      d = Math.hypot(N.x - x, N.y - y);
-    if (d >= go) return {x: x + ((N.x - x) / d) * go, y: y + ((N.y - y) / d) * go};
+    const N = NODES[n];
+    const d = Math.hypot(N.x - x, N.y - y);
+    if (d >= go) {
+      return {x: x + ((N.x - x) / d) * go, y: y + ((N.y - y) / d) * go};
+    }
     go -= d;
     x = N.x;
     y = N.y;
     const m = downhill(f, n);
-    if (m < 0) return {x, y};
+    if (m < 0) {
+      return {x, y};
+    }
     n = m;
   }
 }
@@ -1079,7 +1520,12 @@ function waypoint(f, o, ahead) {
 
 const TYPES = {
   car: {
-    name: ['Familienkutsche', 'Rostlaube', 'Dorfschleuder', 'Kombi vom Nachbarn'],
+    name: [
+      'Familienkutsche',
+      'Rostlaube',
+      'Dorfschleuder',
+      'Kombi vom Nachbarn',
+    ],
     L: 4.4,
     Wd: 2,
     max: 38,
@@ -1087,15 +1533,87 @@ const TYPES = {
     hp: 100,
     mass: 1,
   },
-  sport: {name: ['Sportflitzer', 'Angeberkarre'], L: 4.4, Wd: 2, max: 48, acc: 20, hp: 80, mass: 0.9},
-  van: {name: ['Kastenwagen', 'Handwerkerbus'], L: 5.6, Wd: 2.3, max: 30, acc: 11, hp: 140, mass: 1.7},
-  pizza: {name: ['Pizza-Flitzer'], L: 3.9, Wd: 1.9, max: 41, acc: 18, hp: 150, mass: 0.9},
-  police: {name: ['Streifenwagen'], L: 4.6, Wd: 2, max: 45, acc: 19, hp: 150, mass: 1.1},
-  tractor: {name: ['Bulldog'], L: 4.2, Wd: 2.3, max: 16, acc: 10, hp: 220, mass: 2.4},
-  truck: {name: ['Bierlaster'], L: 7.4, Wd: 2.5, max: 27, acc: 9, hp: 230, mass: 3},
-  tipper: {name: ['Kipper'], L: 7, Wd: 2.5, max: 26, acc: 9, hp: 250, mass: 3.2},
-  mixer: {name: ['Betonmischer'], L: 7.8, Wd: 2.6, max: 25, acc: 8.5, hp: 280, mass: 4},
-  fire: {name: ['Löschfahrzeug LF 16/12'], L: 7.2, Wd: 2.5, max: 33, acc: 12, hp: 280, mass: 3},
+  sport: {
+    name: ['Sportflitzer', 'Angeberkarre'],
+    L: 4.4,
+    Wd: 2,
+    max: 48,
+    acc: 20,
+    hp: 80,
+    mass: 0.9,
+  },
+  van: {
+    name: ['Kastenwagen', 'Handwerkerbus'],
+    L: 5.6,
+    Wd: 2.3,
+    max: 30,
+    acc: 11,
+    hp: 140,
+    mass: 1.7,
+  },
+  pizza: {
+    name: ['Pizza-Flitzer'],
+    L: 3.9,
+    Wd: 1.9,
+    max: 41,
+    acc: 18,
+    hp: 150,
+    mass: 0.9,
+  },
+  police: {
+    name: ['Streifenwagen'],
+    L: 4.6,
+    Wd: 2,
+    max: 45,
+    acc: 19,
+    hp: 150,
+    mass: 1.1,
+  },
+  tractor: {
+    name: ['Bulldog'],
+    L: 4.2,
+    Wd: 2.3,
+    max: 16,
+    acc: 10,
+    hp: 220,
+    mass: 2.4,
+  },
+  truck: {
+    name: ['Bierlaster'],
+    L: 7.4,
+    Wd: 2.5,
+    max: 27,
+    acc: 9,
+    hp: 230,
+    mass: 3,
+  },
+  tipper: {
+    name: ['Kipper'],
+    L: 7,
+    Wd: 2.5,
+    max: 26,
+    acc: 9,
+    hp: 250,
+    mass: 3.2,
+  },
+  mixer: {
+    name: ['Betonmischer'],
+    L: 7.8,
+    Wd: 2.6,
+    max: 25,
+    acc: 8.5,
+    hp: 280,
+    mass: 4,
+  },
+  fire: {
+    name: ['Löschfahrzeug LF 16/12'],
+    L: 7.2,
+    Wd: 2.5,
+    max: 33,
+    acc: 12,
+    hp: 280,
+    mass: 3,
+  },
 };
 for (const T of Object.values(TYPES)) {
   // a row of collision circles along the body
@@ -1126,24 +1644,33 @@ const PAINT = {
   van: '#eeeee8',
 };
 const SPRITES = new Map();
+/**
+ *
+ * @param kind
+ * @param col
+ * @param frame
+ */
 function carSprite(kind, col, frame = 0) {
   // drawn nose-right; col 'wreck' gives the burnt-out shell
   const key = kind + col + frame;
-  if (SPRITES.has(key)) return SPRITES.get(key);
-  const T = TYPES[kind],
-    w = Math.round(T.L * PPM),
-    h = Math.round(T.Wd * PPM),
-    c = canvas(w, h),
-    g = c.getContext('2d');
+  if (SPRITES.has(key)) {
+    return SPRITES.get(key);
+  }
+  const T = TYPES[kind];
+  const w = Math.round(T.L * PPM);
+  const h = Math.round(T.Wd * PPM);
+  const c = canvas(w, h);
+  const g = c.getContext('2d');
   const R = (x, y, ww, hh, f) => {
     g.fillStyle = f;
     g.fillRect(x, y, ww, hh);
   };
-  const wreck = col === 'wreck',
-    body = wreck ? '#2b2724' : col,
-    glass = wreck ? '#141210' : '#182533',
-    mid = h >> 1;
-  const paint = f => (wreck ? shade('#2b2724', 0.8 + (parseInt(f.slice(1, 3), 16) % 5) / 12) : f);
+  const wreck = col === 'wreck';
+  const body = wreck ? '#2b2724' : col;
+  const glass = wreck ? '#141210' : '#182533';
+  const mid = h >> 1;
+  const paint = f =>
+    wreck ? shade('#2b2724', 0.8 + (parseInt(f.slice(1, 3), 16) % 5) / 12) : f;
   const box = (x0, x1, f) => {
     // a rounded, outlined slab from x0 to x1
     R(x0 + 2, 0, x1 - x0 - 4, h, '#0b0b0d');
@@ -1167,14 +1694,23 @@ function carSprite(kind, col, frame = 0) {
       R(1, h - 5, 1, 3, '#e02a2a');
     }
   };
-  if (kind === 'car' || kind === 'sport' || kind === 'police' || kind === 'pizza') {
-    const a = Math.round(w * 0.2),
-      b = Math.round(w * 0.6);
+  if (
+    kind === 'car' ||
+    kind === 'sport' ||
+    kind === 'police' ||
+    kind === 'pizza'
+  ) {
+    const a = Math.round(w * 0.2);
+    const b = Math.round(w * 0.6);
     box(0, w, body);
-    if (kind === 'sport' && !wreck) R(2, mid - 1, w - 4, 2, '#f4f4ef');
+    if (kind === 'sport' && !wreck) {
+      R(2, mid - 1, w - 4, 2, '#f4f4ef');
+    }
     R(a, 2, b - a + 5, h - 4, glass);
     R(a + 3, 3, b - a - 3, h - 6, shade(body, 1.12));
-    if (kind === 'sport' && !wreck) R(a + 3, mid - 1, b - a - 3, 2, '#f4f4ef');
+    if (kind === 'sport' && !wreck) {
+      R(a + 3, mid - 1, b - a - 3, 2, '#f4f4ef');
+    }
     if (kind === 'police' && !wreck) {
       R(3, 1, w - 6, 2, '#1f5fbf');
       R(3, h - 3, w - 6, 2, '#1f5fbf');
@@ -1194,7 +1730,9 @@ function carSprite(kind, col, frame = 0) {
     box(0, w, body);
     R(w - 12, 2, 5, h - 4, glass);
     R(3, 2, w - 17, h - 4, shade(body, 1.06));
-    if (!wreck) R(3, mid - 1, w - 17, 3, COLORS[frame % COLORS.length]); // company stripe
+    if (!wreck) {
+      R(3, mid - 1, w - 17, 3, COLORS[frame % COLORS.length]);
+    } // company stripe
   } else if (kind === 'tractor') {
     R(1, 0, 12, 5, '#101012');
     R(1, h - 5, 12, 5, '#101012');
@@ -1213,37 +1751,49 @@ function carSprite(kind, col, frame = 0) {
     if (!wreck) {
       R(3, mid - 3, w - 20, 6, '#d99a1a');
       R(3, mid - 1, w - 20, 2, '#f6efd9');
-      for (let x = 7; x < w - 20; x += 8) R(x, 2, 1, h - 4, '#d6ccae');
+      for (let x = 7; x < w - 20; x += 8) {
+        R(x, 2, 1, h - 4, '#d6ccae');
+      }
     }
     cab(15);
   } else if (kind === 'tipper') {
     box(0, w - 14, paint('#6c6f76'));
     R(3, 3, w - 20, h - 6, paint('#8d867a'));
-    if (!wreck)
-      for (let i = 0; i < 40; i++)
+    if (!wreck) {
+      for (let i = 0; i < 40; i++) {
         R(
           3 + ((i * 37) % (w - 21)),
           3 + ((i * 53) % (h - 7)),
           2,
           1,
-          ['#6f6a60', '#a59e90', '#b56a4a', '#c9c5b9'][i % 4],
+          ['#6f6a60', '#a59e90', '#b56a4a', '#c9c5b9'][i % 4]
         );
+      }
+    }
     cab(15);
   } else if (kind === 'mixer') {
-    const dw = w - 21,
-      drum = paint('#d8d8d2');
+    const dw = w - 21;
+    const drum = paint('#d8d8d2');
     R(2, 3, w - 16, h - 6, '#26262a');
     R(5, 1, dw - 4, h - 2, '#0b0b0d');
     R(3, 3, dw, h - 6, '#0b0b0d');
     R(5, 2, dw - 4, h - 4, drum);
     R(4, 4, dw - 2, h - 8, drum);
-    if (!wreck)
-      for (let x = -4 + frame * 2; x < dw; x += 8)
+    if (!wreck) {
+      for (let x = -4 + frame * 2; x < dw; x += 8) {
         for (let y = 2; y < h - 2; y++) {
           // the spiral on the drum turns
           const xx = 3 + x + (y >> 1);
-          if (xx > 4 && xx < dw + 1 && ((y > 3 && y < h - 4) || (xx > 5 && xx < dw - 1))) R(xx, y, 2, 1, body);
+          if (
+            xx > 4 &&
+            xx < dw + 1 &&
+            ((y > 3 && y < h - 4) || (xx > 5 && xx < dw - 1))
+          ) {
+            R(xx, y, 2, 1, body);
+          }
         }
+      }
+    }
     R(5, 2, dw - 4, 1, shade(drum, 1.1));
     R(dw + 2, mid - 2, 3, 4, '#55565a');
     cab(15);
@@ -1258,7 +1808,9 @@ function carSprite(kind, col, frame = 0) {
       }
       R(5, mid - 3, w - 24, 1, '#e6e6e0');
       R(5, mid + 2, w - 24, 1, '#e6e6e0');
-      for (let x = 6; x < w - 20; x += 3) R(x, mid - 2, 1, 4, '#e6e6e0');
+      for (let x = 6; x < w - 20; x += 3) {
+        R(x, mid - 2, 1, 4, '#e6e6e0');
+      }
       R(w - 17, 1, 2, h - 2, '#f4f4ef');
     }
     R(w - 10, 2, 5, h - 4, glass);
@@ -1270,10 +1822,10 @@ function carSprite(kind, col, frame = 0) {
 }
 const TRAILERS = {grain: {L: 5.2, Wd: 2.3}, log: {L: 13, Wd: 1.8}};
 for (const [kind, T] of Object.entries(TRAILERS)) {
-  const w = (T.L * PPM) | 0,
-    h = (T.Wd * PPM) | 0,
-    c = (T.spr = canvas(w, h)),
-    g = c.getContext('2d');
+  const w = (T.L * PPM) | 0;
+  const h = (T.Wd * PPM) | 0;
+  const c = (T.spr = canvas(w, h));
+  const g = c.getContext('2d');
   const R = (x, y, ww, hh, f) => {
     g.fillStyle = f;
     g.fillRect(x, y, ww, hh);
@@ -1284,8 +1836,15 @@ for (const [kind, T] of Object.entries(TRAILERS)) {
     R(0, 1, w - 3, h - 2, '#0b0b0d');
     R(1, 2, w - 5, h - 4, '#6b4a2a');
     R(3, 4, w - 9, h - 8, '#d9b23c');
-    for (let i = 0; i < 50; i++)
-      R(3 + ((i * 29) % (w - 10)), 4 + ((i * 17) % (h - 9)), 1, 1, i % 2 ? '#f0cf5a' : '#b8922a');
+    for (let i = 0; i < 50; i++) {
+      R(
+        3 + ((i * 29) % (w - 10)),
+        4 + ((i * 17) % (h - 9)),
+        1,
+        1,
+        i % 2 ? '#f0cf5a' : '#b8922a'
+      );
+    }
     R(w - 3, h / 2 - 1, 3, 2, '#333');
   } else {
     // the maypole: white and blue, wreath at the tip
@@ -1293,18 +1852,26 @@ for (const [kind, T] of Object.entries(TRAILERS)) {
     R(w - 26, 0, 8, h, '#101012');
     R(4, 3, w - 12, h - 6, '#2a2a2e');
     R(0, h / 2 - 2, w - 6, 4, '#f4f4ef');
-    for (let x = 2; x < w - 8; x += 8) R(x, h / 2 - 2, 4, 4, '#2b62c8');
+    for (let x = 2; x < w - 8; x += 8) {
+      R(x, h / 2 - 2, 4, 4, '#2b62c8');
+    }
     R(0, h / 2 - 4, 5, 8, '#2f8f4a');
     R(w - 6, h / 2 - 1, 6, 2, '#333');
   }
 }
 
 const ICONS = {};
+/**
+ *
+ * @param kind
+ */
 function icon(kind) {
   // little pixel pictures for the things you carry around
-  if (ICONS[kind]) return ICONS[kind];
-  const c = (ICONS[kind] = canvas(12, 12)),
-    g = c.getContext('2d');
+  if (ICONS[kind]) {
+    return ICONS[kind];
+  }
+  const c = (ICONS[kind] = canvas(12, 12));
+  const g = c.getContext('2d');
   const R = (x, y, w, h, f) => {
     g.fillStyle = f;
     g.fillRect(x, y, w, h);
@@ -1342,8 +1909,11 @@ function icon(kind) {
 // ---------- state
 
 let S;
-const fmt = v => Math.round(v).toLocaleString('de-DE') + ' €';
+const fmt = v => `${Math.round(v).toLocaleString('de-DE')} €`;
 const SAVE = 'gtw-save';
+/**
+ *
+ */
 function load() {
   try {
     return JSON.parse(localStorage.getItem(SAVE));
@@ -1351,16 +1921,29 @@ function load() {
     return null;
   }
 }
+/**
+ *
+ */
 function store() {
   try {
-    localStorage.setItem(SAVE, JSON.stringify({n: S.jobN, money: S.money, stats: S.stats}));
+    localStorage.setItem(
+      SAVE,
+      JSON.stringify({n: S.jobN, money: S.money, stats: S.stats})
+    );
   } catch (e) {
     /* private mode */
   }
 }
 
+/**
+ *
+ * @param mode
+ * @param save
+ */
 function reset(mode, save) {
-  for (const p of PROPS) p.down = 0;
+  for (const p of PROPS) {
+    p.down = 0;
+  }
   S = {
     mode,
     t: 0,
@@ -1401,16 +1984,36 @@ function reset(mode, save) {
     S.money = S.shown = save.money;
     Object.assign(S.stats, save.stats);
   }
-  const hq = SPOT.hq,
-    car = makeCar(hq.x, hq.y, hq.a, 'car', '#e0b21c');
-  S.P = {x: hq.x + Math.sin(hq.a) * 2.4, y: hq.y - Math.cos(hq.a) * 2.4, a: hq.a, t: 0, car: null};
-  if (mode === 'play') Object.assign(S.cam, {x: S.P.x, y: S.P.y, z: 12});
+  const hq = SPOT.hq;
+  const car = makeCar(hq.x, hq.y, hq.a, 'car', '#e0b21c');
+  S.P = {
+    x: hq.x + Math.sin(hq.a) * 2.4,
+    y: hq.y - Math.cos(hq.a) * 2.4,
+    a: hq.a,
+    t: 0,
+    car: null,
+  };
+  if (mode === 'play') {
+    Object.assign(S.cam, {x: S.P.x, y: S.P.y, z: 12});
+  }
   car.radio = 0;
   parkCars();
-  for (let i = 0; i < 45; i++) populate(1, mode === 'play' ? 45 : 0);
-  for (let i = 0; i < 40; i++) dropCash();
+  for (let i = 0; i < 45; i++) {
+    populate(1, mode === 'play' ? 45 : 0);
+  }
+  for (let i = 0; i < 40; i++) {
+    dropCash();
+  }
 }
 
+/**
+ *
+ * @param x
+ * @param y
+ * @param a
+ * @param kind
+ * @param col
+ */
 function makeCar(x, y, a, kind, col = PAINT[kind] || pick(COLORS)) {
   const T = TYPES[kind];
   const c = {
@@ -1433,11 +2036,21 @@ function makeCar(x, y, a, kind, col = PAINT[kind] || pick(COLORS)) {
     burn: 0,
     dead: false,
     ai: null,
-    radio: kind === 'tractor' ? 1 : Math.random() < 0.15 ? -1 : (Math.random() * 4) | 0,
+    radio:
+      kind === 'tractor'
+        ? 1
+        : Math.random() < 0.15
+          ? -1
+          : (Math.random() * 4) | 0,
   };
   S.cars.push(c);
   return c;
 }
+/**
+ *
+ * @param c
+ * @param kind
+ */
 function hitch(c, kind) {
   c.tr = {kind, a: c.a, T: TRAILERS[kind]};
   return c;
@@ -1445,10 +2058,23 @@ function hitch(c, kind) {
 
 // ---------- effects
 
+/**
+ *
+ * @param x
+ * @param y
+ * @param kind
+ */
 function puff(x, y, kind) {
-  if (S.parts.length > 400) return;
-  const a = rand(0, TAU),
-    sp = kind === 'spark' ? rand(4, 12) : kind === 'blood' || kind === 'water' ? rand(1, 6) : rand(0.2, 1.5);
+  if (S.parts.length > 400) {
+    return;
+  }
+  const a = rand(0, TAU);
+  const sp =
+    kind === 'spark'
+      ? rand(4, 12)
+      : kind === 'blood' || kind === 'water'
+        ? rand(1, 6)
+        : rand(0.2, 1.5);
   S.parts.push({
     x,
     y,
@@ -1459,17 +2085,31 @@ function puff(x, y, kind) {
     max: {spark: 0.3, smoke: 1.4, blood: 0.35, fire: 0.5, water: 0.6}[kind],
   });
 }
+/**
+ *
+ * @param x
+ * @param y
+ * @param kind
+ */
 function decal(x, y, kind) {
-  for (let i = 0; i < 3; i++)
+  for (let i = 0; i < 3; i++) {
     S.decals.push({
       x: x + rand(-0.8, 0.8),
       y: y + rand(-0.8, 0.8),
       r: kind === 'blood' ? rand(0.4, 1) : rand(1.5, 2.6),
       kind,
     });
-  if (S.decals.length > 120) S.decals.splice(0, 3);
+  }
+  if (S.decals.length > 120) {
+    S.decals.splice(0, 3);
+  }
 }
-const float = (o, s, col = '#ffd23e') => S.texts.push({x: o.x, y: o.y, s, life: 1.5, col});
+const float = (o, s, col = '#ffd23e') =>
+  S.texts.push({x: o.x, y: o.y, s, life: 1.5, col});
+/**
+ *
+ * @param el
+ */
 function replay(el) {
   // show an element and restart its CSS animation
   el.hidden = false;
@@ -1477,12 +2117,21 @@ function replay(el) {
   el.offsetWidth;
   el.style.animation = '';
 }
+/**
+ *
+ * @param big
+ * @param small
+ */
 function flash(big, small = '') {
   const el = $('flash');
   el.firstElementChild.textContent = big;
   el.lastElementChild.textContent = small;
   replay(el);
 }
+/**
+ *
+ * @param text
+ */
 function info(text) {
   // small line at the bottom: car names, radio stations
   $('info').textContent = text;
@@ -1491,27 +2140,46 @@ function info(text) {
 
 // ---------- cars
 
+/**
+ *
+ * @param c
+ * @param h
+ * @param off
+ */
 function bounce(c, h, off) {
   // push a car out along [nx, ny, depth]; returns the impact speed
   c.x += h[0] * h[2];
   c.y += h[1] * h[2];
   const vn = c.vx * h[0] + c.vy * h[1];
-  if (vn >= 0) return 0;
+  if (vn >= 0) {
+    return 0;
+  }
   c.vx -= 1.3 * vn * h[0];
   c.vy -= 1.3 * vn * h[1];
   c.spin += off * (Math.cos(c.a) * h[1] - Math.sin(c.a) * h[0]) * -vn * 0.1;
   return -vn;
 }
 
+/**
+ *
+ * @param c
+ * @param imp
+ */
 function damage(c, imp) {
-  if (imp < 5 || c.dead) return;
+  if (imp < 5 || c.dead) {
+    return;
+  }
   if (dist(c, S.P) < 80 && S.t - S.crashT > 0.08) {
     S.crashT = S.t;
     audio.play('crash', imp);
-    for (let i = 0; i < 6; i++) puff(c.x, c.y, 'spark');
+    for (let i = 0; i < 6; i++) {
+      puff(c.x, c.y, 'spark');
+    }
   }
   c.hp -= ((imp - 5) * 0.55) / c.T.mass;
-  if (c.ai) c.ai.rage = 5;
+  if (c.ai) {
+    c.ai.rage = 5;
+  }
   const j = S.job;
   if (j && j.fragile && c === S.P.car) {
     // the load does not like this
@@ -1522,33 +2190,60 @@ function damage(c, imp) {
   if (c.hp <= 0 && !c.burn) {
     c.burn = 4.5;
     bail(c);
-    if (c === S.P.car) flash('Raus hier!', 'Die Karre brennt');
+    if (c === S.P.car) {
+      flash('Raus hier!', 'Die Karre brennt');
+    }
   }
 }
 
+/**
+ *
+ * @param c
+ */
 function bail(c) {
   // the driver jumps out and runs for it
-  if (!c.ai) return;
+  if (!c.ai) {
+    return;
+  }
   c.ai = null;
   c.thr = c.steer = 0;
   c.hb = false;
-  const n = nearNode(c, 'walk'),
-    p = spawnPed(c.x + Math.sin(c.a) * 2, c.y - Math.cos(c.a) * 2, n, pick(NODES[n].walk));
+  const n = nearNode(c, 'walk');
+  const p = spawnPed(
+    c.x + Math.sin(c.a) * 2,
+    c.y - Math.cos(c.a) * 2,
+    n,
+    pick(NODES[n].walk)
+  );
   p.flee = 4;
   p.a = c.a - Math.PI / 2 + rand(-0.6, 0.6);
 }
 
+/**
+ *
+ * @param c
+ */
 function explode(c) {
   c.burn = 0;
   c.dead = true;
   c.hp = 0;
   c.spr = carSprite(c.kind, 'wreck');
   bail(c);
-  S.parts.push({x: c.x, y: c.y, vx: 0, vy: 0, kind: 'boom', life: 0, max: 0.45});
-  for (let i = 0; i < 26; i++) puff(c.x + rand(-2, 2), c.y + rand(-2, 2), i % 2 ? 'fire' : 'smoke');
+  S.parts.push({
+    x: c.x,
+    y: c.y,
+    vx: 0,
+    vy: 0,
+    kind: 'boom',
+    life: 0,
+    max: 0.45,
+  });
+  for (let i = 0; i < 26; i++) {
+    puff(c.x + rand(-2, 2), c.y + rand(-2, 2), i % 2 ? 'fire' : 'smoke');
+  }
   decal(c.x, c.y, 'scorch');
-  const P = S.P,
-    far = dist(c, P);
+  const P = S.P;
+  const far = dist(c, P);
   if (far < 150) {
     audio.play('boom');
     S.shake = Math.max(S.shake, clamp(1.2 - far / 60, 0, 1));
@@ -1556,7 +2251,9 @@ function explode(c) {
   S.stats.wrecks++;
   for (const o of S.cars) {
     const d = dist(o, c);
-    if (o === c || o.dead || d > 9) continue;
+    if (o === c || o.dead || d > 9) {
+      continue;
+    }
     o.vx += ((o.x - c.x) / (d || 1)) * 7;
     o.vy += ((o.y - c.y) / (d || 1)) * 7;
     o.hp -= 60;
@@ -1565,135 +2262,235 @@ function explode(c) {
       bail(o);
     }
   }
-  for (const p of S.peds) if (dist(p, c) < 8) killPed(p);
-  if (P.car === c || (!P.car && far < 7)) waste();
+  for (const p of S.peds) {
+    if (dist(p, c) < 8) {
+      killPed(p);
+    }
+  }
+  if (P.car === c || (!P.car && far < 7)) {
+    waste();
+  }
 }
 
+/**
+ *
+ * @param c
+ */
 function sink(c) {
   // cars cannot swim
-  for (let i = 0; i < 30; i++) puff(c.x + rand(-2, 2), c.y + rand(-2, 2), 'water');
-  if (dist(c, S.P) < 150) audio.play('splash');
+  for (let i = 0; i < 30; i++) {
+    puff(c.x + rand(-2, 2), c.y + rand(-2, 2), 'water');
+  }
+  if (dist(c, S.P) < 150) {
+    audio.play('splash');
+  }
   c.dead = c.gone = true;
   c.ai = null;
-  if (S.P.car === c) waste('Abgesoffen!');
+  if (S.P.car === c) {
+    waste('Abgesoffen!');
+  }
 }
 
+/**
+ *
+ * @param c
+ * @param dt
+ */
 function stepCar(c, dt) {
   const T = c.T;
   if (c.burn > 0) {
     c.thr = 0;
-    if (Math.random() < dt * 40) puff(c.x + rand(-1, 1), c.y + rand(-1, 1), 'fire');
-    if ((c.burn -= dt) <= 0) explode(c);
-  } else if (!c.dead && c.hp < T.hp * 0.5 && Math.random() < dt * (c.hp < T.hp * 0.25 ? 16 : 6)) {
-    puff(c.x + Math.cos(c.a) * T.L * 0.35, c.y + Math.sin(c.a) * T.L * 0.35, 'smoke');
+    if (Math.random() < dt * 40) {
+      puff(c.x + rand(-1, 1), c.y + rand(-1, 1), 'fire');
+    }
+    if ((c.burn -= dt) <= 0) {
+      explode(c);
+    }
+  } else if (
+    !c.dead &&
+    c.hp < T.hp * 0.5 &&
+    Math.random() < dt * (c.hp < T.hp * 0.25 ? 16 : 6)
+  ) {
+    puff(
+      c.x + Math.cos(c.a) * T.L * 0.35,
+      c.y + Math.sin(c.a) * T.L * 0.35,
+      'smoke'
+    );
   }
-  if (c.dead) c.thr = c.steer = 0;
+  if (c.dead) {
+    c.thr = c.steer = 0;
+  }
   c.a += c.spin * dt;
   c.spin *= Math.exp(-3 * dt);
-  const ground = surfAt(c.x, c.y),
-    road = ground & 1 || c.ai;
-  if ((ground & 9) === 8 && !c.dead) return sink(c);
-  let fx = Math.cos(c.a),
-    fy = Math.sin(c.a),
-    vf = c.vx * fx + c.vy * fy;
-  c.a += ((c.steer * (c.hb ? 3.5 : 2.8)) / (1 + Math.abs(vf) / 26)) * clamp(vf / 5, -1, 1) * dt;
+  const ground = surfAt(c.x, c.y);
+  const road = ground & 1 || c.ai;
+  if ((ground & 9) === 8 && !c.dead) {
+    return sink(c);
+  }
+  let fx = Math.cos(c.a);
+  let fy = Math.sin(c.a);
+  let vf = c.vx * fx + c.vy * fy;
+  c.a +=
+    ((c.steer * (c.hb ? 3.5 : 2.8)) / (1 + Math.abs(vf) / 26)) *
+    clamp(vf / 5, -1, 1) *
+    dt;
   fx = Math.cos(c.a);
   fy = Math.sin(c.a);
   vf = c.vx * fx + c.vy * fy;
   let vl = c.vy * fx - c.vx * fy; // sideways slip
   const max = T.max * (road ? 1 : 0.7);
-  if (c.thr > 0 && vf < max) vf += T.acc * (vf < 0 ? 2.5 : 1 - (vf / max) ** 2) * c.thr * dt; // punchy launch, tapering to top speed
-  if (c.thr < 0 && vf > -max * 0.35) vf += (vf > 0 ? 30 : T.acc * 0.7) * c.thr * dt;
-  const drag = (c.thr ? 0 : 4) + (c.hb ? 12 : 0) + (Math.abs(vf) > max ? 6 : 0) + (c.dead ? 8 : 0);
+  if (c.thr > 0 && vf < max) {
+    vf += T.acc * (vf < 0 ? 2.5 : 1 - (vf / max) ** 2) * c.thr * dt;
+  } // punchy launch, tapering to top speed
+  if (c.thr < 0 && vf > -max * 0.35) {
+    vf += (vf > 0 ? 30 : T.acc * 0.7) * c.thr * dt;
+  }
+  const drag =
+    (c.thr ? 0 : 4) +
+    (c.hb ? 12 : 0) +
+    (Math.abs(vf) > max ? 6 : 0) +
+    (c.dead ? 8 : 0);
   vf -= Math.sign(vf) * Math.min(Math.abs(vf), drag * dt);
   vl *= Math.exp(-(c.hb ? 1.6 : road ? 8 : 4.5) * dt);
   if (!c.thr && Math.abs(vf) < 0.05 && Math.abs(vl) < 0.05) {
     vf = vl = 0;
-    if (Math.abs(c.spin) < 0.02) c.spin = 0;
+    if (Math.abs(c.spin) < 0.02) {
+      c.spin = 0;
+    }
   }
   c.vx = fx * vf - fy * vl;
   c.vy = fy * vf + fx * vl;
   c.vf = vf;
   c.x += c.vx * dt;
   c.y += c.vy * dt;
-  if (c.tr) c.tr.a = c.a - clamp(wrap(c.a - c.tr.a - (vf / c.tr.T.L) * Math.sin(c.a - c.tr.a) * dt), -1.3, 1.3); // the trailer swings in behind
+  if (c.tr) {
+    c.tr.a =
+      c.a -
+      clamp(
+        wrap(c.a - c.tr.a - (vf / c.tr.T.L) * Math.sin(c.a - c.tr.a) * dt),
+        -1.3,
+        1.3
+      );
+  } // the trailer swings in behind
   for (const off of T.offs) {
     // walls and tree trunks
-    const px = c.x + fx * off,
-      py = c.y + fy * off;
-    if (surfAt(px, py) & 2) continue;
+    const px = c.x + fx * off;
+    const py = c.y + fy * off;
+    if (surfAt(px, py) & 2) {
+      continue;
+    }
     for (const b of at(BG, px, py)) {
-      if (px < b.x0 - T.r || px > b.x1 + T.r || py < b.y0 - T.r || py > b.y1 + T.r) continue;
+      if (
+        px < b.x0 - T.r ||
+        px > b.x1 + T.r ||
+        py < b.y0 - T.r ||
+        py > b.y1 + T.r
+      ) {
+        continue;
+      }
       const h = pushOut(c.x + fx * off, c.y + fy * off, T.r, b.p);
-      if (h) damage(c, bounce(c, h, off));
+      if (h) {
+        damage(c, bounce(c, h, off));
+      }
     }
     for (const t of at(TG, px, py)) {
-      const dx = c.x + fx * off - t.x,
-        dy = c.y + fy * off - t.y,
-        d = Math.hypot(dx, dy);
-      if (d && d < T.r + 0.4) damage(c, bounce(c, [dx / d, dy / d, T.r + 0.4 - d], off));
+      const dx = c.x + fx * off - t.x;
+      const dy = c.y + fy * off - t.y;
+      const d = Math.hypot(dx, dy);
+      if (d && d < T.r + 0.4) {
+        damage(c, bounce(c, [dx / d, dy / d, T.r + 0.4 - d], off));
+      }
     }
-    for (const p of at(PG, px, py))
-      if (!p.down && Math.hypot(c.x + fx * off - p.x, c.y + fy * off - p.y) < T.r + 0.2) knock(p, c);
+    for (const p of at(PG, px, py)) {
+      if (
+        !p.down &&
+        Math.hypot(c.x + fx * off - p.x, c.y + fy * off - p.y) < T.r + 0.2
+      ) {
+        knock(p, c);
+      }
+    }
   }
 }
 
+/**
+ *
+ */
 function collideCars() {
-  const cs = S.cars,
-    P = S.P;
-  for (let i = 0; i < cs.length; i++)
+  const cs = S.cars;
+  const P = S.P;
+  for (let i = 0; i < cs.length; i++) {
     for (let j = i + 1; j < cs.length; j++) {
-      const a = cs[i],
-        b = cs[j];
-      if (Math.abs(a.x - b.x) > 12 || Math.abs(a.y - b.y) > 12) continue;
-      const ma = a.T.mass * (a.dead ? 2 : 1),
-        mb = b.T.mass * (b.dead ? 2 : 1),
-        min = a.T.r + b.T.r;
-      for (const oa of a.T.offs)
+      const a = cs[i];
+      const b = cs[j];
+      if (Math.abs(a.x - b.x) > 12 || Math.abs(a.y - b.y) > 12) {
+        continue;
+      }
+      const ma = a.T.mass * (a.dead ? 2 : 1);
+      const mb = b.T.mass * (b.dead ? 2 : 1);
+      const min = a.T.r + b.T.r;
+      for (const oa of a.T.offs) {
         for (const ob of b.T.offs) {
-          const dx = b.x + Math.cos(b.a) * ob - a.x - Math.cos(a.a) * oa,
-            dy = b.y + Math.sin(b.a) * ob - a.y - Math.sin(a.a) * oa;
+          const dx = b.x + Math.cos(b.a) * ob - a.x - Math.cos(a.a) * oa;
+          const dy = b.y + Math.sin(b.a) * ob - a.y - Math.sin(a.a) * oa;
           const d = Math.hypot(dx, dy);
-          if (!d || d >= min) continue;
-          const nx = dx / d,
-            ny = dy / d,
-            pen = min - d;
+          if (!d || d >= min) {
+            continue;
+          }
+          const nx = dx / d;
+          const ny = dy / d;
+          const pen = min - d;
           a.x -= (nx * pen * mb) / (ma + mb);
           a.y -= (ny * pen * mb) / (ma + mb);
           b.x += (nx * pen * ma) / (ma + mb);
           b.y += (ny * pen * ma) / (ma + mb);
           const rv = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny;
-          if (rv >= 0) continue;
+          if (rv >= 0) {
+            continue;
+          }
           const J = (-1.3 * rv) / (1 / ma + 1 / mb);
           a.vx -= (J / ma) * nx;
           a.vy -= (J / ma) * ny;
           b.vx += (J / mb) * nx;
           b.vy += (J / mb) * ny;
-          a.spin -= ((oa * (Math.cos(a.a) * ny - Math.sin(a.a) * nx) * J) / ma) * 0.1;
-          b.spin += ((ob * (Math.cos(b.a) * ny - Math.sin(b.a) * nx) * J) / mb) * 0.1;
+          a.spin -=
+            ((oa * (Math.cos(a.a) * ny - Math.sin(a.a) * nx) * J) / ma) * 0.1;
+          b.spin +=
+            ((ob * (Math.cos(b.a) * ny - Math.sin(b.a) * nx) * J) / mb) * 0.1;
           damage(a, ((-rv * mb) / (ma + mb)) * 1.6);
           damage(b, ((-rv * ma) / (ma + mb)) * 1.6);
           const other = a === P.car ? b : b === P.car ? a : null;
           if (other && -rv > 7) {
-            if (other.ai && other.ai.cop) crime(0.4); // ramming the police
+            if (other.ai && other.ai.cop) {
+              crime(0.4);
+            } // ramming the police
             if (S.job && other === S.job.prey) {
               other.hits = (other.hits || 0) + 1;
               float(other, 'RUMMS!', '#ff5a1f');
             }
           }
         }
+      }
     }
+  }
 }
 
 // ---------- traffic, police and pedestrians
 
+/**
+ *
+ * @param from
+ * @param to
+ * @param ai
+ */
 function nextNode(from, to, ai) {
   // where an AI car turns next; wide roads and gentle turns are more likely
-  const a = NODES[from],
-    b = NODES[to];
+  const a = NODES[from];
+  const b = NODES[to];
   if (ai.cop && S.copF) {
     const n = downhill(S.copF, to);
-    if (n >= 0) return n;
+    if (n >= 0) {
+      return n;
+    }
   }
   let opts = b.car.filter(e => e.n !== from);
   if (ai.flee) {
@@ -1704,80 +2501,106 @@ function nextNode(from, to, ai) {
     });
     opts = stay.length ? stay : b.car.filter(e => e.n === from);
   }
-  if (!opts.length) return -1;
+  if (!opts.length) {
+    return -1;
+  }
   const dir = Math.atan2(b.y - a.y, b.x - a.x);
   let total = 0;
   for (const e of opts) {
     const c = NODES[e.n];
-    total += e.k = e.w * e.w * (1.3 + Math.cos(Math.atan2(c.y - b.y, c.x - b.x) - dir));
+    total += e.k =
+      e.w * e.w * (1.3 + Math.cos(Math.atan2(c.y - b.y, c.x - b.x) - dir));
   }
   let r = Math.random() * total;
   return (opts.find(e => (r -= e.k) < 0) || opts[0]).n;
 }
 
+/**
+ *
+ * @param c
+ * @param dt
+ */
 function driveAI(c, dt) {
-  const ai = c.ai,
-    a = NODES[ai.from],
-    b = NODES[ai.to],
-    P = S.P,
-    hunt = ai.cop && S.wanted >= 1 && !S.wasted;
-  let dx = b.x - a.x,
-    dy = b.y - a.y;
+  const ai = c.ai;
+  const a = NODES[ai.from];
+  const b = NODES[ai.to];
+  const P = S.P;
+  const hunt = ai.cop && S.wanted >= 1 && !S.wasted;
+  let dx = b.x - a.x;
+  let dy = b.y - a.y;
   const len = Math.hypot(dx, dy) || 1;
   dx /= len;
   dy /= len;
-  const along = (c.x - a.x) * dx + (c.y - a.y) * dy,
-    lane = Math.min(a.w, b.w) / 4; // drive on the right
+  const along = (c.x - a.x) * dx + (c.y - a.y) * dy;
+  const lane = Math.min(a.w, b.w) / 4; // drive on the right
   if (along > len - 2) {
     const n = nextNode(ai.from, ai.to, ai);
-    if (n < 0)
-      c.gone = true; // left the map
+    if (n < 0) {
+      c.gone = true;
+    } // left the map
     else {
       ai.from = ai.to;
       ai.to = n;
     }
     return;
   }
-  const s = Math.min(len, along + 5 + c.vf * 0.4),
-    near = hunt && dist(c, P) < 45;
-  let tx = a.x + dx * s - dy * lane,
-    ty = a.y + dy * s + dx * lane;
+  const s = Math.min(len, along + 5 + c.vf * 0.4);
+  const near = hunt && dist(c, P) < 45;
+  let tx = a.x + dx * s - dy * lane;
+  let ty = a.y + dy * s + dx * lane;
   if (near) {
     tx = P.x + (P.car ? P.car.vx * 0.4 : 0);
     ty = P.y + (P.car ? P.car.vy * 0.4 : 0);
   } // close enough: go straight for the player
-  const err = wrap(Math.atan2(ty - c.y, tx - c.x) - c.a),
-    fast = hunt || ai.flee || ai.rage > 0;
+  const err = wrap(Math.atan2(ty - c.y, tx - c.x) - c.a);
+  const fast = hunt || ai.flee || ai.rage > 0;
   const want =
     (2 + Math.min(a.w, b.w) * 1.6) *
     (hunt || ai.flee ? 2 : ai.rage > 0 ? 1.6 : 1) *
     (1 - 0.7 * Math.min(1, Math.abs(err)));
-  const fx = Math.cos(c.a),
-    fy = Math.sin(c.a),
-    reach = 5 + c.vf * 0.9;
+  const fx = Math.cos(c.a);
+  const fy = Math.sin(c.a);
+  const reach = 5 + c.vf * 0.9;
   const ahead = o => {
-    const rx = o.x - c.x,
-      ry = o.y - c.y,
-      f = rx * fx + ry * fy;
+    const rx = o.x - c.x;
+    const ry = o.y - c.y;
+    const f = rx * fx + ry * fy;
     return f > 0 && f < reach && Math.abs(ry * fx - rx * fy) < 1.7;
   };
   const block =
     !fast &&
     !(ai.push > 0) &&
-    (S.cars.some(o => o !== c && ahead(o)) || S.peds.some(ahead) || (S.mode === 'play' && !P.car && ahead(P)));
+    (S.cars.some(o => o !== c && ahead(o)) ||
+      S.peds.some(ahead) ||
+      (S.mode === 'play' && !P.car && ahead(P)));
   ai.wait = block ? ai.wait + dt : 0;
-  if (ai.wait > 5) ai.push = 2; // tired of waiting: shove through
+  if (ai.wait > 5) {
+    ai.push = 2;
+  } // tired of waiting: shove through
   ai.push -= dt;
   ai.rage -= dt;
-  c.thr = block ? (c.vf > 0.3 ? -1 : 0) : c.vf < want ? (fast ? 1 : 0.7) : c.vf > want + 2 ? -0.4 : 0;
+  c.thr = block
+    ? c.vf > 0.3
+      ? -1
+      : 0
+    : c.vf < want
+      ? fast
+        ? 1
+        : 0.7
+      : c.vf > want + 2
+        ? -0.4
+        : 0;
   c.hb = block && c.vf < 1;
   c.steer = clamp(err * 2.2, -1, 1);
   if (near && dist(c, P) < 9 && (P.car ? Math.abs(P.car.vf) : 0) < 4) {
     c.thr = c.vf > 1 ? -1 : 0;
     c.hb = true;
   } // box the player in
-  if (!block && !c.hb && Math.abs(c.vf) < 0.5) ai.stuck += dt;
-  else if (c.vf > 1.5) ai.stuck = 0;
+  if (!block && !c.hb && Math.abs(c.vf) < 0.5) {
+    ai.stuck += dt;
+  } else if (c.vf > 1.5) {
+    ai.stuck = 0;
+  }
   if (ai.stuck > 1.5) {
     ai.stuck = 0;
     ai.rev = 1.3;
@@ -1789,26 +2612,42 @@ function driveAI(c, dt) {
     c.steer = -c.steer;
   }
 }
-const newAI = (from, to, more) => Object.assign({from, to, wait: 0, push: 0, rage: 0, stuck: 0, rev: 0, jams: 0}, more);
+const newAI = (from, to, more) =>
+  Object.assign(
+    {from, to, wait: 0, push: 0, rage: 0, stuck: 0, rev: 0, jams: 0},
+    more
+  );
 
+/**
+ *
+ * @param heat
+ */
 function crime(heat) {
   S.wanted = Math.min(4, S.wanted + heat);
   S.seen = 8;
 }
 
+/**
+ *
+ * @param dt
+ */
 function police(dt) {
-  const P = S.P,
-    cops = S.cars.filter(c => c.ai && c.ai.cop && !c.dead);
+  const P = S.P;
+  const cops = S.cars.filter(c => c.ai && c.ai.cop && !c.dead);
   const close = cops.reduce((m, c) => Math.min(m, dist(c, P)), 1e9);
   if (S.wanted > 0) {
     S.seen -= dt;
-    S.wanted = Math.max(0, S.wanted - dt * (close < 90 ? 0.012 : S.seen > 0 ? 0.04 : 0.14)); // heat cools off once nobody is looking
+    S.wanted = Math.max(
+      0,
+      S.wanted - dt * (close < 90 ? 0.012 : S.seen > 0 ? 0.04 : 0.14)
+    ); // heat cools off once nobody is looking
   }
-  if (S.wanted < 1)
+  if (S.wanted < 1) {
     for (const c of cops) {
       c.ai.cop = false;
       c.siren = false;
-    } // off duty: back to normal traffic
+    }
+  } // off duty: back to normal traffic
   audio.siren(S.wanted >= 1 && close < 170 && S.mode === 'play' && !S.paused);
   if (S.wanted < 1 || S.mode !== 'play') {
     S.bust = 0;
@@ -1818,17 +2657,33 @@ function police(dt) {
     S.copT = 1;
     S.copF = field(P);
   }
-  if (cops.length < Math.min(3, Math.floor(S.wanted)) && Math.random() < dt * 1.2) {
+  if (
+    cops.length < Math.min(3, Math.floor(S.wanted)) &&
+    Math.random() < dt * 1.2
+  ) {
     const spots = NODES.filter(n => {
       const d = dist(n, P);
-      return d > 110 && d < 230 && n.gps.length && n.x > 0 && n.y > 0 && n.x < W && n.y < H;
+      return (
+        d > 110 &&
+        d < 230 &&
+        n.gps.length &&
+        n.x > 0 &&
+        n.y > 0 &&
+        n.x < W &&
+        n.y < H
+      );
     });
     const a = pick(spots);
     if (a) {
-      const i = NODES.indexOf(a),
-        to = downhill(S.copF, i);
+      const i = NODES.indexOf(a);
+      const to = downhill(S.copF, i);
       if (to >= 0) {
-        const c = makeCar(a.x, a.y, Math.atan2(NODES[to].y - a.y, NODES[to].x - a.x), 'police');
+        const c = makeCar(
+          a.x,
+          a.y,
+          Math.atan2(NODES[to].y - a.y, NODES[to].x - a.x),
+          'police'
+        );
         c.ai = newAI(i, to, {cop: true});
         c.siren = true;
       }
@@ -1836,14 +2691,22 @@ function police(dt) {
   }
   // caught: a patrol car right next to you while you are slow
   const slow = (P.car ? Math.hypot(P.car.vx, P.car.vy) : 0) < 3;
-  S.bust = close < (P.car ? 7 : 5) && slow && !S.wasted ? S.bust + dt : Math.max(0, S.bust - dt * 2);
-  if (S.bust > 1.6) busted();
+  S.bust =
+    close < (P.car ? 7 : 5) && slow && !S.wasted
+      ? S.bust + dt
+      : Math.max(0, S.bust - dt * 2);
+  if (S.bust > 1.6) {
+    busted();
+  }
 }
 
+/**
+ *
+ */
 function busted() {
-  const P = S.P,
-    fine = Math.round((S.money * 0.1) / 5) * 5,
-    r = SPOT.townhall;
+  const P = S.P;
+  const fine = Math.round((S.money * 0.1) / 5) * 5;
+  const r = SPOT.townhall;
   S.stats.busted++;
   S.money -= fine;
   S.wanted = 0;
@@ -1853,17 +2716,43 @@ function busted() {
     P.car = null;
     audio.radio(-1);
   }
-  flash('Erwischt!', fine ? 'Strafzettel: ' + fmt(fine) : 'Nochmal Glück gehabt');
+  flash(
+    'Erwischt!',
+    fine ? `Strafzettel: ${fmt(fine)}` : 'Nochmal Glück gehabt'
+  );
   audio.play('fail');
-  if (S.job) failJob('busted');
-  for (const c of S.cars) if (c.ai && c.ai.cop) c.gone = true;
+  if (S.job) {
+    failJob('busted');
+  }
+  for (const c of S.cars) {
+    if (c.ai && c.ai.cop) {
+      c.gone = true;
+    }
+  }
   Object.assign(P, {x: r.x, y: r.y, a: r.a});
   page(pick(TALK.busted));
 }
 
-const SHIRTS = ['#d9d4c8', '#b3372f', '#2f5fa8', '#3c8a4a', '#d8a31c', '#7a4a9a', '#22252b', '#d86a2a', '#e58fb0'];
+const SHIRTS = [
+  '#d9d4c8',
+  '#b3372f',
+  '#2f5fa8',
+  '#3c8a4a',
+  '#d8a31c',
+  '#7a4a9a',
+  '#22252b',
+  '#d86a2a',
+  '#e58fb0',
+];
 const HAIR = ['#2a1d12', '#4a3018', '#8a6a3a', '#c8c2b4', '#15151a', '#a8452a'];
 
+/**
+ *
+ * @param x
+ * @param y
+ * @param from
+ * @param to
+ */
 function spawnPed(x, y, from, to) {
   const p = {
     x,
@@ -1884,24 +2773,31 @@ function spawnPed(x, y, from, to) {
   return p;
 }
 
+/**
+ *
+ * @param p
+ * @param dt
+ */
 function stepPed(p, dt) {
   let sp = p.sp;
   if (p.flee > 0) {
     p.flee -= dt;
     sp = 5;
   } else {
-    const a = NODES[p.from],
-      b = NODES[p.to];
-    let dx = b.x - a.x,
-      dy = b.y - a.y;
-    const len = Math.hypot(dx, dy) || 1,
-      off = (b.w / 2 + 1) * p.side; // walk beside the road
-    const tx = b.x - (dy / len) * off,
-      ty = b.y + (dx / len) * off;
+    const a = NODES[p.from];
+    const b = NODES[p.to];
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const off = (b.w / 2 + 1) * p.side; // walk beside the road
+    const tx = b.x - (dy / len) * off;
+    const ty = b.y + (dx / len) * off;
     if (Math.hypot(tx - p.x, ty - p.y) < 0.9) {
       const opts = b.walk.filter(n => n !== p.from);
       [p.from, p.to] = [p.to, opts.length ? pick(opts) : p.from]; // dead end: turn around
-    } else p.a += clamp(wrap(Math.atan2(ty - p.y, tx - p.x) - p.a), -6 * dt, 6 * dt);
+    } else {
+      p.a += clamp(wrap(Math.atan2(ty - p.y, tx - p.x) - p.a), -6 * dt, 6 * dt);
+    }
   }
   p.x += Math.cos(p.a) * sp * dt;
   p.y += Math.sin(p.a) * sp * dt;
@@ -1909,12 +2805,23 @@ function stepPed(p, dt) {
   shove(p, 0.35);
 }
 
+/**
+ *
+ * @param p
+ * @param byPlayer
+ */
 function killPed(p, byPlayer) {
-  if (p.dead) return;
+  if (p.dead) {
+    return;
+  }
   p.dead = true;
   decal(p.x, p.y, 'blood');
-  for (let i = 0; i < 10; i++) puff(p.x, p.y, 'blood');
-  if (dist(p, S.P) < 80) audio.play('splat');
+  for (let i = 0; i < 10; i++) {
+    puff(p.x, p.y, 'blood');
+  }
+  if (dist(p, S.P) < 80) {
+    audio.play('splat');
+  }
   if (byPlayer) {
     S.stats.peds++;
     float(p, 'BATSCH!', '#ff5a1f');
@@ -1922,28 +2829,58 @@ function killPed(p, byPlayer) {
   }
 }
 
+/**
+ *
+ * @param o
+ * @param c
+ * @param r
+ */
 function touching(o, c, r) {
   // is walker `o` under car `c`?
-  for (const off of c.T.offs)
-    if (Math.hypot(o.x - c.x - Math.cos(c.a) * off, o.y - c.y - Math.sin(c.a) * off) < c.T.r + r) return true;
+  for (const off of c.T.offs) {
+    if (
+      Math.hypot(
+        o.x - c.x - Math.cos(c.a) * off,
+        o.y - c.y - Math.sin(c.a) * off
+      ) <
+      c.T.r + r
+    ) {
+      return true;
+    }
+  }
   return false;
 }
 
+/**
+ *
+ */
 function walkersVsCars() {
   const P = S.P;
   for (const c of S.cars) {
     const sp = Math.hypot(c.vx, c.vy);
     for (const p of S.peds) {
-      const dx = p.x - c.x,
-        dy = p.y - c.y;
-      if (Math.abs(dx) > 12 || Math.abs(dy) > 12) continue;
+      const dx = p.x - c.x;
+      const dy = p.y - c.y;
+      if (Math.abs(dx) > 12 || Math.abs(dy) > 12) {
+        continue;
+      }
       const side = dx * c.vy - dy * c.vx; // which side of the car's path the walker is on
-      if (sp > 5 && p.alert && p.flee <= 0 && dx * c.vx + dy * c.vy > 0 && Math.abs(side) / sp < 3) {
+      if (
+        sp > 5 &&
+        p.alert &&
+        p.flee <= 0 &&
+        dx * c.vx + dy * c.vy > 0 &&
+        Math.abs(side) / sp < 3
+      ) {
         p.flee = 1;
         p.a = Math.atan2(c.vy, c.vx) + ((side > 0 ? -1 : 1) * Math.PI) / 2; // jump out of the way
-        if (c === P.car && Math.random() < 0.5) audio.play('scream');
+        if (c === P.car && Math.random() < 0.5) {
+          audio.play('scream');
+        }
       }
-      if (!touching(p, c, 0.35)) continue;
+      if (!touching(p, c, 0.35)) {
+        continue;
+      }
       if (sp > 3) {
         killPed(p, c === P.car);
         c.vx *= 0.96;
@@ -1955,8 +2892,9 @@ function walkersVsCars() {
       }
     }
     if (S.mode === 'play' && !P.car && !S.wasted && touching(P, c, 0.35)) {
-      if (sp > 4) waste();
-      else {
+      if (sp > 4) {
+        waste();
+      } else {
         const d = dist(P, c) || 1;
         P.x += ((P.x - c.x) / d) * 0.2;
         P.y += ((P.y - c.y) / d) * 0.2;
@@ -1966,18 +2904,29 @@ function walkersVsCars() {
 }
 
 // Keep the streets around `f` busy; `near` is how close things may appear.
+/**
+ *
+ * @param dt
+ * @param near
+ */
 function populate(dt, near) {
-  const P = S.P,
-    f = S.mode === 'play' ? P : S.cam,
-    j = S.job,
-    keep = c => c === P.car || (j && (c === j.veh || c === j.prey));
+  const P = S.P;
+  const f = S.mode === 'play' ? P : S.cam;
+  const j = S.job;
+  const keep = c => c === P.car || (j && (c === j.veh || c === j.prey));
   S.cars = S.cars.filter(
     c =>
       (keep(c) && !c.gone) ||
-      !(c.gone || ((c.ai || c.dead) && dist(c, f) > 300) || (c.ai && c.ai.jams > 4 && dist(c, f) > 110)),
+      !(
+        c.gone ||
+        ((c.ai || c.dead) && dist(c, f) > 300) ||
+        (c.ai && c.ai.jams > 4 && dist(c, f) > 110)
+      )
   );
   S.peds = S.peds.filter(p => !p.dead && dist(p, f) < 230);
-  if ((S.spawnT -= dt) > 0) return;
+  if ((S.spawnT -= dt) > 0) {
+    return;
+  }
   S.spawnT = 0.3;
   const spots = NODES.filter(n => {
     const d = dist(n, f);
@@ -1986,117 +2935,190 @@ function populate(dt, near) {
   if (S.cars.filter(c => c.ai).length < 13) {
     const a = pick(spots.filter(n => n.car.length));
     if (a && !S.cars.some(c => dist(c, a) < 14)) {
-      const to = pick(a.car).n,
-        b = NODES[to],
-        ang = Math.atan2(b.y - a.y, b.x - a.x),
-        r = Math.random();
+      const to = pick(a.car).n;
+      const b = NODES[to];
+      const ang = Math.atan2(b.y - a.y, b.x - a.x);
+      const r = Math.random();
       const c = makeCar(
         a.x - (Math.sin(ang) * a.w) / 4,
         a.y + (Math.cos(ang) * a.w) / 4,
         ang,
-        r < 0.6 ? 'car' : r < 0.78 ? 'van' : r < 0.86 ? 'sport' : r < 0.93 ? 'tractor' : r < 0.97 ? 'truck' : 'tipper',
+        r < 0.6
+          ? 'car'
+          : r < 0.78
+            ? 'van'
+            : r < 0.86
+              ? 'sport'
+              : r < 0.93
+                ? 'tractor'
+                : r < 0.97
+                  ? 'truck'
+                  : 'tipper'
       );
       c.ai = newAI(NODES.indexOf(a), to);
-      if (c.kind === 'tractor' && Math.random() < 0.5) hitch(c, 'grain');
+      if (c.kind === 'tractor' && Math.random() < 0.5) {
+        hitch(c, 'grain');
+      }
     }
   }
   if (S.peds.length < 24) {
     const a = pick(spots.filter(n => n.walk.length));
-    if (a) spawnPed(a.x + rand(-2, 2), a.y + rand(-2, 2), NODES.indexOf(a), pick(a.walk));
+    if (a) {
+      spawnPed(
+        a.x + rand(-2, 2),
+        a.y + rand(-2, 2),
+        NODES.indexOf(a),
+        pick(a.walk)
+      );
+    }
   }
 }
 
+/**
+ *
+ */
 function parkCars() {
   // fill the car parks in tidy rows
   const r = rng(11);
-  for (const a of AREAS)
+  for (const a of AREAS) {
     if (a.k === 'park') {
-      const ca = Math.cos(a.ang),
-        sa = Math.sin(a.ang),
-        R = Math.hypot(a.x1 - a.x0, a.y1 - a.y0) / 2;
-      for (let u = -R; u < R; u += 2.8)
+      const ca = Math.cos(a.ang);
+      const sa = Math.sin(a.ang);
+      const R = Math.hypot(a.x1 - a.x0, a.y1 - a.y0) / 2;
+      for (let u = -R; u < R; u += 2.8) {
         for (let v = -R; v < R; v += 5.8) {
-          const x = a.mx + ca * u - sa * v,
-            y = a.my + sa * u + ca * v,
-            ex = -sa * 2.7,
-            ey = ca * 2.7,
-            take = r() < 0.42,
-            flip = r() < 0.5,
-            kind = r();
+          const x = a.mx + ca * u - sa * v;
+          const y = a.my + sa * u + ca * v;
+          const ex = -sa * 2.7;
+          const ey = ca * 2.7;
+          const take = r() < 0.42;
+          const flip = r() < 0.5;
+          const kind = r();
           const free = (px, py) => pip(px, py, a.p) && !(surfAt(px, py) & 4);
-          if (!take || !free(x, y) || !free(x + ex, y + ey) || !free(x - ex, y - ey)) continue;
-          if (blocked(x, y, 3)) continue;
+          if (
+            !take ||
+            !free(x, y) ||
+            !free(x + ex, y + ey) ||
+            !free(x - ex, y - ey)
+          ) {
+            continue;
+          }
+          if (blocked(x, y, 3)) {
+            continue;
+          }
           makeCar(
             x,
             y,
             a.ang + Math.PI / 2 + (flip ? Math.PI : 0),
             kind < 0.8 ? 'car' : kind < 0.93 ? 'van' : 'sport',
-            COLORS[(r() * COLORS.length) | 0],
+            COLORS[(r() * COLORS.length) | 0]
           );
         }
+      }
     }
+  }
   for (let i = 0; i < 46; i++) {
     // and a few along the kerb in the village
-    const s = SEGS[(r() * SEGS.length) | 0],
-      t = r(),
-      kind = r(),
-      flip = r() < 0.5,
-      col = COLORS[(r() * COLORS.length) | 0];
-    if (!town(s[6]) || s[5] < 14) continue;
-    const off = s[4] / 2 + 0.2,
-      x = lerp(s[0], s[2], t) - ((s[3] - s[1]) / s[5]) * off,
-      y = lerp(s[1], s[3], t) + ((s[2] - s[0]) / s[5]) * off;
+    const s = SEGS[(r() * SEGS.length) | 0];
+    const t = r();
+    const kind = r();
+    const flip = r() < 0.5;
+    const col = COLORS[(r() * COLORS.length) | 0];
+    if (!town(s[6]) || s[5] < 14) {
+      continue;
+    }
+    const off = s[4] / 2 + 0.2;
+    const x = lerp(s[0], s[2], t) - ((s[3] - s[1]) / s[5]) * off;
+    const y = lerp(s[1], s[3], t) + ((s[2] - s[0]) / s[5]) * off;
     if (
       blocked(x, y, 2.6) ||
       S.cars.some(c => Math.hypot(c.x - x, c.y - y) < 7) ||
       NODES.some(n => n.car.length > 2 && Math.hypot(n.x - x, n.y - y) < 12)
-    )
+    ) {
       continue;
+    }
     makeCar(
       x,
       y,
       Math.atan2(s[3] - s[1], s[2] - s[0]) + (flip ? Math.PI : 0),
       kind < 0.85 ? 'car' : kind < 0.95 ? 'van' : 'sport',
-      col,
+      col
     );
   }
 }
 
 // ---------- money on the street
 
+/**
+ *
+ * @param ok
+ */
 function roadPoint(ok) {
   // random spot on a road (uniform by length) that passes `ok`
   for (let n = 0; n < 600; n++) {
     const s = pick(SEGS);
-    if (Math.random() * SEGMAX > s[5]) continue;
-    const t = Math.random(),
-      o = rand(-0.3, 0.3) * s[4];
-    const x = lerp(s[0], s[2], t) - ((s[3] - s[1]) / s[5]) * o,
-      y = lerp(s[1], s[3], t) + ((s[2] - s[0]) / s[5]) * o;
-    if (x > 15 && y > 15 && x < W - 15 && y < H - 15 && !(surfAt(x, y) & 10) && ok(x, y)) return {x, y};
+    if (Math.random() * SEGMAX > s[5]) {
+      continue;
+    }
+    const t = Math.random();
+    const o = rand(-0.3, 0.3) * s[4];
+    const x = lerp(s[0], s[2], t) - ((s[3] - s[1]) / s[5]) * o;
+    const y = lerp(s[1], s[3], t) + ((s[2] - s[0]) / s[5]) * o;
+    if (
+      x > 15 &&
+      y > 15 &&
+      x < W - 15 &&
+      y < H - 15 &&
+      !(surfAt(x, y) & 10) &&
+      ok(x, y)
+    ) {
+      return {x, y};
+    }
   }
 }
+/**
+ *
+ */
 function dropCash() {
   const spot = roadPoint(
-    (x, y) => Math.hypot(x - S.P.x, y - S.P.y) > 30 && !S.items.some(v => Math.hypot(v.x - x, v.y - y) < 20),
+    (x, y) =>
+      Math.hypot(x - S.P.x, y - S.P.y) > 30 &&
+      !S.items.some(v => Math.hypot(v.x - x, v.y - y) < 20)
   );
-  if (spot) S.items.push({...spot, kind: 'cash', val: pick([5, 10, 10, 20, 20, 50, 100]), ph: rand(0, TAU)});
+  if (spot) {
+    S.items.push({
+      ...spot,
+      kind: 'cash',
+      val: pick([5, 10, 10, 20, 20, 50, 100]),
+      ph: rand(0, TAU),
+    });
+  }
 }
+/**
+ *
+ * @param v
+ */
 function grab(v) {
   audio.play('coin');
   if (v.kind === 'cash') {
     S.money += v.val;
-    float(v, '+' + fmt(v.val));
+    float(v, `+${fmt(v.val)}`);
     return dropCash();
   }
-  const j = S.job,
-    left = S.items.filter(o => o.job).length;
+  const j = S.job;
+  const left = S.items.filter(o => o.job).length;
   float(v, left ? `noch ${left}` : 'Alles da!');
-  if (j) j.got++;
+  if (j) {
+    j.got++;
+  }
 }
 
 // ---------- the pager and Flo's jobs
 
+/**
+ *
+ * @param {...any} msgs
+ */
 function page(...msgs) {
   // Flo is calling
   const pg = S.pager;
@@ -2108,18 +3130,33 @@ function page(...msgs) {
   pg.q.push(...msgs);
 }
 
+/**
+ *
+ * @param o
+ */
 function place(o) {
   // a step's target: a place name or the mission car
   return typeof o === 'string' ? SPOT[o] : o;
 }
+/**
+ *
+ * @param kind
+ * @param key
+ * @param trailer
+ */
 function spawnAt(kind, key, trailer) {
   const s = SPOT[key];
   S.cars = S.cars.filter(c => c === S.P.car || dist(c, s) > 9); // make room
   const c = makeCar(s.x, s.y, s.a, kind);
-  if (trailer) hitch(c, trailer);
+  if (trailer) {
+    hitch(c, trailer);
+  }
   return c;
 }
 
+/**
+ *
+ */
 function startJob() {
   const m = MISSIONS[S.jobN];
   S.job = {
@@ -2143,19 +3180,26 @@ function startJob() {
   nextStep();
 }
 
+/**
+ *
+ */
 function nextStep() {
-  const j = S.job,
-    done = j.step,
-    st = j.m.steps[++j.i];
+  const j = S.job;
+  const done = j.step;
+  const st = j.m.steps[++j.i];
   if (done && done.tip && j.timed) {
     // quick delivery, generous customer
     const tip = Math.round(j.left) * 2;
     S.money += tip;
-    float(S.P, 'Trinkgeld +' + fmt(tip));
+    float(S.P, `Trinkgeld +${fmt(tip)}`);
     audio.play('coin');
   }
-  if (!st) return endJob();
-  if (j.i) audio.play('step');
+  if (!st) {
+    return endJob();
+  }
+  if (j.i) {
+    audio.play('step');
+  }
   j.step = st;
   j.hold = 0;
   j.told = false;
@@ -2163,33 +3207,41 @@ function nextStep() {
   if (st.time) {
     j.left = st.time;
     j.timed = true;
-  } else if (st.time === 0) j.timed = false;
+  } else if (st.time === 0) {
+    j.timed = false;
+  }
   if (st.fragile != null) {
     j.fragile = st.fragile;
     j.cargo = 1;
   }
-  if (st.drop) j.veh = null;
+  if (st.drop) {
+    j.veh = null;
+  }
   if (st.wanted) {
     crime(st.wanted);
     audio.play('alarm');
   }
-  if (st.say) page(st.say);
+  if (st.say) {
+    page(st.say);
+  }
   S.pager.idle = st.obj;
   if (st.do === 'steal') {
     j.veh = spawnAt(st.veh, st.at, st.trailer);
     j.to = j.veh;
   }
   if (st.do === 'chase') {
-    const s = SPOT[st.at],
-      from = nearNode(s, 'car'),
-      to = NODES[from].car[0].n;
+    const s = SPOT[st.at];
+    const from = nearNode(s, 'car');
+    const to = NODES[from].car[0].n;
     j.prey = makeCar(
       NODES[from].x,
       NODES[from].y,
       Math.atan2(NODES[to].y - NODES[from].y, NODES[to].x - NODES[from].x),
-      st.veh,
+      st.veh
     );
-    if (st.trailer) hitch(j.prey, st.trailer);
+    if (st.trailer) {
+      hitch(j.prey, st.trailer);
+    }
     j.prey.ai = newAI(from, to, {flee: true});
     j.to = j.prey;
   }
@@ -2205,7 +3257,9 @@ function nextStep() {
     for (let i = 0; i < st.n; i++) {
       const spot =
         roadPoint(
-          (x, y) => Math.hypot(x - c.x, y - c.y) < st.r && !S.items.some(v => Math.hypot(v.x - x, v.y - y) < 25),
+          (x, y) =>
+            Math.hypot(x - c.x, y - c.y) < st.r &&
+            !S.items.some(v => Math.hypot(v.x - x, v.y - y) < 25)
         ) || c;
       S.items.push({...spot, kind: st.item, job: true, ph: rand(0, TAU)});
     }
@@ -2213,46 +3267,78 @@ function nextStep() {
   S.gps = null;
 }
 
+/**
+ *
+ * @param dt
+ */
 function jobRules(dt) {
-  const j = S.job,
-    P = S.P,
-    st = j.step,
-    sp = P.car ? Math.hypot(P.car.vx, P.car.vy) : 0;
+  const j = S.job;
+  const P = S.P;
+  const st = j.step;
+  const sp = P.car ? Math.hypot(P.car.vx, P.car.vy) : 0;
   const lost = c => c && (c.dead || c.burn > 0 || c.gone);
-  if (lost(j.veh) || lost(j.prey)) return failJob(j.prey && j.prey.gone ? 'gone' : 'wreck');
-  if (j.timed && (j.left -= dt) <= 0) return failJob('time');
-  if (j.fragile && j.cargo <= 0) return failJob('cargo');
+  if (lost(j.veh) || lost(j.prey)) {
+    return failJob(j.prey && j.prey.gone ? 'gone' : 'wreck');
+  }
+  if (j.timed && (j.left -= dt) <= 0) {
+    return failJob('time');
+  }
+  if (j.fragile && j.cargo <= 0) {
+    return failJob('cargo');
+  }
   const near = r => j.to && dist(P, j.to) < r;
   switch (st.do) {
     case 'steal':
     case 'take':
-      if (P.car === j.veh) nextStep();
+      if (P.car === j.veh) {
+        nextStep();
+      }
       break;
     case 'bring':
-      if (P.car === j.veh && near(7) && sp < 8) nextStep();
+      if (P.car === j.veh && near(7) && sp < 8) {
+        nextStep();
+      }
       break;
     case 'goto':
       if (st.foot && P.car && near(14) && !j.told) {
         j.told = true;
         info('Aussteigen und zu Fuß reingehen');
       }
-      if (st.foot ? !P.car && near(3.5) : near(st.r || 7) && sp < 9) nextStep();
+      if (st.foot ? !P.car && near(3.5) : near(st.r || 7) && sp < 9) {
+        nextStep();
+      }
       break;
     case 'hold':
       if (near(st.r || 10) && (!st.veh || P.car === j.veh)) {
         j.hold += dt;
         if (st.fx === 'water') {
-          for (let i = 0; i < 3; i++) puff(lerp(P.x, j.to.x, Math.random()), lerp(P.y, j.to.y, Math.random()), 'water');
-          if (Math.random() < dt * 5) audio.play('spray');
+          for (let i = 0; i < 3; i++) {
+            puff(
+              lerp(P.x, j.to.x, Math.random()),
+              lerp(P.y, j.to.y, Math.random()),
+              'water'
+            );
+          }
+          if (Math.random() < dt * 5) {
+            audio.play('spray');
+          }
         }
-        if (j.hold >= st.secs) nextStep();
-      } else j.hold = Math.max(0, j.hold - dt);
+        if (j.hold >= st.secs) {
+          nextStep();
+        }
+      } else {
+        j.hold = Math.max(0, j.hold - dt);
+      }
       break;
     case 'collect':
-      if (j.got >= j.need) nextStep();
+      if (j.got >= j.need) {
+        nextStep();
+      }
       break;
     case 'lose':
-      if (S.wanted < 1) nextStep();
+      if (S.wanted < 1) {
+        nextStep();
+      }
       break;
     case 'chase':
       if ((j.prey.hits || 0) >= st.hits || j.prey.hp < j.prey.T.hp * 0.35) {
@@ -2264,9 +3350,12 @@ function jobRules(dt) {
   }
 }
 
+/**
+ *
+ */
 function endJob() {
-  const j = S.job,
-    m = j.m;
+  const j = S.job;
+  const m = j.m;
   S.job = null;
   S.jobN++;
   S.nextJob = 8;
@@ -2274,7 +3363,7 @@ function endJob() {
   S.stats.missions++;
   S.pager.idle = '';
   S.items = S.items.filter(v => !v.job);
-  flash('Mission erfüllt!', '+' + fmt(m.reward));
+  flash('Mission erfüllt!', `+${fmt(m.reward)}`);
   audio.play('win');
   store();
   if (S.jobN >= MISSIONS.length) {
@@ -2286,6 +3375,10 @@ function endJob() {
   page(...m.outro);
 }
 
+/**
+ *
+ * @param why
+ */
 function failJob(why) {
   const j = S.job;
   S.job = null;
@@ -2293,7 +3386,10 @@ function failJob(why) {
   S.pager.idle = '';
   S.items = S.items.filter(v => !v.job);
   if (j.prey) {
-    j.prey.ai = newAI(j.prey.ai ? j.prey.ai.from : 0, j.prey.ai ? j.prey.ai.to : 0);
+    j.prey.ai = newAI(
+      j.prey.ai ? j.prey.ai.from : 0,
+      j.prey.ai ? j.prey.ai.to : 0
+    );
     j.prey.gone = !j.prey.ai.to;
   }
   flash(
@@ -2305,28 +3401,46 @@ function failJob(why) {
       gone: 'Entkommen',
       busted: '',
       wasted: '',
-    }[why],
+    }[why]
   );
   audio.play('fail');
-  if (why !== 'busted') page(pick(TALK.scold));
+  if (why !== 'busted') {
+    page(pick(TALK.scold));
+  }
 }
 
+/**
+ *
+ * @param dt
+ */
 function playRules(dt) {
   // pickups, missions and the grand finale
-  const P = S.P,
-    reach = P.car ? P.car.T.L / 2 + 1 : 1.7; // long lorries scoop things up with the whole bumper
-  if (S.wasted) return;
+  const P = S.P;
+  const reach = P.car ? P.car.T.L / 2 + 1 : 1.7; // long lorries scoop things up with the whole bumper
+  if (S.wasted) {
+    return;
+  }
   const got = S.items.filter(v => Math.hypot(v.x - P.x, v.y - P.y) < reach);
   if (got.length) {
     S.items = S.items.filter(v => !got.includes(v));
     got.forEach(grab);
   }
-  if (P.car && S.wanted >= 1 && dist(P, SPOT.carwash) < 7) wash();
-  if (S.job) jobRules(dt);
-  else if ((S.nextJob -= dt) <= 0 && S.jobN < MISSIONS.length) startJob();
-  if (S.finale && (S.finale -= dt) <= 0) finish();
+  if (P.car && S.wanted >= 1 && dist(P, SPOT.carwash) < 7) {
+    wash();
+  }
+  if (S.job) {
+    jobRules(dt);
+  } else if ((S.nextJob -= dt) <= 0 && S.jobN < MISSIONS.length) {
+    startJob();
+  }
+  if (S.finale && (S.finale -= dt) <= 0) {
+    finish();
+  }
 }
 
+/**
+ *
+ */
 function wash() {
   // the car wash at Murk: new paint, nobody recognises you
   const c = S.P.car;
@@ -2334,17 +3448,24 @@ function wash() {
   S.money -= 15;
   c.col = pick(COLORS.filter(col => col !== c.col));
   c.spr = carSprite(c.kind, c.col);
-  for (let i = 0; i < 40; i++) puff(c.x + rand(-3, 3), c.y + rand(-3, 3), 'water');
+  for (let i = 0; i < 40; i++) {
+    puff(c.x + rand(-3, 3), c.y + rand(-3, 3), 'water');
+  }
   flash('Blitzsauber!', 'Waschstraße: 14,90 €');
   audio.play('splash');
 }
 
+/**
+ *
+ */
 function finish() {
-  const st = S.stats,
-    rank = RANKS.find(r => S.money >= r[0])[1];
+  const st = S.stats;
+  const rank = RANKS.find(r => S.money >= r[0])[1];
   S.mode = 'end';
   S.finale = 0;
-  if (S.P.car) Object.assign(S.P.car, {thr: 0, steer: 0, hb: true});
+  if (S.P.car) {
+    Object.assign(S.P.car, {thr: 0, steer: 0, hb: true});
+  }
   $('hud').hidden = true;
   $('end').hidden = false;
   $('total').textContent = fmt(S.money);
@@ -2353,7 +3474,7 @@ function finish() {
       `Rang: ${rank}`,
       `Aufträge für Flo: ${st.missions} · Autos geklaut: ${st.stolen}`,
       `Schrottkarren: ${st.wrecks} · Umgefahren: ${st.peds} · Erwischt: ${st.busted} · Erledigt: ${st.wasted}`,
-    ].map(t => Object.assign(document.createElement('li'), {textContent: t})),
+    ].map(t => Object.assign(document.createElement('li'), {textContent: t}))
   );
   audio.play('win');
   audio.radio(1);
@@ -2368,13 +3489,21 @@ function finish() {
 
 // ---------- player
 
-const keys = {},
-  pad = {x: 0, y: 0, brake: false, horn: false};
-const axis = (neg, pos) => (pos.some(k => keys[k]) ? 1 : 0) - (neg.some(k => keys[k]) ? 1 : 0);
+const keys = {};
+const pad = {x: 0, y: 0, brake: false, horn: false};
+const axis = (neg, pos) =>
+  (pos.some(k => keys[k]) ? 1 : 0) - (neg.some(k => keys[k]) ? 1 : 0);
 
+/**
+ *
+ * @param o
+ * @param r
+ */
 function shove(o, r) {
   // keep a walker out of buildings
-  if (surfAt(o.x, o.y) & 2) return;
+  if (surfAt(o.x, o.y) & 2) {
+    return;
+  }
   for (const b of at(BG, o.x, o.y)) {
     const h = pushOut(o.x, o.y, r, b.p);
     if (h) {
@@ -2384,16 +3513,22 @@ function shove(o, r) {
   }
 }
 
+/**
+ *
+ * @param dt
+ */
 function controlPlayer(dt) {
-  const P = S.P,
-    c = P.car,
-    stick = Math.hypot(pad.x, pad.y);
+  const P = S.P;
+  const c = P.car;
+  const stick = Math.hypot(pad.x, pad.y);
   if (S.wasted) {
-    if ((S.wasted -= dt) <= 0) respawn();
+    if ((S.wasted -= dt) <= 0) {
+      respawn();
+    }
     return;
   }
-  let thr = axis(['ArrowDown', 'KeyS'], ['ArrowUp', 'KeyW']),
-    steer = axis(['ArrowLeft', 'KeyA'], ['ArrowRight', 'KeyD']);
+  let thr = axis(['ArrowDown', 'KeyS'], ['ArrowUp', 'KeyW']);
+  let steer = axis(['ArrowLeft', 'KeyA'], ['ArrowRight', 'KeyD']);
   const wet = (surfAt(P.x, P.y) & 9) === 8;
   if (c) {
     if (stick > 0.15) {
@@ -2402,21 +3537,28 @@ function controlPlayer(dt) {
       steer = clamp(err * 2.2, -1, 1) * (c.vf < -1 ? -1 : 1);
       thr = Math.min(1, stick * 1.3) * (Math.abs(err) > 1.4 ? 0.55 : 1);
     }
-    if (pad.brake) thr = -1;
+    if (pad.brake) {
+      thr = -1;
+    }
     c.thr = thr;
     c.steer = steer;
     c.hb = !!keys.Space;
-    c.siren = (c.kind === 'police' || c.kind === 'fire') && (keys.KeyH || pad.horn);
+    c.siren =
+      (c.kind === 'police' || c.kind === 'fire') && (keys.KeyH || pad.horn);
     return;
   }
   let sp = thr * (thr > 0 ? 4.5 : 2);
   if (stick > 0.15) {
     P.a = Math.atan2(pad.y, pad.x);
     sp = Math.min(1, stick * 1.3) * 4.5;
-  } else P.a += steer * 3.5 * dt;
+  } else {
+    P.a += steer * 3.5 * dt;
+  }
   if (wet) {
     sp *= 0.4;
-    if (sp && Math.random() < dt * 8) puff(P.x, P.y, 'water');
+    if (sp && Math.random() < dt * 8) {
+      puff(P.x, P.y, 'water');
+    }
   } // wading
   P.x += Math.cos(P.a) * sp * dt;
   P.y += Math.sin(P.a) * sp * dt;
@@ -2424,22 +3566,34 @@ function controlPlayer(dt) {
   shove(P, 0.4);
 }
 
+/**
+ *
+ */
 function toggleCar() {
-  const P = S.P,
-    c = P.car;
-  if (S.wasted || S.paused || S.mode !== 'play') return;
+  const P = S.P;
+  const c = P.car;
+  if (S.wasted || S.paused || S.mode !== 'play') {
+    return;
+  }
   if (c) {
-    if (Math.hypot(c.vx, c.vy) > 5 && !c.burn) return; // jump out of a burning car at any speed
+    if (Math.hypot(c.vx, c.vy) > 5 && !c.burn) {
+      return;
+    } // jump out of a burning car at any speed
     const side = c.T.Wd / 2 + 0.8; // driver's door is on the left
-    Object.assign(P, {x: c.x + Math.sin(c.a) * side, y: c.y - Math.cos(c.a) * side, a: c.a, car: null});
+    Object.assign(P, {
+      x: c.x + Math.sin(c.a) * side,
+      y: c.y - Math.cos(c.a) * side,
+      a: c.a,
+      car: null,
+    });
     c.thr = c.steer = 0;
     c.hb = false;
     c.siren = false;
     audio.radio(-1);
     return audio.play('door');
   }
-  let best = null,
-    bd = 4.2;
+  let best = null;
+  let bd = 4.2;
   for (const o of S.cars) {
     // the nearest car; the one Flo wants counts as closer
     const d = dist(o, P) - o.T.L / 4 - (S.job && o === S.job.veh ? 2.5 : 0);
@@ -2448,40 +3602,64 @@ function toggleCar() {
       best = o;
     }
   }
-  if (!best) return;
+  if (!best) {
+    return;
+  }
   if (best.ai) {
-    if (best.ai.cop) crime(1);
-    else if (!(S.job && best === S.job.prey)) crime(0.35);
+    if (best.ai.cop) {
+      crime(1);
+    } else if (!(S.job && best === S.job.prey)) {
+      crime(0.35);
+    }
     bail(best);
     S.stats.stolen++;
   }
   P.car = best;
   audio.play('door');
   audio.radio(best.radio);
-  info(best.name + (best.radio >= 0 ? ' · ♪ ' + audio.stations[best.radio] : ''));
+  info(
+    best.name + (best.radio >= 0 ? ` · ♪ ${audio.stations[best.radio]}` : '')
+  );
 }
 
+/**
+ *
+ */
 function nextStation() {
   const c = S.P.car;
-  if (!c) return;
+  if (!c) {
+    return;
+  }
   c.radio = c.radio >= audio.stations.length - 1 ? -1 : c.radio + 1;
   audio.radio(c.radio);
-  info(c.radio < 0 ? 'Radio aus' : '♪ ' + audio.stations[c.radio]);
+  info(c.radio < 0 ? 'Radio aus' : `♪ ${audio.stations[c.radio]}`);
 }
+/**
+ *
+ */
 function honk() {
   const c = S.P.car;
-  if (!c || c.kind === 'police' || c.kind === 'fire') return;
+  if (!c || c.kind === 'police' || c.kind === 'fire') {
+    return;
+  }
   audio.play('horn');
-  for (const p of S.peds)
+  for (const p of S.peds) {
     if (dist(p, c) < 14 && p.flee <= 0) {
       p.flee = 1.2;
       p.a = Math.atan2(p.y - c.y, p.x - c.x);
     }
+  }
 }
 
+/**
+ *
+ * @param title
+ */
 function waste(title = 'Erledigt!') {
   const P = S.P;
-  if (S.wasted || S.mode !== 'play') return;
+  if (S.wasted || S.mode !== 'play') {
+    return;
+  }
   const lost = Math.round((S.money * 0.1) / 5) * 5;
   S.wasted = 3.2;
   S.money -= lost;
@@ -2492,32 +3670,49 @@ function waste(title = 'Erledigt!') {
     P.car = null;
     audio.radio(-1);
   }
-  flash(title, lost ? 'Krankenhaus Höchstadt: ' + fmt(lost) : '');
+  flash(title, lost ? `Krankenhaus Höchstadt: ${fmt(lost)}` : '');
   audio.play('fail');
-  for (let i = 0; i < 12; i++) puff(P.x, P.y, 'blood');
+  for (let i = 0; i < 12; i++) {
+    puff(P.x, P.y, 'blood');
+  }
   decal(P.x, P.y, 'blood');
-  if (S.job) failJob('wasted');
+  if (S.job) {
+    failJob('wasted');
+  }
   page(pick(TALK.wasted));
 }
 
+/**
+ *
+ */
 function respawn() {
   // back on the road in a fresh car, at the nearest junction
   const P = S.P;
-  const best = NODES[nearNode(P, 'car')],
-    to = NODES[best.car[0].n];
-  P.car = makeCar(best.x, best.y, Math.atan2(to.y - best.y, to.x - best.x), 'car', '#e0b21c');
+  const best = NODES[nearNode(P, 'car')];
+  const to = NODES[best.car[0].n];
+  P.car = makeCar(
+    best.x,
+    best.y,
+    Math.atan2(to.y - best.y, to.x - best.x),
+    'car',
+    '#e0b21c'
+  );
   audio.radio(P.car.radio);
   S.wasted = 0;
 }
 
+/**
+ *
+ * @param dt
+ */
 function camera(dt) {
-  const cam = S.cam,
-    P = S.P,
-    c = P.car,
-    tall = VH > VW ? 0.78 : 1;
-  let tx = 1450 + Math.cos(S.t * 0.05) * 420,
-    ty = 850 + Math.sin(S.t * 0.05) * 260,
-    tz = 4.4; // title screen fly-over
+  const cam = S.cam;
+  const P = S.P;
+  const c = P.car;
+  const tall = VH > VW ? 0.78 : 1;
+  let tx = 1450 + Math.cos(S.t * 0.05) * 420;
+  let ty = 850 + Math.sin(S.t * 0.05) * 260;
+  let tz = 4.4; // title screen fly-over
   if (S.mode === 'end') {
     tx = SPOT.townhall.x + Math.cos(S.t * 0.3) * 25;
     ty = SPOT.townhall.y + Math.sin(S.t * 0.3) * 25;
@@ -2526,7 +3721,9 @@ function camera(dt) {
   if (S.mode === 'play') {
     tx = P.x + (c ? c.vx * 0.45 : 0);
     ty = P.y + (c ? c.vy * 0.45 : 0);
-    tz = (c ? lerp(11.5, 7.5, clamp(Math.hypot(c.vx, c.vy) / 40, 0, 1)) : 13) * tall; // pull up when going fast
+    tz =
+      (c ? lerp(11.5, 7.5, clamp(Math.hypot(c.vx, c.vy) / 40, 0, 1)) : 13) *
+      tall; // pull up when going fast
   }
   const k = 1 - Math.exp(-dt * 4);
   cam.x += (tx - cam.x) * k;
@@ -2535,17 +3732,28 @@ function camera(dt) {
   S.shake *= Math.exp(-dt * 4);
 }
 
+/**
+ *
+ * @param dt
+ */
 function update(dt) {
   const P = S.P;
   S.t += dt;
-  if (S.mode === 'play') controlPlayer(dt);
+  if (S.mode === 'play') {
+    controlPlayer(dt);
+  }
   for (const c of S.cars) {
-    if (c.ai) driveAI(c, dt);
-    else if (c !== P.car && !c.burn && !c.vx && !c.vy && !c.spin) continue; // parked and at rest
+    if (c.ai) {
+      driveAI(c, dt);
+    } else if (c !== P.car && !c.burn && !c.vx && !c.vy && !c.spin) {
+      continue;
+    } // parked and at rest
     stepCar(c, dt);
   }
   collideCars();
-  for (const p of S.peds) stepPed(p, dt);
+  for (const p of S.peds) {
+    stepPed(p, dt);
+  }
   walkersVsCars();
   populate(dt, 85);
   police(dt);
@@ -2554,7 +3762,9 @@ function update(dt) {
     P.y = P.car.y;
     P.a = P.car.a;
   }
-  if (S.mode === 'play') playRules(dt);
+  if (S.mode === 'play') {
+    playRules(dt);
+  }
   const o = P.car || P; // the map has an edge
   if (o.x < 6 || o.x > W - 6) {
     o.x = clamp(o.x, 6, W - 6);
@@ -2567,7 +3777,11 @@ function update(dt) {
   for (const sp of S.sprays) {
     // broken hydrants are fountains for a while
     sp.t -= dt;
-    if (dist(sp, P) < 90) for (let i = 0; i < 2; i++) puff(sp.x + rand(-0.3, 0.3), sp.y + rand(-0.3, 0.3), 'water');
+    if (dist(sp, P) < 90) {
+      for (let i = 0; i < 2; i++) {
+        puff(sp.x + rand(-0.3, 0.3), sp.y + rand(-0.3, 0.3), 'water');
+      }
+    }
   }
   S.sprays = S.sprays.filter(sp => sp.t > 0);
   for (const p of S.parts) {
@@ -2584,36 +3798,51 @@ function update(dt) {
   camera(dt);
 }
 
+/**
+ *
+ * @param dt
+ */
 function guide(dt) {
   // keep the yellow arrow pointing down the road to the current target
-  const j = S.job,
-    P = S.P,
-    to = j && j.to;
+  const j = S.job;
+  const P = S.P;
+  const to = j && j.to;
   if (!to) {
     S.gps = null;
     return;
   }
-  if (!S.gps || Math.hypot(S.gps.x - to.x, S.gps.y - to.y) > 25) S.gps = {x: to.x, y: to.y, f: field(to), wp: null};
-  if ((S.gpsT -= dt) > 0) return;
+  if (!S.gps || Math.hypot(S.gps.x - to.x, S.gps.y - to.y) > 25) {
+    S.gps = {x: to.x, y: to.y, f: field(to), wp: null};
+  }
+  if ((S.gpsT -= dt) > 0) {
+    return;
+  }
   S.gpsT = 0.25;
   S.gps.wp = dist(P, to) < 50 ? to : waypoint(S.gps.f, P, 40) || to;
   S.gps.far = pathLength(routeLine(S.gps.f, P, to)); // how far it is by road
 }
 
+/**
+ *
+ * @param dt
+ */
 function hud(dt) {
-  const P = S.P,
-    c = P.car,
-    pg = S.pager,
-    j = S.job;
-  S.shown = Math.abs(S.money - S.shown) < 1 ? S.money : lerp(S.shown, S.money, Math.min(1, dt * 8));
+  const P = S.P;
+  const c = P.car;
+  const pg = S.pager;
+  const j = S.job;
+  S.shown =
+    Math.abs(S.money - S.shown) < 1
+      ? S.money
+      : lerp(S.shown, S.money, Math.min(1, dt * 8));
   $('money').textContent = fmt(S.shown);
   $('heat').textContent = '★'.repeat(Math.floor(S.wanted));
   $('heat').classList.toggle('hot', S.bust > 0.3);
   $('dmg').hidden = !c;
   if (c) {
-    const k = clamp(c.hp / c.T.hp, 0, 1),
-      bar = $('dmg').querySelector('i');
-    bar.style.width = k * 100 + '%';
+    const k = clamp(c.hp / c.T.hp, 0, 1);
+    const bar = $('dmg').querySelector('i');
+    bar.style.width = `${k * 100}%`;
     bar.style.background = k < 0.3 ? 'var(--hot)' : '';
   }
   // the pager types out Flo's messages one after the other, then shows what to do
@@ -2627,26 +3856,52 @@ function hud(dt) {
     if (pg.n < pg.cur.length) {
       pg.n += dt * 46;
       const n = Math.min(pg.cur.length, pg.n | 0);
-      $('lcd').textContent = 'FLO: ' + pg.cur.slice(0, n);
+      $('lcd').textContent = `FLO: ${pg.cur.slice(0, n)}`;
       if (n - pg.said >= 3) {
         pg.said = n;
-        if (/\w/.test(pg.cur[n - 1] || '')) audio.babble();
+        if (/\w/.test(pg.cur[n - 1] || '')) {
+          audio.babble();
+        }
       }
     } else if ((pg.hold -= dt) <= 0) {
       pg.cur = '';
-      if (!pg.q.length) $('pager').classList.remove('ring');
+      if (!pg.q.length) {
+        $('pager').classList.remove('ring');
+      }
     }
-  } else $('lcd').textContent = pg.idle ? '» ' + pg.idle : S.jobN >= MISSIONS.length ? 'Wachenroth gehört dir.' : '...';
-  $('mission').hidden = !j || !(j.timed || j.fragile || j.need || j.step.do === 'hold' || j.step.do === 'chase');
+  } else {
+    $('lcd').textContent = pg.idle
+      ? `» ${pg.idle}`
+      : S.jobN >= MISSIONS.length
+        ? 'Wachenroth gehört dir.'
+        : '...';
+  }
+  $('mission').hidden =
+    !j ||
+    !(
+      j.timed ||
+      j.fragile ||
+      j.need ||
+      j.step.do === 'hold' ||
+      j.step.do === 'chase'
+    );
   if (j && !$('mission').hidden) {
-    const el = $('mission'),
-      secs = Math.max(0, Math.ceil(j.left)),
-      st = j.step,
-      bits = [];
-    if (j.timed) bits.push(`${(secs / 60) | 0}:${String(secs % 60).padStart(2, '0')}`);
-    if (st.do === 'collect') bits.push(`${j.got} / ${j.need}`);
-    if (st.do === 'chase') bits.push(`Treffer ${j.prey.hits || 0} / ${st.hits}`);
-    if (j.fragile) bits.push('Ladung');
+    const el = $('mission');
+    const secs = Math.max(0, Math.ceil(j.left));
+    const st = j.step;
+    const bits = [];
+    if (j.timed) {
+      bits.push(`${(secs / 60) | 0}:${String(secs % 60).padStart(2, '0')}`);
+    }
+    if (st.do === 'collect') {
+      bits.push(`${j.got} / ${j.need}`);
+    }
+    if (st.do === 'chase') {
+      bits.push(`Treffer ${j.prey.hits || 0} / ${st.hits}`);
+    }
+    if (j.fragile) {
+      bits.push('Ladung');
+    }
     el.firstElementChild.textContent = bits.join('  ·  ');
     const bar = j.fragile
       ? j.cargo
@@ -2657,15 +3912,19 @@ function hud(dt) {
           : j.timed
             ? j.left / (st.time || j.left)
             : 0;
-    el.lastElementChild.hidden = !(j.fragile || st.do === 'hold' || st.do === 'collect');
-    el.querySelector('i').style.width = clamp(bar, 0, 1) * 100 + '%';
+    el.lastElementChild.hidden = !(
+      j.fragile ||
+      st.do === 'hold' ||
+      st.do === 'collect'
+    );
+    el.querySelector('i').style.width = `${clamp(bar, 0, 1) * 100}%`;
     el.classList.toggle('hurry', j.timed && secs <= 15);
   }
   if ((S.whereT -= dt) <= 0) {
     // where am I?
     S.whereT = 0.5;
-    let name = '',
-      bd = 34;
+    let name = '';
+    let bd = 34;
     for (const k in SPOT) {
       const d = dist(P, SPOT[k]);
       if (d < bd && PLACES[k]) {
@@ -2675,40 +3934,63 @@ function hud(dt) {
     }
     if (!name) {
       bd = 14;
-      for (const s of SEGS)
-        if (s[6].n && Math.abs(s[0] - P.x) < 150 && Math.abs(s[1] - P.y) < 150) {
-          const q = nearest(P.x, P.y, s[0], s[1], s[2], s[3]),
-            d = Math.hypot(P.x - q[0], P.y - q[1]);
+      for (const s of SEGS) {
+        if (
+          s[6].n &&
+          Math.abs(s[0] - P.x) < 150 &&
+          Math.abs(s[1] - P.y) < 150
+        ) {
+          const q = nearest(P.x, P.y, s[0], s[1], s[2], s[3]);
+          const d = Math.hypot(P.x - q[0], P.y - q[1]);
           if (d < bd) {
             bd = d;
             name = s[6].n;
           }
         }
+      }
     }
     $('where').textContent = name;
   }
   audio.engine(c ? c.vf : 0, c && S.mode === 'play' && !S.paused, c && c.kind);
 }
 
+/**
+ *
+ * @param save
+ */
 function start(save) {
   audio.init();
   reset('play', save);
   $('menu').hidden = $('end').hidden = true;
   $('hud').hidden = false;
   $('lcd').textContent = '';
-  for (const id of ['flash', 'mission', 'pause', 'info', 'map']) $(id).hidden = true;
+  for (const id of ['flash', 'mission', 'pause', 'info', 'map']) {
+    $(id).hidden = true;
+  }
   replay($('hint'));
   document.activeElement.blur();
-  if (document.body.classList.contains('touch') && document.documentElement.requestFullscreen)
+  if (
+    document.body.classList.contains('touch') &&
+    document.documentElement.requestFullscreen
+  ) {
     document.documentElement.requestFullscreen().catch(() => {});
+  }
   audio.radio(-1);
   const pickN = +new URLSearchParams(location.search).get('job'); // index.html?job=3 jumps straight to a job
-  if (pickN) S.jobN = clamp(Math.round(pickN) - 1, 0, MISSIONS.length - 1);
+  if (pickN) {
+    S.jobN = clamp(Math.round(pickN) - 1, 0, MISSIONS.length - 1);
+  }
   page(...(save ? TALK.back : TALK.hello));
 }
 
+/**
+ *
+ * @param p
+ */
 function pause(p) {
-  if (S.mode !== 'play' || S.map) return;
+  if (S.mode !== 'play' || S.map) {
+    return;
+  }
   S.paused = p;
   $('pause').hidden = !p;
   audio.pause(p);
@@ -2717,26 +3999,48 @@ function pause(p) {
 // ---------- input: keyboard, and a thumb stick plus buttons on touch screens
 
 addEventListener('keydown', e => {
-  if (S.mode !== 'play') return;
-  if (e.code.startsWith('Arrow') || e.code === 'Space' || e.code === 'Tab') e.preventDefault();
-  if (e.code === 'Tab' && !e.repeat) return showMap(!S.map);
+  if (S.mode !== 'play') {
+    return;
+  }
+  if (e.code.startsWith('Arrow') || e.code === 'Space' || e.code === 'Tab') {
+    e.preventDefault();
+  }
+  if (e.code === 'Tab' && !e.repeat) {
+    return showMap(!S.map);
+  }
   if (S.map) {
-    if (e.code === 'Escape') showMap(false);
+    if (e.code === 'Escape') {
+      showMap(false);
+    }
     return;
   }
   keys[e.code] = true;
-  if (e.repeat) return;
-  if (e.code === 'KeyF' || e.code === 'Enter') toggleCar();
-  if (e.code === 'KeyP' || e.code === 'Escape') pause(!S.paused);
-  if (e.code === 'KeyM') audio.mute(!audio.isMuted());
-  if (e.code === 'KeyR') nextStation();
-  if (e.code === 'KeyH') honk();
+  if (e.repeat) {
+    return;
+  }
+  if (e.code === 'KeyF' || e.code === 'Enter') {
+    toggleCar();
+  }
+  if (e.code === 'KeyP' || e.code === 'Escape') {
+    pause(!S.paused);
+  }
+  if (e.code === 'KeyM') {
+    audio.mute(!audio.isMuted());
+  }
+  if (e.code === 'KeyR') {
+    nextStation();
+  }
+  if (e.code === 'KeyH') {
+    honk();
+  }
 });
 addEventListener('keyup', e => {
   keys[e.code] = false;
 });
 addEventListener('blur', () => {
-  for (const k in keys) keys[k] = false;
+  for (const k in keys) {
+    keys[k] = false;
+  }
 });
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
@@ -2746,38 +4050,44 @@ document.addEventListener('visibilitychange', () => {
 });
 
 {
-  const stick = $('stick'),
-    knob = stick.firstElementChild,
-    R = 52;
-  let id = null,
-    ox = 0,
-    oy = 0;
+  const stick = $('stick');
+  const knob = stick.firstElementChild;
+  const R = 52;
+  let id = null;
+  let ox = 0;
+  let oy = 0;
   const move = e => {
-    const dx = e.clientX - ox,
-      dy = e.clientY - oy,
-      d = Math.hypot(dx, dy),
-      k = Math.min(1, d / R) / (d || 1);
+    const dx = e.clientX - ox;
+    const dy = e.clientY - oy;
+    const d = Math.hypot(dx, dy);
+    const k = Math.min(1, d / R) / (d || 1);
     pad.x = dx * k;
     pad.y = dy * k;
     knob.style.transform = `translate(${pad.x * R}px, ${pad.y * R}px)`;
   };
   const zone = $('zone');
   zone.addEventListener('pointerdown', e => {
-    if (id !== null) return;
+    if (id !== null) {
+      return;
+    }
     id = e.pointerId;
     ox = e.clientX;
     oy = e.clientY;
     zone.setPointerCapture(id);
-    stick.style.left = ox + 'px';
-    stick.style.top = oy + 'px';
+    stick.style.left = `${ox}px`;
+    stick.style.top = `${oy}px`;
     stick.classList.add('on');
     move(e);
   });
   zone.addEventListener('pointermove', e => {
-    if (e.pointerId === id) move(e);
+    if (e.pointerId === id) {
+      move(e);
+    }
   });
   const up = e => {
-    if (e.pointerId !== id) return;
+    if (e.pointerId !== id) {
+      return;
+    }
     id = null;
     pad.x = pad.y = 0;
     knob.style.transform = '';
@@ -2789,12 +4099,15 @@ document.addEventListener('visibilitychange', () => {
     el.addEventListener('pointerdown', e => {
       e.preventDefault();
       pad[key] = true;
-      if (key === 'horn') honk();
+      if (key === 'horn') {
+        honk();
+      }
     });
-    for (const ev of ['pointerup', 'pointercancel', 'pointerleave'])
+    for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) {
       el.addEventListener(ev, () => {
         pad[key] = false;
       });
+    }
   };
   hold($('bB'), 'brake');
   hold($('bH'), 'horn');
@@ -2823,11 +4136,16 @@ document.addEventListener('visibilitychange', () => {
   $('map').addEventListener('pointerdown', () => showMap(false));
   $('pager').addEventListener('pointerdown', () => {
     const pg = S.pager;
-    if (pg.n < pg.cur.length) pg.n = pg.cur.length;
-    else pg.hold = 0;
+    if (pg.n < pg.cur.length) {
+      pg.n = pg.cur.length;
+    } else {
+      pg.hold = 0;
+    }
   }); // tap: next message
   const touchy = () => document.body.classList.add('touch');
-  if (matchMedia('(pointer: coarse)').matches) touchy();
+  if (matchMedia('(pointer: coarse)').matches) {
+    touchy();
+  }
   addEventListener('touchstart', touchy, {once: true, passive: true});
   document.addEventListener('contextmenu', e => e.preventDefault());
 }
@@ -2842,11 +4160,21 @@ $('how').onclick = () => {
 {
   const save = load();
   $('resume').hidden = !(save && save.n > 0 && save.n < MISSIONS.length);
-  if (save) $('resume').textContent = `Weiterspielen (Auftrag ${save.n + 1}/${MISSIONS.length})`;
+  if (save) {
+    $('resume').textContent =
+      `Weiterspielen (Auftrag ${save.n + 1}/${MISSIONS.length})`;
+  }
 }
 
 // ---------- rendering
 
+/**
+ *
+ * @param l
+ * @param style
+ * @param w
+ * @param grow
+ */
 function strokeLayer(l, style, w, grow = 0) {
   ctx.strokeStyle = style;
   for (const [rw, path] of l) {
@@ -2855,15 +4183,19 @@ function strokeLayer(l, style, w, grow = 0) {
   }
 }
 
+/**
+ *
+ * @param a
+ */
 function drawPitch(a) {
-  const L = a.u1 - a.u0,
-    Wd = a.v1 - a.v0,
-    line = (x0, y0, x1, y1) => {
-      ctx.beginPath();
-      ctx.moveTo(x0, y0);
-      ctx.lineTo(x1, y1);
-      ctx.stroke();
-    };
+  const L = a.u1 - a.u0;
+  const Wd = a.v1 - a.v0;
+  const line = (x0, y0, x1, y1) => {
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    ctx.lineTo(x1, y1);
+    ctx.stroke();
+  };
   ctx.save();
   local(a);
   ctx.strokeStyle = '#e8efe0';
@@ -2880,9 +4212,9 @@ function drawPitch(a) {
     ctx.arc(0, 0, Math.min(9.15, Wd * 0.18), 0, TAU);
     ctx.stroke();
     for (const s of [-1, 1]) {
-      const x = s * (L / 2 - 1.5),
-        bw = Math.min(40, Wd * 0.6),
-        sw = Math.min(18, Wd * 0.3);
+      const x = s * (L / 2 - 1.5);
+      const bw = Math.min(40, Wd * 0.6);
+      const sw = Math.min(18, Wd * 0.3);
       ctx.strokeRect(Math.min(x, x - s * 16.5), -bw / 2, 16.5, bw);
       ctx.strokeRect(Math.min(x, x - s * 5.5), -sw / 2, 5.5, sw);
       ctx.fillStyle = '#f4f4ef';
@@ -2891,12 +4223,12 @@ function drawPitch(a) {
   } else {
     ctx.fillStyle = a.s === 'tennis' ? TEX.clay : TEX.play;
     ctx.fill(a.lpath);
-    const n = Math.max(1, Math.round(Wd / 18)),
-      ch = Wd / n; // courts side by side
+    const n = Math.max(1, Math.round(Wd / 18));
+    const ch = Wd / n; // courts side by side
     for (let i = 0; i < n; i++) {
-      const y = a.v0 + ch * i + ch / 2,
-        cl = Math.min(L - 6, 23.8),
-        cw = Math.min(ch - 5, 11);
+      const y = a.v0 + ch * i + ch / 2;
+      const cl = Math.min(L - 6, 23.8);
+      const cw = Math.min(ch - 5, 11);
       ctx.strokeRect(-cl / 2, y - cw / 2, cl, cw);
       ctx.strokeStyle = '#30343a';
       line(0, y - cw / 2 - 0.8, 0, y + cw / 2 + 0.8);
@@ -2907,12 +4239,23 @@ function drawPitch(a) {
   ctx.lineCap = 'round';
 }
 
+/**
+ *
+ * @param x0
+ * @param y0
+ * @param x1
+ * @param y1
+ */
 function drawGround(x0, y0, x1, y1) {
   ctx.fillStyle = TEX.grass;
   ctx.fillRect(x0 - 1, y0 - 1, x1 - x0 + 2, y1 - y0 + 2);
   const seen = a => a.x1 > x0 && a.x0 < x1 && a.y1 > y0 && a.y0 < y1;
-  TEX.water.setTransform(new DOMMatrix().scaleSelf(1 / PPM).translateSelf((S.t * 5) % 64, (S.t * 2) % 64)); // the water drifts
-  for (const a of AREAS)
+  TEX.water.setTransform(
+    new DOMMatrix()
+      .scaleSelf(1 / PPM)
+      .translateSelf((S.t * 5) % 64, (S.t * 2) % 64)
+  ); // the water drifts
+  for (const a of AREAS) {
     if (seen(a) && a.fill) {
       ctx.fillStyle = a.fill;
       if (a.k === 'farm') {
@@ -2921,7 +4264,9 @@ function drawGround(x0, y0, x1, y1) {
         ctx.fill(a.lpath);
         ctx.restore();
       } // furrows run along the field
-      else ctx.fill(a.path);
+      else {
+        ctx.fill(a.path);
+      }
       if (a.bays) {
         ctx.save();
         ctx.clip(a.path);
@@ -2932,7 +4277,12 @@ function drawGround(x0, y0, x1, y1) {
         ctx.restore();
       }
     }
-  for (const a of AREAS) if (seen(a) && a.k === 'pitch') drawPitch(a);
+  }
+  for (const a of AREAS) {
+    if (seen(a) && a.k === 'pitch') {
+      drawPitch(a);
+    }
+  }
   strokeLayer(ROADS.stream, '#3a72a2');
   strokeLayer(ROADS.bank, '#3c6829');
   strokeLayer(ROADS.river, TEX.water);
@@ -2973,11 +4323,12 @@ function drawGround(x0, y0, x1, y1) {
     ctx.beginPath();
     ctx.arc(10.5, 3, 1.5, 0, TAU);
     ctx.fill();
-    for (const x of [-16, 15.4])
+    for (const x of [-16, 15.4]) {
       for (let i = 0; i < 7; i++) {
         ctx.fillStyle = i % 2 ? '#f4f4ef' : '#c8201c';
         ctx.fillRect(x, -1 + i, 0.6, 1);
       }
+    }
     for (let i = 0; i < 16; i++) {
       ctx.fillStyle = i % 2 ? '#f4f4ef' : '#c8201c';
       ctx.fillRect(-16 + i * 2, 5.6, 2, 0.5);
@@ -3006,8 +4357,8 @@ function drawGround(x0, y0, x1, y1) {
   ctx.stroke(FENCES);
   ctx.setLineDash([]);
   ctx.lineCap = 'round';
-  const j = S.job,
-    to = j && j.to;
+  const j = S.job;
+  const to = j && j.to;
   if (to && to !== j.veh && to !== j.prey) {
     // where to go: a pulsing ring on the ground
     const pulse = Math.sin(S.t * 5);
@@ -3024,15 +4375,21 @@ function drawGround(x0, y0, x1, y1) {
       ctx.stroke();
     }
   }
-  if (DEBUG)
+  if (DEBUG) {
     for (const k in SPOT) {
       ctx.fillStyle = '#f0f';
       ctx.beginPath();
       ctx.arc(SPOT[k].x, SPOT[k].y, 1.5, 0, TAU);
       ctx.fill();
     }
+  }
 }
 
+/**
+ *
+ * @param builds
+ * @param trees
+ */
 function drawShadows(builds, trees) {
   ctx.fillStyle = 'rgba(0,0,0,.28)';
   for (const b of builds) {
@@ -3050,18 +4407,27 @@ function drawShadows(builds, trees) {
 }
 
 // Buildings lean away from the screen centre, like looking straight down from a helicopter.
+/**
+ *
+ * @param builds
+ * @param cx
+ * @param cy
+ * @param hc
+ */
 function drawBuildings(builds, cx, cy, hc) {
-  for (const b of builds) b.d = (b.mx - cx) ** 2 + (b.my - cy) ** 2;
+  for (const b of builds) {
+    b.d = (b.mx - cx) ** 2 + (b.my - cy) ** 2;
+  }
   builds.sort((a, b) => b.d - a.d);
   for (const b of builds) {
-    const h = Math.min(b.h, hc * 0.5),
-      s = hc / (hc - h),
-      ox = cx * (1 - s),
-      oy = cy * (1 - s),
-      p = b.p;
+    const h = Math.min(b.h, hc * 0.5);
+    const s = hc / (hc - h);
+    const ox = cx * (1 - s);
+    const oy = cy * (1 - s);
+    const p = b.p;
     for (let i = 0, k = 0; i < p.length; i += 2, k++) {
-      const ax = p[i],
-        ay = p[i + 1];
+      const ax = p[i];
+      const ay = p[i + 1];
       if (b.k === 'o') {
         // an open roof stands on posts
         ctx.strokeStyle = '#6c6f76';
@@ -3072,10 +4438,12 @@ function drawBuildings(builds, cx, cy, hc) {
         ctx.stroke();
         continue;
       }
-      if ((cx - ax) * b.nx[k] + (cy - ay) * b.ny[k] <= 0) continue; // faces away
-      const j = (i + 2) % p.length,
-        bx = p[j],
-        by = p[j + 1];
+      if ((cx - ax) * b.nx[k] + (cy - ay) * b.ny[k] <= 0) {
+        continue;
+      } // faces away
+      const j = (i + 2) % p.length;
+      const bx = p[j];
+      const by = p[j + 1];
       ctx.fillStyle = ctx.strokeStyle = b.wall[k];
       ctx.lineWidth = 0.15;
       ctx.beginPath();
@@ -3094,13 +4462,15 @@ function drawBuildings(builds, cx, cy, hc) {
       ctx.stroke();
       // a row of windows on every floor: pale frames, dark glass
       const tall = (s - 1) * Math.hypot((ax + bx) / 2 - cx, (ay + by) / 2 - cy);
-      if (tall < 0.8 || b.h < 5 || b.k === 's') continue;
-      const hall = b.k === 'i' || b.k === 'm',
-        pane = (tall * 0.34) / b.floors;
+      if (tall < 0.8 || b.h < 5 || b.k === 's') {
+        continue;
+      }
+      const hall = b.k === 'i' || b.k === 'm';
+      const pane = (tall * 0.34) / b.floors;
       ctx.lineCap = 'butt';
       for (let f = 0; f < b.floors; f++) {
-        const sm = 1 + ((s - 1) * (f + 0.58)) / b.floors,
-          om = 1 - sm;
+        const sm = 1 + ((s - 1) * (f + 0.58)) / b.floors;
+        const om = 1 - sm;
         ctx.beginPath();
         ctx.moveTo(ax * sm + cx * om, ay * sm + cy * om);
         ctx.lineTo(bx * sm + cx * om, by * sm + cy * om);
@@ -3122,14 +4492,14 @@ function drawBuildings(builds, cx, cy, hc) {
     }
     ctx.save();
     local(b);
-    const lx = (cx - b.mx) * b.ca + (cy - b.my) * b.sa,
-      ly = (cy - b.my) * b.ca - (cx - b.mx) * b.sa; // the camera in the roof's own frame
+    const lx = (cx - b.mx) * b.ca + (cy - b.my) * b.sa;
+    const ly = (cy - b.my) * b.ca - (cx - b.mx) * b.sa; // the camera in the roof's own frame
     ctx.strokeStyle = 'rgba(0,0,0,.5)';
     ctx.lineWidth = 0.3;
-    const top = Math.min(h + (b.rh || b.apex || 0), hc * 0.62),
-      s2 = hc / (hc - top),
-      k1 = 1 - s,
-      k2 = 1 - s2;
+    const top = Math.min(h + (b.rh || b.apex || 0), hc * 0.62);
+    const s2 = hc / (hc - top);
+    const k1 = 1 - s;
+    const k2 = 1 - s2;
     if (b.halves) {
       for (const g of b.gables) {
         // the triangles under the ridge
@@ -3144,11 +4514,14 @@ function drawBuildings(builds, cx, cy, hc) {
         const hp = b.halves[n];
         ctx.beginPath();
         for (let i = 0; i < hp.length; i += 3) {
-          const ss = hp[i + 2] ? s2 : s,
-            x = hp[i] * ss + lx * (1 - ss),
-            y = hp[i + 1] * ss + ly * (1 - ss);
-          if (i) ctx.lineTo(x, y);
-          else ctx.moveTo(x, y);
+          const ss = hp[i + 2] ? s2 : s;
+          const x = hp[i] * ss + lx * (1 - ss);
+          const y = hp[i + 1] * ss + ly * (1 - ss);
+          if (i) {
+            ctx.lineTo(x, y);
+          } else {
+            ctx.moveTo(x, y);
+          }
         }
         ctx.closePath();
         ctx.fillStyle = b.roof;
@@ -3163,27 +4536,37 @@ function drawBuildings(builds, cx, cy, hc) {
       ctx.moveTo(b.rx0 * s2 + lx * k2, b.ry * s2 + ly * k2);
       ctx.lineTo(b.rx1 * s2 + lx * k2, b.ry * s2 + ly * k2);
       ctx.stroke();
-      const sm = (s + s2) / 2,
-        km = 1 - sm;
+      const sm = (s + s2) / 2;
+      const km = 1 - sm;
       if (b.pv != null) {
         // solar panels
-        const dir = b.pv ? -1 : 1,
-          half = (b.v1 - b.v0) / 2,
-          len = (b.rx1 - b.rx0) * 0.62,
-          x = (b.rx0 + b.rx1) / 2 - len / 2;
+        const dir = b.pv ? -1 : 1;
+        const half = (b.v1 - b.v0) / 2;
+        const len = (b.rx1 - b.rx0) * 0.62;
+        const x = (b.rx0 + b.rx1) / 2 - len / 2;
         ctx.fillStyle = '#1d2c4d';
         ctx.fillRect(
           x * sm + lx * km,
           (b.ry + dir * half * (dir > 0 ? 0.22 : 0.78)) * sm + ly * km,
           len * sm,
-          half * 0.56 * sm,
+          half * 0.56 * sm
         );
       }
       if (b.chim) {
         ctx.fillStyle = '#5a2c22';
-        ctx.fillRect(b.chim[0] * s2 + lx * k2 - 0.45, b.chim[1] * s2 + ly * k2 - 0.45, 0.9, 0.9);
+        ctx.fillRect(
+          b.chim[0] * s2 + lx * k2 - 0.45,
+          b.chim[1] * s2 + ly * k2 - 0.45,
+          0.9,
+          0.9
+        );
         ctx.fillStyle = '#1c1c1c';
-        ctx.fillRect(b.chim[0] * s2 + lx * k2 - 0.2, b.chim[1] * s2 + ly * k2 - 0.2, 0.4, 0.4);
+        ctx.fillRect(
+          b.chim[0] * s2 + lx * k2 - 0.2,
+          b.chim[1] * s2 + ly * k2 - 0.2,
+          0.4,
+          0.4
+        );
       }
     } else if (b.apex) {
       // spires and silo lids: every wall gets a triangle up to the tip
@@ -3219,7 +4602,7 @@ function drawBuildings(builds, cx, cy, hc) {
         ctx.stroke(b.lpath);
         ctx.restore();
       } // parapet
-      if (b.units)
+      if (b.units) {
         for (const [ux, uy, us] of b.units) {
           ctx.fillStyle = 'rgba(0,0,0,.3)';
           ctx.fillRect(ux + 0.4, uy + 0.4, us, us * 0.7);
@@ -3228,11 +4611,18 @@ function drawBuildings(builds, cx, cy, hc) {
           ctx.fillStyle = '#7d828a';
           ctx.fillRect(ux + us * 0.15, uy + us * 0.12, us * 0.7, us * 0.12);
         }
+      }
     }
     if (b.label) {
-      const sl = b.halves ? s2 : 1,
-        size = clamp(Math.min((b.u1 - b.u0) / (b.label.length * 0.7), (b.v1 - b.v0) * 0.4), 2.2, 11);
-      if (b.halves) ctx.transform(s2, 0, 0, s2, lx * k2, ly * k2);
+      const sl = b.halves ? s2 : 1;
+      const size = clamp(
+        Math.min((b.u1 - b.u0) / (b.label.length * 0.7), (b.v1 - b.v0) * 0.4),
+        2.2,
+        11
+      );
+      if (b.halves) {
+        ctx.transform(s2, 0, 0, s2, lx * k2, ly * k2);
+      }
       ctx.font = `${size}px Impact, Haettenschweiler, "Arial Narrow Bold", sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
@@ -3247,6 +4637,13 @@ function drawBuildings(builds, cx, cy, hc) {
   }
 }
 
+/**
+ *
+ * @param list
+ * @param cx
+ * @param cy
+ * @param hc
+ */
 function drawFurniture(list, cx, cy, hc) {
   const line = (x0, y0, x1, y1) => {
     ctx.beginPath();
@@ -3263,19 +4660,21 @@ function drawFurniture(list, cx, cy, hc) {
   ctx.lineCap = 'butt';
   for (const p of list) {
     if (p.k === 'hydrant') {
-      if (p.down) disc(p.x, p.y, 1.5, 'rgba(70,130,190,.4)');
+      if (p.down) {
+        disc(p.x, p.y, 1.5, 'rgba(70,130,190,.4)');
+      }
       disc(p.x + 0.18, p.y + 0.18, 0.36, 'rgba(0,0,0,.3)');
       disc(p.x, p.y, 0.36, p.down ? '#7a1512' : '#c8201c');
       disc(p.x - 0.08, p.y - 0.08, 0.17, p.down ? '#9a2a22' : '#ee6a5a');
       continue;
     }
-    const h = 6.5,
-      s = p.down ? 1 : hc / (hc - h),
-      k = 1 - s; // standing lanterns lean like the houses do, fallen ones lie flat
-    const tx = p.down ? p.x + Math.cos(p.fa) * h : p.x * s + cx * k,
-      ty = p.down ? p.y + Math.sin(p.fa) * h : p.y * s + cy * k;
-    const hx = tx + Math.cos(p.down ? p.fa + 1.2 : p.a) * 1.4 * s,
-      hy = ty + Math.sin(p.down ? p.fa + 1.2 : p.a) * 1.4 * s;
+    const h = 6.5;
+    const s = p.down ? 1 : hc / (hc - h);
+    const k = 1 - s; // standing lanterns lean like the houses do, fallen ones lie flat
+    const tx = p.down ? p.x + Math.cos(p.fa) * h : p.x * s + cx * k;
+    const ty = p.down ? p.y + Math.sin(p.fa) * h : p.y * s + cy * k;
+    const hx = tx + Math.cos(p.down ? p.fa + 1.2 : p.a) * 1.4 * s;
+    const hy = ty + Math.sin(p.down ? p.fa + 1.2 : p.a) * 1.4 * s;
     if (!p.down) {
       ctx.strokeStyle = 'rgba(0,0,0,.22)';
       ctx.lineWidth = 0.28;
@@ -3293,29 +4692,45 @@ function drawFurniture(list, cx, cy, hc) {
   ctx.lineCap = 'round';
 }
 
+/**
+ *
+ * @param trees
+ * @param cx
+ * @param cy
+ * @param hc
+ */
 function drawTrees(trees, cx, cy, hc) {
   ctx.strokeStyle = '#4a3420';
   ctx.lineWidth = 0.5;
   for (const t of trees) {
-    const s = hc / (hc - t.h),
-      x = t.x * s + cx * (1 - s),
-      y = t.y * s + cy * (1 - s);
+    const s = hc / (hc - t.h);
+    const x = t.x * s + cx * (1 - s);
+    const y = t.y * s + cy * (1 - s);
     ctx.beginPath();
     ctx.moveTo(t.x, t.y);
     ctx.lineTo(x, y);
     ctx.stroke();
-    ctx.globalAlpha = S.mode === 'play' && Math.hypot(x - S.P.x, y - S.P.y) < t.r + 2.5 ? 0.4 : 1; // see under the canopy
+    ctx.globalAlpha =
+      S.mode === 'play' && Math.hypot(x - S.P.x, y - S.P.y) < t.r + 2.5
+        ? 0.4
+        : 1; // see under the canopy
     ctx.drawImage(CANOPY[t.s], x - t.r, y - t.r, t.r * 2, t.r * 2);
   }
   ctx.globalAlpha = 1;
 }
 
+/**
+ *
+ * @param p
+ * @param shirt
+ * @param hair
+ */
 function drawPerson(p, shirt, hair) {
-  const sw = Math.sin(p.t * 4) * 0.22,
-    R = (x, y, w, h, f) => {
-      ctx.fillStyle = f;
-      ctx.fillRect(x, y, w, h);
-    };
+  const sw = Math.sin(p.t * 4) * 0.22;
+  const R = (x, y, w, h, f) => {
+    ctx.fillStyle = f;
+    ctx.fillRect(x, y, w, h);
+  };
   ctx.save();
   ctx.translate(p.x, p.y);
   ctx.rotate(p.a);
@@ -3329,28 +4744,39 @@ function drawPerson(p, shirt, hair) {
   ctx.restore();
 }
 
+/**
+ *
+ */
 function drawProps() {
   // mission scenery: bonfires, tents, people waiting for a lift
   const j = S.job;
   for (const pr of j ? j.m.props || [] : []) {
-    const s = SPOT[pr.at],
-      x = s.x + (pr.dx || 0),
-      y = s.y + (pr.dy || 0);
-    if (pr.from > j.i || pr.until <= j.i) continue;
+    const s = SPOT[pr.at];
+    const x = s.x + (pr.dx || 0);
+    const y = s.y + (pr.dy || 0);
+    if (pr.from > j.i || pr.until <= j.i) {
+      continue;
+    }
     if (pr.k === 'fire') {
       ctx.fillStyle = '#3a2a1a';
       ctx.beginPath();
       ctx.arc(x, y, 2.6, 0, TAU);
       ctx.fill();
       for (let i = 0; i < 7; i++) {
-        const a = S.t * 3 + i * 2.4,
-          r = 1.6 + Math.sin(S.t * 9 + i) * 0.7;
+        const a = S.t * 3 + i * 2.4;
+        const r = 1.6 + Math.sin(S.t * 9 + i) * 0.7;
         ctx.fillStyle = i % 2 ? '#ff5a1f' : '#ffd23e';
         ctx.beginPath();
         ctx.arc(x + Math.cos(a) * 1.3, y + Math.sin(a) * 1.3, r * 0.6, 0, TAU);
         ctx.fill();
       }
-      if (Math.random() < 0.5) puff(x + rand(-1, 1), y + rand(-1, 1), Math.random() < 0.5 ? 'fire' : 'smoke');
+      if (Math.random() < 0.5) {
+        puff(
+          x + rand(-1, 1),
+          y + rand(-1, 1),
+          Math.random() < 0.5 ? 'fire' : 'smoke'
+        );
+      }
     } else if (pr.k === 'tent') {
       ctx.save();
       ctx.translate(x, y);
@@ -3367,24 +4793,41 @@ function drawProps() {
       ctx.lineTo(12, 0);
       ctx.stroke();
       ctx.restore();
-    } else if (pr.k === 'person') drawPerson({x, y, a: S.t * 0.8 + x, t: 0}, pr.col || '#b3372f', '#2a1d12');
+    } else if (pr.k === 'person') {
+      drawPerson(
+        {x, y, a: S.t * 0.8 + x, t: 0},
+        pr.col || '#b3372f',
+        '#2a1d12'
+      );
+    }
   }
 }
 
+/**
+ *
+ * @param x0
+ * @param y0
+ * @param x1
+ * @param y1
+ */
 function drawSprites(x0, y0, x1, y1) {
-  const P = S.P,
-    seen = o => o.x > x0 - 14 && o.x < x1 + 14 && o.y > y0 - 14 && o.y < y1 + 14;
+  const P = S.P;
+  const seen = o =>
+    o.x > x0 - 14 && o.x < x1 + 14 && o.y > y0 - 14 && o.y < y1 + 14;
   for (const d of S.decals) {
-    ctx.fillStyle = d.kind === 'blood' ? 'rgba(140,10,16,.8)' : 'rgba(15,12,10,.55)';
+    ctx.fillStyle =
+      d.kind === 'blood' ? 'rgba(140,10,16,.8)' : 'rgba(15,12,10,.55)';
     ctx.beginPath();
     ctx.arc(d.x, d.y, d.r, 0, TAU);
     ctx.fill();
   }
   drawProps();
   for (const v of S.items) {
-    if (!seen(v)) continue;
-    const k = Math.sin(S.t * 5 + v.ph),
-      w = (v.job ? 2.6 : 2) + k * 0.2;
+    if (!seen(v)) {
+      continue;
+    }
+    const k = Math.sin(S.t * 5 + v.ph);
+    const w = (v.job ? 2.6 : 2) + k * 0.2;
     ctx.fillStyle = v.job ? 'rgba(255,210,62,.5)' : 'rgba(255,255,255,.25)';
     ctx.beginPath();
     ctx.arc(v.x, v.y, (v.job ? 2.4 : 1.7) + k * 0.3, 0, TAU);
@@ -3403,19 +4846,28 @@ function drawSprites(x0, y0, x1, y1) {
     ctx.stroke();
     drawPerson(P, '#19c2bd', '#3a2a1a');
   }
-  for (const p of S.peds) if (seen(p)) drawPerson(p, p.shirt, p.hair);
+  for (const p of S.peds) {
+    if (seen(p)) {
+      drawPerson(p, p.shirt, p.hair);
+    }
+  }
   for (const c of S.cars) {
-    if (!seen(c)) continue;
-    const T = c.T,
-      fx = Math.cos(c.a),
-      fy = Math.sin(c.a);
+    if (!seen(c)) {
+      continue;
+    }
+    const T = c.T;
+    const fx = Math.cos(c.a);
+    const fy = Math.sin(c.a);
     if (c.tr) {
       // the trailer hangs on the rear hitch
-      const tt = c.tr.T,
-        hx = c.x - (fx * T.L) / 2,
-        hy = c.y - (fy * T.L) / 2;
+      const tt = c.tr.T;
+      const hx = c.x - (fx * T.L) / 2;
+      const hy = c.y - (fy * T.L) / 2;
       ctx.save();
-      ctx.translate(hx - Math.cos(c.tr.a) * (tt.L / 2 + 0.4), hy - Math.sin(c.tr.a) * (tt.L / 2 + 0.4));
+      ctx.translate(
+        hx - Math.cos(c.tr.a) * (tt.L / 2 + 0.4),
+        hy - Math.sin(c.tr.a) * (tt.L / 2 + 0.4)
+      );
       ctx.rotate(c.tr.a);
       ctx.fillStyle = 'rgba(0,0,0,.3)';
       ctx.fillRect(-tt.L / 2 + 0.4, -tt.Wd / 2 + 0.4, tt.L, tt.Wd);
@@ -3431,12 +4883,15 @@ function drawSprites(x0, y0, x1, y1) {
         ctx.fillStyle = 'rgba(0,0,0,.3)';
         ctx.fillRect(-T.L / 2, -T.Wd / 2, T.L, T.Wd);
       } else {
-        const spin = c.kind === 'mixer' && !c.dead ? carSprite('mixer', c.col, ((S.t * 5) | 0) % 4) : c.spr;
+        const spin =
+          c.kind === 'mixer' && !c.dead
+            ? carSprite('mixer', c.col, ((S.t * 5) | 0) % 4)
+            : c.spr;
         ctx.drawImage(spin, -T.L / 2, -T.Wd / 2, T.L, T.Wd);
         if (c.siren && !c.dead) {
           // blue lights
-          const on = ((S.t * 6) | 0) % 2,
-            x = c.kind === 'fire' ? T.L / 2 - 2.3 : -0.2;
+          const on = ((S.t * 6) | 0) % 2;
+          const x = c.kind === 'fire' ? T.L / 2 - 2.3 : -0.2;
           ctx.fillStyle = on ? '#4aa3ff' : '#12327a';
           ctx.fillRect(x, -T.Wd / 2 + 0.3, 0.5, 0.6);
           ctx.fillStyle = on ? '#12327a' : '#4aa3ff';
@@ -3448,11 +4903,19 @@ function drawSprites(x0, y0, x1, y1) {
   }
 }
 
+/**
+ *
+ */
 function drawParticles() {
   for (const p of S.parts) {
     const k = p.life / p.max;
     if (p.kind === 'spark' || p.kind === 'blood' || p.kind === 'water') {
-      ctx.fillStyle = p.kind === 'spark' ? '#ffd23e' : p.kind === 'blood' ? '#b0121a' : '#9fd0f0';
+      ctx.fillStyle =
+        p.kind === 'spark'
+          ? '#ffd23e'
+          : p.kind === 'blood'
+            ? '#b0121a'
+            : '#9fd0f0';
       ctx.fillRect(p.x, p.y, 0.35, 0.35);
       continue;
     }
@@ -3465,26 +4928,53 @@ function drawParticles() {
             ? '#ffd23e'
             : '#ff5a1f';
     ctx.beginPath();
-    ctx.arc(p.x, p.y, p.kind === 'smoke' ? 0.5 + p.life * 1.2 : p.kind === 'boom' ? 2 + k * 8 : 0.8 - k * 0.6, 0, TAU);
+    ctx.arc(
+      p.x,
+      p.y,
+      p.kind === 'smoke'
+        ? 0.5 + p.life * 1.2
+        : p.kind === 'boom'
+          ? 2 + k * 8
+          : 0.8 - k * 0.6,
+      0,
+      TAU
+    );
     ctx.fill();
   }
 }
 
+/**
+ *
+ */
 function render() {
-  const z = S.cam.z,
-    cx = S.cam.x + rand(-1, 1) * S.shake,
-    cy = S.cam.y + rand(-1, 1) * S.shake,
-    hw = VW / 2 / z,
-    hh = VH / 2 / z;
-  const x0 = cx - hw,
-    y0 = cy - hh,
-    x1 = cx + hw,
-    y1 = cy + hh,
-    hc = 520 / z; // hc = camera height in metres
-  ctx.setTransform(z, 0, 0, z, Math.round(VW / 2 - cx * z), Math.round(VH / 2 - cy * z));
+  const z = S.cam.z;
+  const cx = S.cam.x + rand(-1, 1) * S.shake;
+  const cy = S.cam.y + rand(-1, 1) * S.shake;
+  const hw = VW / 2 / z;
+  const hh = VH / 2 / z;
+  const x0 = cx - hw;
+  const y0 = cy - hh;
+  const x1 = cx + hw;
+  const y1 = cy + hh;
+  const hc = 520 / z; // hc = camera height in metres
+  ctx.setTransform(
+    z,
+    0,
+    0,
+    z,
+    Math.round(VW / 2 - cx * z),
+    Math.round(VH / 2 - cy * z)
+  );
   ctx.lineJoin = ctx.lineCap = 'round';
   const builds = gridFind(BG, x0 - 30, y0 - 30, x1 + 30, y1 + 30).concat(
-    BUILD.filter(b => b.k === 'o' && b.x1 > x0 - 30 && b.x0 < x1 + 30 && b.y1 > y0 - 30 && b.y0 < y1 + 30),
+    BUILD.filter(
+      b =>
+        b.k === 'o' &&
+        b.x1 > x0 - 30 &&
+        b.x0 < x1 + 30 &&
+        b.y1 > y0 - 30 &&
+        b.y0 < y1 + 30
+    )
   );
   const trees = gridFind(TG, x0 - 12, y0 - 12, x1 + 12, y1 + 12);
   drawGround(x0, y0, x1, y1);
@@ -3501,15 +4991,23 @@ function render() {
   ctx.fillRect(x0, H, x1 - x0, m(y1 - H));
   ctx.fillRect(x0, 0, m(-x0), H);
   ctx.fillRect(W, 0, m(x1 - W), H);
-  if (S.mode === 'play') drawOverlay(cx, cy, z);
+  if (S.mode === 'play') {
+    drawOverlay(cx, cy, z);
+  }
 }
 
+/**
+ *
+ * @param cx
+ * @param cy
+ * @param z
+ */
 function drawOverlay(cx, cy, z) {
   // labels and pointers, in screen pixels
-  const P = S.P,
-    j = S.job,
-    sx = x => (x - cx) * z + VW / 2,
-    sy = y => (y - cy) * z + VH / 2;
+  const P = S.P;
+  const j = S.job;
+  const sx = x => (x - cx) * z + VW / 2;
+  const sy = y => (y - cy) * z + VH / 2;
   const label = (s, x, y, col) => {
     ctx.fillStyle = '#000';
     ctx.fillText(s, x + 1, y + 1);
@@ -3536,52 +5034,90 @@ function drawOverlay(cx, cy, z) {
   };
   const pointer = (o, col, text) => {
     // arrow on the screen edge towards something out of view
-    const x = sx(o.x),
-      y = sy(o.y),
-      pad = 26;
-    if (x > pad && x < VW - pad && y > pad && y < VH - pad) return false;
-    const a = Math.atan2(y - VH / 2, x - VW / 2),
-      ca = Math.cos(a),
-      sa = Math.sin(a);
-    const k = Math.min((VW / 2 - pad) / Math.abs(ca || 1e-6), (VH / 2 - pad) / Math.abs(sa || 1e-6));
-    const px = VW / 2 + ca * k,
-      py = VH / 2 + sa * k;
+    const x = sx(o.x);
+    const y = sy(o.y);
+    const pad = 26;
+    if (x > pad && x < VW - pad && y > pad && y < VH - pad) {
+      return false;
+    }
+    const a = Math.atan2(y - VH / 2, x - VW / 2);
+    const ca = Math.cos(a);
+    const sa = Math.sin(a);
+    const k = Math.min(
+      (VW / 2 - pad) / Math.abs(ca || 1e-6),
+      (VH / 2 - pad) / Math.abs(sa || 1e-6)
+    );
+    const px = VW / 2 + ca * k;
+    const py = VH / 2 + sa * k;
     arrow(px, py, a, col);
     const half = text ? ctx.measureText(text).width / 2 + 4 : 0; // keep the whole label on the screen
-    if (text) label(text, clamp(px - ca * 30, half, VW - half), clamp(py - sa * 22, 14, VH - 10), col);
+    if (text) {
+      label(
+        text,
+        clamp(px - ca * 30, half, VW - half),
+        clamp(py - sa * 22, 14, VH - 10),
+        col
+      );
+    }
     return true;
   };
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.font = 'bold 11px "Courier New", monospace';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  for (const v of S.items) if (v.job) pointer(v, '#ffd23e');
+  for (const v of S.items) {
+    if (v.job) {
+      pointer(v, '#ffd23e');
+    }
+  }
   if (j && j.to) {
-    const to = j.to,
-      far = dist(P, to);
-    pointer(to, '#ffd23e', (to.name || 'ZIEL').toUpperCase() + ' · ' + metres((S.gps && S.gps.far) || far));
+    const to = j.to;
+    const far = dist(P, to);
+    pointer(
+      to,
+      '#ffd23e',
+      `${(to.name || 'ZIEL').toUpperCase()} · ${metres((S.gps && S.gps.far) || far)}`
+    );
     if (to === j.veh || to === j.prey) {
       // the car you are after
       const bob = Math.sin(S.t * 6) * 3;
-      arrow(sx(to.x), sy(to.y) - 3.2 * z - 12 + bob, Math.PI / 2, to === j.prey ? '#ff5a1f' : '#ffd23e', 0.8);
+      arrow(
+        sx(to.x),
+        sy(to.y) - 3.2 * z - 12 + bob,
+        Math.PI / 2,
+        to === j.prey ? '#ff5a1f' : '#ffd23e',
+        0.8
+      );
     }
     const wp = S.gps && S.gps.wp;
     if (wp && far > 12) {
       // the yellow arrow by the player shows the way along the roads
-      const a = Math.atan2(wp.y - P.y, wp.x - P.x),
-        r = 3.4 * z + 14;
-      arrow(sx(P.x) + Math.cos(a) * r, sy(P.y) + Math.sin(a) * r, a, '#ffd23e', 0.75);
+      const a = Math.atan2(wp.y - P.y, wp.x - P.x);
+      const r = 3.4 * z + 14;
+      arrow(
+        sx(P.x) + Math.cos(a) * r,
+        sy(P.y) + Math.sin(a) * r,
+        a,
+        '#ffd23e',
+        0.75
+      );
     }
   }
-  if (DEBUG) for (const k in SPOT) label(k, sx(SPOT[k].x), sy(SPOT[k].y) - 8, '#f0f');
+  if (DEBUG) {
+    for (const k in SPOT) {
+      label(k, sx(SPOT[k].x), sy(SPOT[k].y) - 8, '#f0f');
+    }
+  }
   ctx.font = 'bold 14px "Courier New", monospace';
-  for (const t of S.texts) label(t.s, sx(t.x), sy(t.y), t.col);
+  for (const t of S.texts) {
+    label(t.s, sx(t.x), sy(t.y), t.col);
+  }
 }
 
 // ---------- the fold-out map (Tab): the whole village on paper, true to scale
 
-const mapCv = $('map'),
-  mg = mapCv.getContext('2d');
+const mapCv = $('map');
+const mg = mapCv.getContext('2d');
 const PAPER = {
   farm: '#efe6c2',
   meadow: '#d3e2ad',
@@ -3629,15 +5165,20 @@ const MAPNAMES = [
   'carwash',
   'roadworks',
 ];
-let mapBase = null,
-  mapK = 0,
-  mapDpr = 1;
+let mapBase = null;
+let mapK = 0;
+let mapDpr = 1;
 
+/**
+ *
+ * @param k
+ * @param dpr
+ */
 function mapPaint(k, dpr) {
   // the paper layer, k device pixels per metre
-  const c = canvas(Math.ceil(W * k), Math.ceil(H * k)),
-    g = c.getContext('2d'),
-    px = 1 / k;
+  const c = canvas(Math.ceil(W * k), Math.ceil(H * k));
+  const g = c.getContext('2d');
+  const px = 1 / k;
   const stroke = (l, style, grow, min) => {
     g.strokeStyle = style;
     for (const [rw, path] of l) {
@@ -3667,22 +5208,29 @@ function mapPaint(k, dpr) {
   stroke(streets, '#7d7566', 2.2, 3.2);
   stroke(streets, '#fffdf6', 0, 1.8);
   stroke(ROADS.line, '#ffc21a', 0, 2.2); // the main roads in gold
-  for (const b of BUILD)
+  for (const b of BUILD) {
     if (b.k !== 'x' && b.k !== 'o') {
-      g.fillStyle = b.label ? '#6e2518' : 'imts'.includes(b.k) ? '#948a84' : '#c0563d';
+      g.fillStyle = b.label
+        ? '#6e2518'
+        : 'imts'.includes(b.k)
+          ? '#948a84'
+          : '#c0563d';
       g.fill(b.path);
     }
+  }
   // names, in screen pixels so they stay crisp
   g.setTransform(1, 0, 0, 1, 0, 0);
   g.textBaseline = 'middle';
   g.lineJoin = 'round';
-  const taken = [],
-    free = (x, y, w, h) =>
-      !taken.some(t => x < t[0] + t[2] && x + w > t[0] && y < t[1] + t[3] && y + h > t[1]) &&
-      x > 2 &&
-      y > 2 &&
-      x + w < c.width - 2 &&
-      y + h < c.height - 2;
+  const taken = [];
+  const free = (x, y, w, h) =>
+    !taken.some(
+      t => x < t[0] + t[2] && x + w > t[0] && y < t[1] + t[3] && y + h > t[1]
+    ) &&
+    x > 2 &&
+    y > 2 &&
+    x + w < c.width - 2 &&
+    y + h < c.height - 2;
   const halo = (text, x, y, col) => {
     g.lineWidth = 3 * dpr;
     g.strokeStyle = 'rgba(255,253,246,.9)';
@@ -3692,19 +5240,21 @@ function mapPaint(k, dpr) {
   };
   g.font = `bold ${11 * dpr}px "Arial Narrow", "Roboto Condensed", Arial, sans-serif`;
   for (const key of MAPNAMES) {
-    const text = PLACES[key],
-      w = g.measureText(text).width,
-      h = 13 * dpr,
-      x = MAP.pois[key][0] * k,
-      y = MAP.pois[key][1] * k,
-      gap = 6 * dpr;
+    const text = PLACES[key];
+    const w = g.measureText(text).width;
+    const h = 13 * dpr;
+    const x = MAP.pois[key][0] * k;
+    const y = MAP.pois[key][1] * k;
+    const gap = 6 * dpr;
     const at = [
       [x + gap, y - h / 2],
       [x - gap - w, y - h / 2],
       [x - w / 2, y - gap - h],
       [x - w / 2, y + gap],
     ].find(q => free(q[0], q[1], w, h));
-    if (!at) continue;
+    if (!at) {
+      continue;
+    }
     taken.push([at[0], at[1], w, h]);
     g.fillStyle = '#0c0e11';
     g.beginPath();
@@ -3716,18 +5266,28 @@ function mapPaint(k, dpr) {
   g.font = `italic ${9.5 * dpr}px Arial, sans-serif`;
   g.textAlign = 'center';
   const longest = new Map(); // street names along the longest stretch of each street
-  for (const sg of SEGS)
-    if (sg[6].n && DRIVE.includes(sg[6].t) && (!longest.has(sg[6].n) || longest.get(sg[6].n)[5] < sg[5]))
+  for (const sg of SEGS) {
+    if (
+      sg[6].n &&
+      DRIVE.includes(sg[6].t) &&
+      (!longest.has(sg[6].n) || longest.get(sg[6].n)[5] < sg[5])
+    ) {
       longest.set(sg[6].n, sg);
+    }
+  }
   for (const [name, sg] of longest) {
-    const w = g.measureText(name).width,
-      x = ((sg[0] + sg[2]) / 2) * k,
-      y = ((sg[1] + sg[3]) / 2) * k;
+    const w = g.measureText(name).width;
+    const x = ((sg[0] + sg[2]) / 2) * k;
+    const y = ((sg[1] + sg[3]) / 2) * k;
     let a = Math.atan2(sg[3] - sg[1], sg[2] - sg[0]);
-    if (Math.abs(a) > Math.PI / 2) a -= Math.sign(a) * Math.PI;
-    const bw = Math.abs(Math.cos(a)) * w + 12 * dpr,
-      bh = Math.abs(Math.sin(a)) * w + 12 * dpr;
-    if (sg[5] * k < w * 0.8 || !free(x - bw / 2, y - bh / 2, bw, bh)) continue;
+    if (Math.abs(a) > Math.PI / 2) {
+      a -= Math.sign(a) * Math.PI;
+    }
+    const bw = Math.abs(Math.cos(a)) * w + 12 * dpr;
+    const bh = Math.abs(Math.sin(a)) * w + 12 * dpr;
+    if (sg[5] * k < w * 0.8 || !free(x - bw / 2, y - bh / 2, bw, bh)) {
+      continue;
+    }
     taken.push([x - bw / 2, y - bh / 2, bw, bh]);
     g.save();
     g.translate(x, y);
@@ -3738,18 +5298,31 @@ function mapPaint(k, dpr) {
   return c;
 }
 
+/**
+ *
+ * @param on
+ */
 function showMap(on) {
-  if (S.mode !== 'play' || (on && S.paused)) return;
+  if (S.mode !== 'play' || (on && S.paused)) {
+    return;
+  }
   S.map = on;
   mapCv.hidden = !on;
   audio.pause(on || S.paused);
-  if (!on) return;
-  const dpr = Math.min(2, devicePixelRatio || 1),
-    cw = Math.round(innerWidth * dpr),
-    ch = Math.round(innerHeight * dpr);
-  const fitH = (ch - 24 * dpr) / H,
-    k = Math.max(Math.min((cw - 24 * dpr) / W, fitH), Math.min(fitH, 0.45 * dpr)); // whole village if it fits, else a readable cut-out
-  if (mapCv.width === cw && mapCv.height === ch && k === mapK) return;
+  if (!on) {
+    return;
+  }
+  const dpr = Math.min(2, devicePixelRatio || 1);
+  const cw = Math.round(innerWidth * dpr);
+  const ch = Math.round(innerHeight * dpr);
+  const fitH = (ch - 24 * dpr) / H;
+  const k = Math.max(
+    Math.min((cw - 24 * dpr) / W, fitH),
+    Math.min(fitH, 0.45 * dpr)
+  ); // whole village if it fits, else a readable cut-out
+  if (mapCv.width === cw && mapCv.height === ch && k === mapK) {
+    return;
+  }
   mapCv.width = cw;
   mapCv.height = ch;
   mapK = k;
@@ -3759,50 +5332,76 @@ function showMap(on) {
 
 const pathLength = p => {
   let d = 0;
-  for (let i = 2; i < p.length; i += 2) d += Math.hypot(p[i] - p[i - 2], p[i + 1] - p[i - 1]);
+  for (let i = 2; i < p.length; i += 2) {
+    d += Math.hypot(p[i] - p[i - 2], p[i + 1] - p[i - 1]);
+  }
   return d;
 };
-const metres = d => (d < 950 ? Math.round(d / 10) * 10 + ' m' : (d / 1000).toFixed(1).replace('.', ',') + ' km');
+const metres = d =>
+  d < 950
+    ? `${Math.round(d / 10) * 10} m`
+    : `${(d / 1000).toFixed(1).replace('.', ',')} km`;
 
+/**
+ *
+ * @param f
+ * @param o
+ * @param to
+ */
 function routeLine(f, o, to) {
   // the way from `o` to `to` along the roads, as a flat list of points
-  const [link, qx, qy] = nearLink(o),
-    [goal, tx, ty] = nearLink(to),
-    cost = n => f[n] + Math.hypot(NODES[n].x - qx, NODES[n].y - qy) * link.k,
-    pts = [o.x, o.y];
+  const [link, qx, qy] = nearLink(o);
+  const [goal, tx, ty] = nearLink(to);
+  const cost = n =>
+    f[n] + Math.hypot(NODES[n].x - qx, NODES[n].y - qy) * link.k;
+  const pts = [o.x, o.y];
   let n = cost(link[0]) < cost(link[1]) ? link[0] : link[1];
-  if (f[n] > 1e8) return [o.x, o.y, to.x, to.y];
-  if (link !== goal)
-    for (pts.push(qx, qy); n >= 0; n = goal.includes(n) ? -1 : downhill(f, n)) pts.push(NODES[n].x, NODES[n].y);
+  if (f[n] > 1e8) {
+    return [o.x, o.y, to.x, to.y];
+  }
+  if (link !== goal) {
+    for (pts.push(qx, qy); n >= 0; n = goal.includes(n) ? -1 : downhill(f, n)) {
+      pts.push(NODES[n].x, NODES[n].y);
+    }
+  }
   pts.push(tx, ty, to.x, to.y);
   return pts;
 }
 
+/**
+ *
+ */
 function drawMap() {
-  const P = S.P,
-    j = S.job,
-    to = j && j.to,
-    k = mapK,
-    d = mapDpr,
-    cw = mapCv.width,
-    ch = mapCv.height,
-    g = mg;
-  const fx = to ? (P.x + to.x) / 2 : P.x,
-    fy = to ? (P.y + to.y) / 2 : P.y; // keep you and the target in view
-  const ox = W * k <= cw ? (cw - W * k) / 2 : clamp(cw / 2 - fx * k, cw - W * k, 0),
-    oy = H * k <= ch ? (ch - H * k) / 2 : clamp(ch / 2 - fy * k, ch - H * k, 0);
-  const X = x => ox + x * k,
-    Y = y => oy + y * k,
-    pulse = 0.5 + 0.5 * Math.sin(performance.now() / 160);
+  const P = S.P;
+  const j = S.job;
+  const to = j && j.to;
+  const k = mapK;
+  const d = mapDpr;
+  const cw = mapCv.width;
+  const ch = mapCv.height;
+  const g = mg;
+  const fx = to ? (P.x + to.x) / 2 : P.x;
+  const fy = to ? (P.y + to.y) / 2 : P.y; // keep you and the target in view
+  const ox =
+    W * k <= cw ? (cw - W * k) / 2 : clamp(cw / 2 - fx * k, cw - W * k, 0);
+  const oy =
+    H * k <= ch ? (ch - H * k) / 2 : clamp(ch / 2 - fy * k, ch - H * k, 0);
+  const X = x => ox + x * k;
+  const Y = y => oy + y * k;
+  const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 160);
   const chip = (text, x, y, align, col = '#f3ecdb') => {
     // a label on a dark plate
     g.font = `bold ${12 * d}px "Courier New", monospace`;
     g.textBaseline = 'middle';
     g.textAlign = 'left';
-    const w = g.measureText(text).width + 12 * d,
-      h = 20 * d,
-      left = clamp(align === 'right' ? x - w : align === 'center' ? x - w / 2 : x, 4 * d, cw - w - 4 * d),
-      top = clamp(y - h / 2, 4 * d, ch - h - 4 * d);
+    const w = g.measureText(text).width + 12 * d;
+    const h = 20 * d;
+    const left = clamp(
+      align === 'right' ? x - w : align === 'center' ? x - w / 2 : x,
+      4 * d,
+      cw - w - 4 * d
+    );
+    const top = clamp(y - h / 2, 4 * d, ch - h - 4 * d);
     g.fillStyle = 'rgba(12,14,17,.88)';
     g.fillRect(left, top, w, h);
     g.fillStyle = col;
@@ -3825,13 +5424,17 @@ function drawMap() {
       g.strokeStyle = col;
       g.lineWidth = w;
       g.beginPath();
-      for (let i = 0; i < pts.length; i += 2)
-        if (i) g.lineTo(X(pts[i]), Y(pts[i + 1]));
-        else g.moveTo(X(pts[i]), Y(pts[i + 1]));
+      for (let i = 0; i < pts.length; i += 2) {
+        if (i) {
+          g.lineTo(X(pts[i]), Y(pts[i + 1]));
+        } else {
+          g.moveTo(X(pts[i]), Y(pts[i + 1]));
+        }
+      }
       g.stroke();
     }
   }
-  for (const v of S.items)
+  for (const v of S.items) {
     if (v.job) {
       g.fillStyle = '#ffd23e';
       g.strokeStyle = '#0c0e11';
@@ -3841,14 +5444,17 @@ function drawMap() {
       g.fill();
       g.stroke();
     }
-  if (S.wanted >= 1)
-    for (const c of S.cars)
+  }
+  if (S.wanted >= 1) {
+    for (const c of S.cars) {
       if (c.ai && c.ai.cop) {
         g.fillStyle = pulse > 0.5 ? '#4aa3ff' : '#12327a';
         g.beginPath();
         g.arc(X(c.x), Y(c.y), 5 * d, 0, TAU);
         g.fill();
       }
+    }
+  }
   if (to) {
     g.strokeStyle = '#0c0e11';
     g.lineWidth = 6 * d;
@@ -3858,7 +5464,13 @@ function drawMap() {
     g.strokeStyle = '#ffd23e';
     g.lineWidth = 3 * d;
     g.stroke();
-    chip(`${to.name || 'Ziel'} · ${metres(far)}`, X(to.x), Y(to.y) - 24 * d, 'center', '#ffd23e');
+    chip(
+      `${to.name || 'Ziel'} · ${metres(far)}`,
+      X(to.x),
+      Y(to.y) - 24 * d,
+      'center',
+      '#ffd23e'
+    );
   }
   g.save(); // you: an arrow pointing the way you face
   g.translate(X(P.x), Y(P.y));
@@ -3882,10 +5494,17 @@ function drawMap() {
   g.stroke();
   chip('DU', X(P.x), Y(P.y) + 24 * d, 'center', '#19c2bd');
   chip('KARTE · MARKT WACHENROTH', 10 * d, 16 * d, 'left');
-  chip(document.body.classList.contains('touch') ? 'TIPPEN: ZURÜCK' : 'TAB: ZURÜCK', cw - 10 * d, 16 * d, 'right');
-  const bar = 200 * k,
-    bx = 16 * d,
-    by = ch - 18 * d; // scale bar
+  chip(
+    document.body.classList.contains('touch')
+      ? 'TIPPEN: ZURÜCK'
+      : 'TAB: ZURÜCK',
+    cw - 10 * d,
+    16 * d,
+    'right'
+  );
+  const bar = 200 * k;
+  const bx = 16 * d;
+  const by = ch - 18 * d; // scale bar
   chip('200 m', bx + bar + 8 * d, by, 'left');
   g.fillStyle = '#f3ecdb';
   g.fillRect(bx - 2 * d, by - 5 * d, bar + 4 * d, 10 * d);
@@ -3897,6 +5516,9 @@ function drawMap() {
 
 // ---------- main loop
 
+/**
+ *
+ */
 function resize() {
   const a = innerWidth / innerHeight;
   if (a >= 1) {
@@ -3912,23 +5534,36 @@ function resize() {
 }
 addEventListener('resize', () => {
   resize();
-  if (S.map) showMap(true);
+  if (S.map) {
+    showMap(true);
+  }
 });
 resize();
 
 let last = 0;
+/**
+ *
+ * @param now
+ */
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000 || 0);
   last = now;
-  if (S.map)
-    drawMap(); // the game holds its breath while you read the map
+  if (S.map) {
+    drawMap();
+  } // the game holds its breath while you read the map
   else {
     if (!S.paused) {
-      for (let n = dt > 0.02 ? 2 : 1, i = 0; i < n; i++) update(dt / n);
-      if (S.mode === 'play') guide(dt);
+      for (let n = dt > 0.02 ? 2 : 1, i = 0; i < n; i++) {
+        update(dt / n);
+      }
+      if (S.mode === 'play') {
+        guide(dt);
+      }
     }
     render();
-    if (!S.paused) hud(dt);
+    if (!S.paused) {
+      hud(dt);
+    }
   }
   requestAnimationFrame(frame);
 }
@@ -3967,8 +5602,8 @@ window.GTW = {
   wrap,
   surfAt,
   tp(key) {
-    const s = SPOT[key],
-      o = S.P.car || S.P;
+    const s = SPOT[key];
+    const o = S.P.car || S.P;
     Object.assign(o, {x: s.x, y: s.y, vx: 0, vy: 0});
   },
   skip() {
@@ -3986,17 +5621,19 @@ window.GTW = {
 
 if (location.search.includes('selftest')) {
   // open index.html?selftest and read the console
-  const sq = [0, 0, 10, 0, 10, 10, 0, 10],
-    a = pushOut(10.5, 5, 1, sq),
-    b = pushOut(9, 5, 1, sq),
-    home = field(SPOT.hq);
+  const sq = [0, 0, 10, 0, 10, 10, 0, 10];
+  const a = pushOut(10.5, 5, 1, sq);
+  const b = pushOut(9, 5, 1, sq);
+  const home = field(SPOT.hq);
   const ride = (from, to) => {
     // follow the yellow arrow from one place to another, as the crow walks the roads
-    const f = field(to),
-      o = {x: from.x, y: from.y};
+    const f = field(to);
+    const o = {x: from.x, y: from.y};
     for (let i = 0; i < 400 && dist(o, to) > 50; i++) {
       const w = waypoint(f, o, 40);
-      if (!w) return false;
+      if (!w) {
+        return false;
+      }
       const d = dist(o, w) || 1;
       o.x += ((w.x - o.x) / d) * 12;
       o.y += ((w.y - o.y) / d) * 12;
@@ -4004,31 +5641,48 @@ if (location.search.includes('selftest')) {
     return dist(o, to) <= 50;
   };
   const used = new Set(
-    MISSIONS.flatMap(m => [...m.steps.flatMap(s => [s.to, s.at, s.near]), ...(m.props || []).map(p => p.at)]).filter(
-      Boolean,
-    ),
+    MISSIONS.flatMap(m => [
+      ...m.steps.flatMap(s => [s.to, s.at, s.near]),
+      ...(m.props || []).map(p => p.at),
+    ]).filter(Boolean)
   );
   const checks = {
     'clear of a wall: no push': pushOut(20, 5, 1, sq) === null,
-    'touching a wall: pushed straight out': a && a[0] === 1 && Math.abs(a[2] - 0.5) < 1e-9,
-    'inside a building: pushed out through the nearest wall': b && b[0] === 1 && Math.abs(b[2] - 2) < 1e-9,
-    'every mission place exists': [...used].every(k => SPOT[k] || console.error('unknown place', k)),
+    'touching a wall: pushed straight out':
+      a && a[0] === 1 && Math.abs(a[2] - 0.5) < 1e-9,
+    'inside a building: pushed out through the nearest wall':
+      b && b[0] === 1 && Math.abs(b[2] - 2) < 1e-9,
+    'every mission place exists': [...used].every(
+      k => SPOT[k] || console.error('unknown place', k)
+    ),
     'every place has room for a car': Object.values(SPOT).every(
-      s => !blocked(s.x, s.y, 1.2) || console.error('blocked', s.key),
+      s => !blocked(s.x, s.y, 1.2) || console.error('blocked', s.key)
     ),
     'no place is under water': Object.values(SPOT).every(
-      s => (surfAt(s.x, s.y) & 9) !== 8 || console.error('wet', s.key),
+      s => (surfAt(s.x, s.y) & 9) !== 8 || console.error('wet', s.key)
     ),
     'a road leads from the HQ to every place': Object.values(SPOT).every(
-      s => home[nearNode(s, 'gps')] < 1e8 || console.error('cut off', s.key),
+      s => home[nearNode(s, 'gps')] < 1e8 || console.error('cut off', s.key)
     ),
-    'the yellow arrow leads from the HQ to every place and back': Object.values(SPOT).every(
-      s => (ride(SPOT.hq, s) && ride(s, SPOT.hq)) || console.error('arrow lost', s.key),
+    'the yellow arrow leads from the HQ to every place and back': Object.values(
+      SPOT
+    ).every(
+      s =>
+        (ride(SPOT.hq, s) && ride(s, SPOT.hq)) ||
+        console.error('arrow lost', s.key)
     ),
     'every mission pays and talks': MISSIONS.every(
-      m => m.reward > 0 && m.intro.length && m.outro.length && m.steps.every(s => s.obj),
+      m =>
+        m.reward > 0 &&
+        m.intro.length &&
+        m.outro.length &&
+        m.steps.every(s => s.obj)
     ),
   };
-  for (const k in checks) console.assert(checks[k], k);
-  document.title = Object.values(checks).every(Boolean) ? 'selftest ok' : 'selftest FAILED';
+  for (const k in checks) {
+    console.assert(checks[k], k);
+  }
+  document.title = Object.values(checks).every(Boolean)
+    ? 'selftest ok'
+    : 'selftest FAILED';
 }

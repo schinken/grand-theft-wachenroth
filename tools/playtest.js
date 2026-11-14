@@ -43,7 +43,10 @@ async page => {
     };
     const jobItems = () => game.state.items.filter(item => item.job);
 
-    /** One decision of the bot: where to push the stick, when to get out. */
+    /**
+     * One decision of the bot: where to push the stick, when to get out.
+     * @param dt
+     */
     bot.tick = dt => {
       const state = game.state;
       const player = state.P;
@@ -230,7 +233,10 @@ async page => {
       bot.seen = now;
     };
 
-    /** Simulates without drawing, as fast as the CPU allows. */
+    /**
+     * Simulates without drawing, as fast as the CPU allows.
+     * @param secs
+     */
     bot.run = secs => {
       for (let i = 0; i < secs * 60 && game.state.mode === 'play'; i++) {
         const state = game.state;
