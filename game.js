@@ -1,7 +1,12 @@
-'use strict';
-// Grand Theft Wachenroth: a top-down crime caper on the real street map of Wachenroth.
-// World units are metres, y points south. MAP comes from map.js (see tools/osm2map.py),
-// MISSIONS and PLACES from missions.js, AUDIO from audio.js.
+/**
+ * @fileoverview Grand Theft Wachenroth: a top-down crime caper on the real
+ * street map of Wachenroth. World units are metres, y points south. The map
+ * is baked by tools/osm2map.py.
+ */
+
+import * as audio from './audio.js';
+import {MAP} from './map.js';
+import {MISSIONS, PLACES, RANKS, SIGNS, TALK} from './missions.js';
 
 const $ = id => document.getElementById(id);
 const cv = $('game'),
@@ -945,7 +950,7 @@ function knock(p, c) {
   for (let i = 0; i < 5; i++) puff(p.x, p.y, 'spark');
   if (p.k === 'hydrant') {
     S.sprays.push({x: p.x, y: p.y, t: 10});
-    if (dist(p, S.P) < 90) AUDIO.play('splash');
+    if (dist(p, S.P) < 90) audio.play('splash');
   }
   if (c === S.P.car) float(p, p.k === 'hydrant' ? 'PLATSCH!' : 'KLONK!', '#ff5a1f');
 }
@@ -1502,7 +1507,7 @@ function damage(c, imp) {
   if (imp < 5 || c.dead) return;
   if (dist(c, S.P) < 80 && S.t - S.crashT > 0.08) {
     S.crashT = S.t;
-    AUDIO.play('crash', imp);
+    audio.play('crash', imp);
     for (let i = 0; i < 6; i++) puff(c.x, c.y, 'spark');
   }
   c.hp -= ((imp - 5) * 0.55) / c.T.mass;
@@ -1512,7 +1517,7 @@ function damage(c, imp) {
     // the load does not like this
     j.cargo -= (imp - 5) * 0.012;
     float(c, pick(['KLIRR!', 'SCHEPPER!', 'AUWEH!']), '#ff5a1f');
-    AUDIO.play('glass');
+    audio.play('glass');
   }
   if (c.hp <= 0 && !c.burn) {
     c.burn = 4.5;
@@ -1545,7 +1550,7 @@ function explode(c) {
   const P = S.P,
     far = dist(c, P);
   if (far < 150) {
-    AUDIO.play('boom');
+    audio.play('boom');
     S.shake = Math.max(S.shake, clamp(1.2 - far / 60, 0, 1));
   }
   S.stats.wrecks++;
@@ -1567,7 +1572,7 @@ function explode(c) {
 function sink(c) {
   // cars cannot swim
   for (let i = 0; i < 30; i++) puff(c.x + rand(-2, 2), c.y + rand(-2, 2), 'water');
-  if (dist(c, S.P) < 150) AUDIO.play('splash');
+  if (dist(c, S.P) < 150) audio.play('splash');
   c.dead = c.gone = true;
   c.ai = null;
   if (S.P.car === c) waste('Abgesoffen!');
@@ -1804,7 +1809,7 @@ function police(dt) {
       c.ai.cop = false;
       c.siren = false;
     } // off duty: back to normal traffic
-  AUDIO.siren(S.wanted >= 1 && close < 170 && S.mode === 'play' && !S.paused);
+  audio.siren(S.wanted >= 1 && close < 170 && S.mode === 'play' && !S.paused);
   if (S.wanted < 1 || S.mode !== 'play') {
     S.bust = 0;
     return;
@@ -1846,10 +1851,10 @@ function busted() {
   if (P.car) {
     Object.assign(P.car, {thr: 0, steer: 0});
     P.car = null;
-    AUDIO.radio(-1);
+    audio.radio(-1);
   }
   flash('Erwischt!', fine ? 'Strafzettel: ' + fmt(fine) : 'Nochmal Glück gehabt');
-  AUDIO.play('fail');
+  audio.play('fail');
   if (S.job) failJob('busted');
   for (const c of S.cars) if (c.ai && c.ai.cop) c.gone = true;
   Object.assign(P, {x: r.x, y: r.y, a: r.a});
@@ -1909,7 +1914,7 @@ function killPed(p, byPlayer) {
   p.dead = true;
   decal(p.x, p.y, 'blood');
   for (let i = 0; i < 10; i++) puff(p.x, p.y, 'blood');
-  if (dist(p, S.P) < 80) AUDIO.play('splat');
+  if (dist(p, S.P) < 80) audio.play('splat');
   if (byPlayer) {
     S.stats.peds++;
     float(p, 'BATSCH!', '#ff5a1f');
@@ -1936,7 +1941,7 @@ function walkersVsCars() {
       if (sp > 5 && p.alert && p.flee <= 0 && dx * c.vx + dy * c.vy > 0 && Math.abs(side) / sp < 3) {
         p.flee = 1;
         p.a = Math.atan2(c.vy, c.vx) + ((side > 0 ? -1 : 1) * Math.PI) / 2; // jump out of the way
-        if (c === P.car && Math.random() < 0.5) AUDIO.play('scream');
+        if (c === P.car && Math.random() < 0.5) audio.play('scream');
       }
       if (!touching(p, c, 0.35)) continue;
       if (sp > 3) {
@@ -2078,7 +2083,7 @@ function dropCash() {
   if (spot) S.items.push({...spot, kind: 'cash', val: pick([5, 10, 10, 20, 20, 50, 100]), ph: rand(0, TAU)});
 }
 function grab(v) {
-  AUDIO.play('coin');
+  audio.play('coin');
   if (v.kind === 'cash') {
     S.money += v.val;
     float(v, '+' + fmt(v.val));
@@ -2098,7 +2103,7 @@ function page(...msgs) {
   if (!pg.q.length && !pg.cur) {
     replay($('pager').firstElementChild);
     $('pager').classList.add('ring');
-    AUDIO.play('pager');
+    audio.play('pager');
   }
   pg.q.push(...msgs);
 }
@@ -2147,10 +2152,10 @@ function nextStep() {
     const tip = Math.round(j.left) * 2;
     S.money += tip;
     float(S.P, 'Trinkgeld +' + fmt(tip));
-    AUDIO.play('coin');
+    audio.play('coin');
   }
   if (!st) return endJob();
-  if (j.i) AUDIO.play('step');
+  if (j.i) audio.play('step');
   j.step = st;
   j.hold = 0;
   j.told = false;
@@ -2166,7 +2171,7 @@ function nextStep() {
   if (st.drop) j.veh = null;
   if (st.wanted) {
     crime(st.wanted);
-    AUDIO.play('alarm');
+    audio.play('alarm');
   }
   if (st.say) page(st.say);
   S.pager.idle = st.obj;
@@ -2238,7 +2243,7 @@ function jobRules(dt) {
         j.hold += dt;
         if (st.fx === 'water') {
           for (let i = 0; i < 3; i++) puff(lerp(P.x, j.to.x, Math.random()), lerp(P.y, j.to.y, Math.random()), 'water');
-          if (Math.random() < dt * 5) AUDIO.play('spray');
+          if (Math.random() < dt * 5) audio.play('spray');
         }
         if (j.hold >= st.secs) nextStep();
       } else j.hold = Math.max(0, j.hold - dt);
@@ -2270,7 +2275,7 @@ function endJob() {
   S.pager.idle = '';
   S.items = S.items.filter(v => !v.job);
   flash('Mission erfüllt!', '+' + fmt(m.reward));
-  AUDIO.play('win');
+  audio.play('win');
   store();
   if (S.jobN >= MISSIONS.length) {
     page(...m.outro);
@@ -2302,7 +2307,7 @@ function failJob(why) {
       wasted: '',
     }[why],
   );
-  AUDIO.play('fail');
+  audio.play('fail');
   if (why !== 'busted') page(pick(TALK.scold));
 }
 
@@ -2331,7 +2336,7 @@ function wash() {
   c.spr = carSprite(c.kind, c.col);
   for (let i = 0; i < 40; i++) puff(c.x + rand(-3, 3), c.y + rand(-3, 3), 'water');
   flash('Blitzsauber!', 'Waschstraße: 14,90 €');
-  AUDIO.play('splash');
+  audio.play('splash');
 }
 
 function finish() {
@@ -2350,9 +2355,9 @@ function finish() {
       `Schrottkarren: ${st.wrecks} · Umgefahren: ${st.peds} · Erwischt: ${st.busted} · Erledigt: ${st.wasted}`,
     ].map(t => Object.assign(document.createElement('li'), {textContent: t})),
   );
-  AUDIO.play('win');
-  AUDIO.radio(1);
-  AUDIO.siren(false);
+  audio.play('win');
+  audio.radio(1);
+  audio.siren(false);
   try {
     localStorage.removeItem(SAVE);
   } catch (e) {
@@ -2430,8 +2435,8 @@ function toggleCar() {
     c.thr = c.steer = 0;
     c.hb = false;
     c.siren = false;
-    AUDIO.radio(-1);
-    return AUDIO.play('door');
+    audio.radio(-1);
+    return audio.play('door');
   }
   let best = null,
     bd = 4.2;
@@ -2451,22 +2456,22 @@ function toggleCar() {
     S.stats.stolen++;
   }
   P.car = best;
-  AUDIO.play('door');
-  AUDIO.radio(best.radio);
-  info(best.name + (best.radio >= 0 ? ' · ♪ ' + AUDIO.stations[best.radio] : ''));
+  audio.play('door');
+  audio.radio(best.radio);
+  info(best.name + (best.radio >= 0 ? ' · ♪ ' + audio.stations[best.radio] : ''));
 }
 
 function nextStation() {
   const c = S.P.car;
   if (!c) return;
-  c.radio = c.radio >= AUDIO.stations.length - 1 ? -1 : c.radio + 1;
-  AUDIO.radio(c.radio);
-  info(c.radio < 0 ? 'Radio aus' : '♪ ' + AUDIO.stations[c.radio]);
+  c.radio = c.radio >= audio.stations.length - 1 ? -1 : c.radio + 1;
+  audio.radio(c.radio);
+  info(c.radio < 0 ? 'Radio aus' : '♪ ' + audio.stations[c.radio]);
 }
 function honk() {
   const c = S.P.car;
   if (!c || c.kind === 'police' || c.kind === 'fire') return;
-  AUDIO.play('horn');
+  audio.play('horn');
   for (const p of S.peds)
     if (dist(p, c) < 14 && p.flee <= 0) {
       p.flee = 1.2;
@@ -2485,10 +2490,10 @@ function waste(title = 'Erledigt!') {
   if (P.car) {
     P.car.thr = P.car.steer = 0;
     P.car = null;
-    AUDIO.radio(-1);
+    audio.radio(-1);
   }
   flash(title, lost ? 'Krankenhaus Höchstadt: ' + fmt(lost) : '');
-  AUDIO.play('fail');
+  audio.play('fail');
   for (let i = 0; i < 12; i++) puff(P.x, P.y, 'blood');
   decal(P.x, P.y, 'blood');
   if (S.job) failJob('wasted');
@@ -2501,7 +2506,7 @@ function respawn() {
   const best = NODES[nearNode(P, 'car')],
     to = NODES[best.car[0].n];
   P.car = makeCar(best.x, best.y, Math.atan2(to.y - best.y, to.x - best.x), 'car', '#e0b21c');
-  AUDIO.radio(P.car.radio);
+  audio.radio(P.car.radio);
   S.wasted = 0;
 }
 
@@ -2625,7 +2630,7 @@ function hud(dt) {
       $('lcd').textContent = 'FLO: ' + pg.cur.slice(0, n);
       if (n - pg.said >= 3) {
         pg.said = n;
-        if (/\w/.test(pg.cur[n - 1] || '')) AUDIO.babble();
+        if (/\w/.test(pg.cur[n - 1] || '')) audio.babble();
       }
     } else if ((pg.hold -= dt) <= 0) {
       pg.cur = '';
@@ -2682,11 +2687,11 @@ function hud(dt) {
     }
     $('where').textContent = name;
   }
-  AUDIO.engine(c ? c.vf : 0, c && S.mode === 'play' && !S.paused, c && c.kind);
+  audio.engine(c ? c.vf : 0, c && S.mode === 'play' && !S.paused, c && c.kind);
 }
 
 function start(save) {
-  AUDIO.init();
+  audio.init();
   reset('play', save);
   $('menu').hidden = $('end').hidden = true;
   $('hud').hidden = false;
@@ -2696,7 +2701,7 @@ function start(save) {
   document.activeElement.blur();
   if (document.body.classList.contains('touch') && document.documentElement.requestFullscreen)
     document.documentElement.requestFullscreen().catch(() => {});
-  AUDIO.radio(-1);
+  audio.radio(-1);
   const pickN = +new URLSearchParams(location.search).get('job'); // index.html?job=3 jumps straight to a job
   if (pickN) S.jobN = clamp(Math.round(pickN) - 1, 0, MISSIONS.length - 1);
   page(...(save ? TALK.back : TALK.hello));
@@ -2706,7 +2711,7 @@ function pause(p) {
   if (S.mode !== 'play' || S.map) return;
   S.paused = p;
   $('pause').hidden = !p;
-  AUDIO.pause(p);
+  audio.pause(p);
 }
 
 // ---------- input: keyboard, and a thumb stick plus buttons on touch screens
@@ -2723,7 +2728,7 @@ addEventListener('keydown', e => {
   if (e.repeat) return;
   if (e.code === 'KeyF' || e.code === 'Enter') toggleCar();
   if (e.code === 'KeyP' || e.code === 'Escape') pause(!S.paused);
-  if (e.code === 'KeyM') AUDIO.mute(!AUDIO.muted);
+  if (e.code === 'KeyM') audio.mute(!audio.isMuted());
   if (e.code === 'KeyR') nextStation();
   if (e.code === 'KeyH') honk();
 });
@@ -2807,8 +2812,8 @@ document.addEventListener('visibilitychange', () => {
   });
   $('bM').addEventListener('pointerdown', e => {
     e.preventDefault();
-    AUDIO.mute(!AUDIO.muted);
-    $('bM').classList.toggle('off', AUDIO.muted);
+    audio.mute(!audio.isMuted());
+    $('bM').classList.toggle('off', audio.isMuted());
   });
   $('pause').addEventListener('pointerdown', () => pause(false));
   $('bMap').addEventListener('pointerdown', e => {
@@ -3737,7 +3742,7 @@ function showMap(on) {
   if (S.mode !== 'play' || (on && S.paused)) return;
   S.map = on;
   mapCv.hidden = !on;
-  AUDIO.pause(on || S.paused);
+  audio.pause(on || S.paused);
   if (!on) return;
   const dpr = Math.min(2, devicePixelRatio || 1),
     cw = Math.round(innerWidth * dpr),
@@ -3930,14 +3935,37 @@ function frame(now) {
 reset('menu');
 requestAnimationFrame(frame);
 
-// Hooks for play-testing from the browser console.
-const GTW = {
-  get S() {
+// Hooks for play-testing: the browser console and tools/playtest.js reach the game through window.GTW.
+window.GTW = {
+  get state() {
     return S;
   },
+  MISSIONS,
   SPOT,
   NODES,
-  MISSIONS,
+  AREAS,
+  BUILD,
+  PROPS,
+  TYPES,
+  pad,
+  audio,
+  update,
+  guide,
+  render,
+  camera,
+  hud,
+  toggleCar,
+  showMap,
+  makeCar,
+  field,
+  waypoint,
+  nearLink,
+  nearNode,
+  routeLine,
+  pathLength,
+  dist,
+  wrap,
+  surfAt,
   tp(key) {
     const s = SPOT[key],
       o = S.P.car || S.P;

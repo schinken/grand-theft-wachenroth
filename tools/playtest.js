@@ -1,104 +1,311 @@
-// Play-test bot: plays Flo's missions through the same thumb stick a phone uses.
-// Run it with Playwright against a local server, e.g. `python3 -m http.server 8765`:
-//   the function below takes a Playwright `page` and returns a log of every mission.
-// Options come from globalThis.PLAYTEST = {from, to, shots} (mission numbers, screenshot prefix).
-async (page) => {
-  const opt = Object.assign({from: 0, to: 99, shots: '', url: 'http://127.0.0.1:8765/index.html'}, globalThis.PLAYTEST);
+// Play-test bot: plays Flo's missions through the same thumb stick a phone
+// uses, and reaches the game through window.GTW.
+//
+// Run it with Playwright against a local server (python3 -m http.server 8765):
+// the function below takes a Playwright `page` and returns a log of every
+// mission. Options come from globalThis.PLAYTEST = {from, to, secs, shots,
+// trace}: first and last mission number, seconds of game time, a screenshot
+// prefix, and whether to log the position every 20 seconds.
+async page => {
+  const opt = Object.assign(
+    {from: 0, to: 99, secs: 2400, shots: '', trace: false},
+    {url: 'http://127.0.0.1:8765/index.html'},
+    globalThis.PLAYTEST
+  );
   await page.goto(opt.url);
   await page.click('#start');
   await page.evaluate(from => {
-    AUDIO.mute(true);
-    GTW.job(from);
-    const B = window.BOT = {log: [], stuck: 0, rev: 0, last: null, tries: 0, helps: 0, walk: 0, side: 0};
-    const say = s => B.log.push(`${S.t.toFixed(0).padStart(4)}s  ${s}`);
-    B.tick = dt => {
-      const P = S.P, j = S.job, c = P.car;
-      pad.x = pad.y = 0; pad.brake = false;
-      if (S.mode !== 'play' || S.wasted || !j) return;
-      const st = j.step;
-      let to = j.to;
-      if (st.do === 'collect') to = S.items.filter(v => v.job).sort((a, b) => dist(a, P) - dist(b, P))[0];
-      if (!to) return;
-      const d = dist(P, to), want = st.do === 'steal' || st.do === 'take' ? j.veh : null;
-      const head = (o, k = 1) => { const a = Math.atan2(o.y - P.y, o.x - P.x); pad.x = Math.cos(a) * k; pad.y = Math.sin(a) * k; };
-      const far = o => dist(P, o) < 45 ? o : waypoint(field(o), P, c ? 38 : 22) || o;
-      const fire = S.cars.find(o => o.burn > 0 && dist(o, P) < 14);
-      if (c && c.burn) return toggleCar(); // out of a burning car
-      if (!c && fire) return head({x: 2 * P.x - fire.x, y: 2 * P.y - fire.y}); // and away from it
-      if (!c) {
-        B.walk = (B.walk || 0) + dt; // on foot for ages: the nearest car is out of reach, try another
-        if ((st.foot && d < 60) || (want && d < 60)) { // walk there, or to the car we should take
-          head(d > 45 ? far(to) : to);
-          if (want && d < 4.5) toggleCar();
+    const game = window.GTW;
+    const {pad, dist, field, waypoint, nearLink, NODES, wrap, surfAt} = game;
+    const bot = {
+      log: [],
+      stuck: 0,
+      rev: 0,
+      side: 0,
+      tries: 0,
+      helps: 0,
+      walk: 0,
+      last: null,
+      since: 0,
+      seen: null,
+      px: 0,
+      py: 0,
+    };
+    window.BOT = bot;
+    game.audio.mute(true);
+    game.job(from);
+
+    const say = text => {
+      bot.log.push(`${game.state.t.toFixed(0).padStart(4)}s  ${text}`);
+    };
+    const nearestOf = (list, from) => {
+      return list.sort((a, b) => dist(a, from) - dist(b, from))[0];
+    };
+    const jobItems = () => game.state.items.filter(item => item.job);
+
+    /** One decision of the bot: where to push the stick, when to get out. */
+    bot.tick = dt => {
+      const state = game.state;
+      const player = state.P;
+      const job = state.job;
+      const car = player.car;
+      pad.x = 0;
+      pad.y = 0;
+      pad.brake = false;
+      if (state.mode !== 'play' || state.wasted || !job) {
+        return;
+      }
+      const step = job.step;
+      const collecting = step.do === 'collect';
+      const target = collecting ? nearestOf(jobItems(), player) : job.to;
+      if (!target) {
+        return;
+      }
+      const far = dist(player, target);
+      const taking = step.do === 'steal' || step.do === 'take';
+      const wanted = taking ? job.veh : null;
+      const head = (to, push = 1) => {
+        const angle = Math.atan2(to.y - player.y, to.x - player.x);
+        pad.x = Math.cos(angle) * push;
+        pad.y = Math.sin(angle) * push;
+      };
+      // The next point down the road towards a place.
+      const along = to => {
+        if (dist(player, to) < 45) {
+          return to;
+        }
+        return waypoint(field(to), player, car ? 38 : 22) || to;
+      };
+
+      const fire = state.cars.find(o => o.burn > 0 && dist(o, player) < 14);
+      if (car && car.burn) {
+        game.toggleCar(); // out of a burning car
+        return;
+      }
+      if (!car && fire) {
+        head({x: 2 * player.x - fire.x, y: 2 * player.y - fire.y});
+        return;
+      }
+      if (!car) {
+        bot.walk += dt;
+        if ((step.foot && far < 60) || (wanted && far < 60)) {
+          // Walk there, or to the car we should take.
+          head(far > 45 ? along(target) : target);
+          if (wanted && far < 4.5) {
+            game.toggleCar();
+          }
           return;
         }
-        const ride = S.cars.filter(o => !o.dead && !o.burn && !(o.ai && o.ai.cop) && !o.tr).sort((a, b) => dist(a, P) - dist(b, P))[0];
-        if (!ride) return;
+        const usable = state.cars.filter(o => {
+          return !o.dead && !o.burn && !(o.ai && o.ai.cop) && !o.tr;
+        });
+        const ride = nearestOf(usable, player);
+        if (!ride) {
+          return;
+        }
         head(ride);
-        if (B.walk > 25) { B.walk = 0; B.helps++; say('  help: put next to a car'); P.x = ride.x + Math.sin(ride.a) * 2.5; P.y = ride.y - Math.cos(ride.a) * 2.5; } // a person would walk around the house
-        if (dist(ride, P) < 4.5) toggleCar();
+        if (bot.walk > 25) {
+          // On foot for ages: a person would walk around the house.
+          bot.walk = 0;
+          bot.helps++;
+          say('  help: put next to a car');
+          player.x = ride.x + Math.sin(ride.a) * 2.5;
+          player.y = ride.y - Math.cos(ride.a) * 2.5;
+        }
+        if (dist(ride, player) < 4.5) {
+          game.toggleCar();
+        }
         return;
       }
-      const sp = Math.hypot(c.vx, c.vy);
-      B.walk = 0;
-      if ((st.foot && d < 9) || (want && c !== want && d < 11)) { // get out and walk the rest
-        pad.brake = sp > 1;
-        if (sp < 4) toggleCar();
+
+      const speed = Math.hypot(car.vx, car.vy);
+      bot.walk = 0;
+      if ((step.foot && far < 9) || (wanted && car !== wanted && far < 11)) {
+        // Get out and walk the rest.
+        pad.brake = speed > 1;
+        if (speed < 4) {
+          game.toggleCar();
+        }
         return;
       }
-      if (B.rev > 0) { B.rev -= dt; pad.brake = true; pad.x = Math.cos(c.a + B.side); pad.y = Math.sin(c.a + B.side); return; } // stuck: back out, turning
-      const wp = st.do === 'collect' || st.do === 'chase' ? far(to) : (S.gps && S.gps.wp) || to;
-      const stop = st.do !== 'chase' && st.do !== 'collect' && st.do !== 'lose';
-      const turn = Math.abs(wrap(Math.atan2(wp.y - P.y, wp.x - P.x) - c.a)), limit = turn > .5 ? 9 : d < 30 && stop ? 9 : st.do === 'collect' && d < 18 ? 7 : 21; // drive like a person, not a rocket
-      head(wp, sp > limit ? .16 : 1);
-      pad.brake = sp > limit + 3; // a light stick still accelerates, so brake when well over the limit
-      if (st.do === 'collect' && d < 10 && turn > 1 && sp > 2) { B.rev = .9; B.side = 0; } // circling the thing: back up and try again
-      if (stop && d < 6 && sp > 5) { pad.x = pad.y = 0; pad.brake = true; }
-      if (st.do === 'hold' && d < (st.r || 10) - 3) { pad.x = pad.y = 0; pad.brake = sp > 1; return; }
-      if ((B.stuck += dt) > 2.5) { // no headway in a while: wedged somewhere
-        const wedged = Math.hypot(P.x - B.px, P.y - B.py) < 4 && !(stop && d < 8);
-        B.tries = wedged ? B.tries + 1 : 0;
-        if (wedged) { B.rev = 1.6; B.side = Math.random() < .5 ? -.6 : .6; }
-        if (B.tries > 2) { // still wedged after backing out twice: lift the car back onto the road
-          const [l, x, y] = nearLink(P), n = (S.gps && waypoint(S.gps.f, {x, y}, 15)) || NODES[l[1]]; // facing the way the arrow points
-          Object.assign(c, {x, y, a: Math.atan2(n.y - y, n.x - x), vx: 0, vy: 0, spin: 0});
-          if (c.tr) c.tr.a = c.a;
-          B.tries = 0; B.rev = 0; B.helps++; say('  help: car lifted back onto the road');
+      if (bot.rev > 0) {
+        // Stuck: back out, turning.
+        bot.rev -= dt;
+        pad.brake = true;
+        pad.x = Math.cos(car.a + bot.side);
+        pad.y = Math.sin(car.a + bot.side);
+        return;
+      }
+      const chasing = step.do === 'chase';
+      const guided = (state.gps && state.gps.wp) || target;
+      const waypt = collecting || chasing ? along(target) : guided;
+      const stops = !chasing && !collecting && step.do !== 'lose';
+      const bearing = Math.atan2(waypt.y - player.y, waypt.x - player.x);
+      const turn = Math.abs(wrap(bearing - car.a));
+      // Drive like a person, not a rocket.
+      let limit = 21;
+      if (turn > 0.5 || (stops && far < 30)) {
+        limit = 9;
+      } else if (collecting && far < 18) {
+        limit = 7;
+      }
+      head(waypt, speed > limit ? 0.16 : 1);
+      // A light stick still accelerates, so brake when well over the limit.
+      pad.brake = speed > limit + 3;
+      if (collecting && far < 10 && turn > 1 && speed > 2) {
+        // Circling the thing: back up and try again.
+        bot.rev = 0.9;
+        bot.side = 0;
+      }
+      if (stops && far < 6 && speed > 5) {
+        pad.x = 0;
+        pad.y = 0;
+        pad.brake = true;
+      }
+      if (step.do === 'hold' && far < (step.r || 10) - 3) {
+        pad.x = 0;
+        pad.y = 0;
+        pad.brake = speed > 1;
+        return;
+      }
+      bot.stuck += dt;
+      if (bot.stuck > 2.5) {
+        // No headway in a while: wedged somewhere.
+        const moved = Math.hypot(player.x - bot.px, player.y - bot.py);
+        const wedged = moved < 4 && !(stops && far < 8);
+        bot.tries = wedged ? bot.tries + 1 : 0;
+        if (wedged) {
+          bot.rev = 1.6;
+          bot.side = Math.random() < 0.5 ? -0.6 : 0.6;
         }
-        B.stuck = 0; B.px = P.x; B.py = P.y;
+        if (bot.tries > 2) {
+          // Still wedged after backing out twice: lift the car back onto the
+          // road, facing the way the arrow points.
+          const [link, x, y] = nearLink(player);
+          const ahead = state.gps && waypoint(state.gps.f, {x, y}, 15);
+          const to = ahead || NODES[link[1]];
+          const a = Math.atan2(to.y - y, to.x - x);
+          Object.assign(car, {x, y, a, vx: 0, vy: 0, spin: 0});
+          if (car.tr) {
+            car.tr.a = a;
+          }
+          bot.tries = 0;
+          bot.rev = 0;
+          bot.helps++;
+          say('  help: car lifted back onto the road');
+        }
+        bot.stuck = 0;
+        bot.px = player.x;
+        bot.py = player.y;
       }
     };
-    B.run = secs => { // simulate without drawing, as fast as the CPU allows
-      for (let i = 0; i < secs * 60 && S.mode === 'play'; i++) {
-        const j = S.job, key = j ? `${j.m.id}/${j.i} ${j.step.do}` : S.jobN >= MISSIONS.length ? 'all done' : 'idle';
-        if (key !== B.last) { say(key + (j && j.timed ? ` (${j.left.toFixed(0)}s left)` : '')); B.last = key; B.since = S.t; }
-        if (j && S.t - B.since > 300) { // nothing happened for five minutes: say where we are, then cheat past it
-          const P = S.P, to = j.to || S.items.filter(v => v.job).sort((a, b) => dist(a, P) - dist(b, P))[0];
-          say(`  STALL in ${P.car ? P.car.kind : 'on foot'} at ${P.x | 0},${P.y | 0}, target ${to ? `${to.x | 0},${to.y | 0}` : 'none'}, speed ${P.car ? P.car.vf.toFixed(1) : 0}, ground ${surfAt(P.x, P.y)}`);
-          if (to) Object.assign(P.car || P, {x: to.x, y: to.y, vx: 0, vy: 0});
-          B.since = S.t; B.helps++;
-        }
-        B.tick(1 / 60);
-        update(1 / 60);
-        if (i % 15 === 0) guide(1);
+
+    /** Notes how missions end and what goes wrong, from the score sheet. */
+    bot.watch = () => {
+      const state = game.state;
+      const stats = state.stats;
+      const job = state.job;
+      const now = {
+        job: job ? job.m.id : null,
+        step: job ? `${job.i} (${job.step.do})` : '',
+        missions: stats.missions,
+        wasted: stats.wasted,
+        busted: stats.busted,
+      };
+      const was = bot.seen || now;
+      const where = `${state.P.x | 0},${state.P.y | 0}`;
+      const flash = document.getElementById('flash');
+      if (now.wasted > was.wasted) {
+        say(`  wasted at ${where}: ${flash.firstElementChild.textContent}`);
       }
-      return {t: S.t, jobN: S.jobN, money: S.money, stats: S.stats, mode: S.mode, helps: B.helps};
+      if (now.busted > was.busted) {
+        say(`  busted at ${where}`);
+      }
+      if (now.missions > was.missions) {
+        say(`DONE ${was.job}`);
+      } else if (was.job && !now.job) {
+        const why = flash.lastElementChild.textContent || 'see above';
+        say(`FAIL ${was.job}: ${why} at step ${was.step}`);
+      }
+      bot.seen = now;
     };
-    for (const name of ['waste', 'sink', 'explode', 'busted']) { // and what went wrong on the way
-      const orig = window[name];
-      window[name] = a => { if (name === 'waste' || name === 'busted' || a === S.P.car) say(`  ${name} ${typeof a === 'string' ? a : ''} at ${S.P.x | 0},${S.P.y | 0}`); return orig(a); };
-    }
-    for (const name of ['endJob', 'failJob']) { // note how every mission ends
-      const orig = window[name];
-      window[name] = why => { say(name === 'endJob' ? `DONE ${S.job.m.id}` : `FAIL ${S.job.m.id}: ${why} at step ${S.job.i} (${S.job.step.do})`); return orig(why); };
-    }
+
+    /** Simulates without drawing, as fast as the CPU allows. */
+    bot.run = secs => {
+      for (let i = 0; i < secs * 60 && game.state.mode === 'play'; i++) {
+        const state = game.state;
+        const job = state.job;
+        let key = 'idle';
+        if (job) {
+          key = `${job.m.id}/${job.i} ${job.step.do}`;
+        } else if (state.jobN >= game.MISSIONS.length) {
+          key = 'all done';
+        }
+        if (key !== bot.last) {
+          const left = job && job.timed ? ` (${job.left.toFixed(0)}s left)` : '';
+          say(key + left);
+          bot.last = key;
+          bot.since = state.t;
+        }
+        if (job && state.t - bot.since > 300) {
+          // Nothing happened for five minutes: say where we are, then cheat.
+          const player = state.P;
+          const target = job.to || nearestOf(jobItems(), player);
+          const ride = player.car ? player.car.kind : 'on foot';
+          const goal = target ? `${target.x | 0},${target.y | 0}` : 'none';
+          say(
+            `  STALL in ${ride} at ${player.x | 0},${player.y | 0}, ` +
+              `target ${goal}, ground ${surfAt(player.x, player.y)}`
+          );
+          if (target) {
+            const body = player.car || player;
+            Object.assign(body, {x: target.x, y: target.y, vx: 0, vy: 0});
+          }
+          bot.since = state.t;
+          bot.helps++;
+        }
+        bot.tick(1 / 60);
+        game.update(1 / 60);
+        bot.watch();
+        if (i % 15 === 0) {
+          game.guide(1);
+        }
+      }
+      const state = game.state;
+      return {
+        t: state.t,
+        jobN: state.jobN,
+        money: state.money,
+        stats: state.stats,
+        mode: state.mode,
+        helps: bot.helps,
+      };
+    };
   }, opt.from);
-  let state, n = 0;
-  for (let t = 0; t < (opt.secs || 2400); t += 20) {
-    state = await page.evaluate(() => BOT.run(20));
-    if (opt.trace) await page.evaluate(() => BOT.log.push(`      at ${S.P.x | 0},${S.P.y | 0} ${S.P.car ? S.P.car.kind : 'on foot'} heat ${S.wanted.toFixed(1)}`));
-    if (opt.shots && n++ % 4 === 0) { await page.waitForTimeout(120); await page.screenshot({path: `.playwright-mcp/${opt.shots}-${String(n).padStart(3, '0')}.png`}); }
-    if (state.mode !== 'play' || state.jobN > opt.to) break;
+
+  let state;
+  let shots = 0;
+  for (let t = 0; t < opt.secs; t += 20) {
+    state = await page.evaluate(() => window.BOT.run(20));
+    if (opt.trace) {
+      await page.evaluate(() => {
+        const game = window.GTW;
+        const player = game.state.P;
+        const ride = player.car ? player.car.kind : 'on foot';
+        const heat = game.state.wanted.toFixed(1);
+        window.BOT.log.push(
+          `      at ${player.x | 0},${player.y | 0} ${ride} heat ${heat}`
+        );
+      });
+    }
+    if (opt.shots && shots++ % 4 === 0) {
+      await page.waitForTimeout(120);
+      const name = String(shots).padStart(3, '0');
+      await page.screenshot({path: `.playwright-mcp/${opt.shots}-${name}.png`});
+    }
+    if (state.mode !== 'play' || state.jobN > opt.to) {
+      break;
+    }
   }
-  return {state, log: await page.evaluate(() => BOT.log)};
+  return {state, log: await page.evaluate(() => window.BOT.log)};
 }

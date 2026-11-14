@@ -1,4 +1,3 @@
-'use strict';
 // Flo Ganzmann's jobs. Place keys come from the POIS table in tools/osm2map.py.
 //
 // Step kinds:
@@ -9,7 +8,7 @@
 // Options: time (seconds, runs on until the next `time`), fragile (crashes break the load), tip (seconds left pay extra),
 // wanted (police heat), drop (the mission car is no longer needed), say (Flo on the pager).
 
-const PLACES = {
+export const PLACES = {
   hq: 'Flos Hauptquartier',
   murk: 'Bekleidungshaus Murk',
   fuel: 'Tankautomat Murk',
@@ -49,7 +48,7 @@ const PLACES = {
 };
 
 // Painted on the roofs of the landmarks.
-const SIGNS = {
+export const SIGNS = {
   murk: 'MURK',
   works: 'RÖCKELEIN',
   hall: 'EBRACHTALHALLE',
@@ -63,7 +62,7 @@ const SIGNS = {
   warehouse: 'LAGERHAUS',
 };
 
-const RANKS = [
+export const RANKS = [
   [10000, 'Pate von Wachenroth'],
   [7500, 'Rechte Hand vom Flo'],
   [5000, 'Schwallkönig'],
@@ -71,7 +70,7 @@ const RANKS = [
   [-1e9, 'Dorfdepp'],
 ];
 
-const TALK = {
+export const TALK = {
   hello: [
     'Servus! Hier ist der Flo Ganzmann.',
     'Du willst in Wachenroth was werden? Dann arbeitest du ab heute für mich.',
@@ -94,7 +93,7 @@ const TALK = {
   ],
 };
 
-const MISSIONS = [
+export const MISSIONS = [
   {
     id: 'cans',
     title: 'Dosen zum Saufen',

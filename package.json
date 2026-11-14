@@ -1,6 +1,7 @@
 {
   "name": "grand-theft-wachenroth",
   "private": true,
+  "type": "module",
   "scripts": {
     "format": "prettier --write .",
     "format:check": "prettier --check ."
