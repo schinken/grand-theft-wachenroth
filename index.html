@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0c0e11">
+<title>Grand Theft Wachenroth</title>
+<link rel="icon" href="data:,">
+<style>
+  :root { --teal: #19c2bd; --hot: #ff5a1f; --gold: #ffd23e; --ink: #0c0e11; --paper: #f3ecdb; --lcd: #b4c08a;
+    --l: env(safe-area-inset-left, 0px); --r: env(safe-area-inset-right, 0px); --t: env(safe-area-inset-top, 0px); --b: env(safe-area-inset-bottom, 0px); }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--ink); color: var(--paper);
+    font-family: Impact, Haettenschweiler, "Arial Narrow Bold", "Franklin Gothic Bold", "Roboto Condensed", sans-serif;
+    touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; overscroll-behavior: none; }
+  [hidden] { display: none !important; }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; }
+  .out { text-shadow: 3px 3px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000; }
+
+  /* title + end screens */
+  .screen { position: fixed; inset: 0; display: grid; place-content: center; justify-items: center; gap: 2vh;
+    padding: 16px; text-align: center; overflow: auto; touch-action: pan-y;
+    background: radial-gradient(ellipse at center, rgba(12, 14, 17, .45), rgba(12, 14, 17, .93)); }
+  h1 { margin: 0 0 1vh; font-size: clamp(46px, 14.5vw, 200px); line-height: .84; font-weight: 400; color: var(--gold);
+    text-transform: uppercase; transform: rotate(-4deg) skewX(-6deg);
+    text-shadow: 4px 4px 0 var(--ink), 9px 9px 0 var(--hot); }
+  h1 small { display: block; font-size: .42em; line-height: 1.1; color: var(--paper); letter-spacing: .09em;
+    text-shadow: 3px 3px 0 var(--ink); }
+  h2 { margin: 0; font-size: clamp(30px, 6vw, 80px); font-weight: 400; color: var(--gold); text-transform: uppercase; }
+  .place { margin: 0; font: bold 14px/1.4 "Courier New", monospace; letter-spacing: .25em; text-transform: uppercase; }
+  nav { display: grid; gap: 4px; }
+  button { font: inherit; color: var(--paper); background: none; border: 0; cursor: pointer; touch-action: manipulation; }
+  nav button { font-size: clamp(24px, 3.6vw, 44px); letter-spacing: .05em; text-transform: uppercase; padding: 4px 32px; }
+  nav button:hover, nav button:focus-visible { color: var(--gold); outline: 0; }
+  nav button:hover::before, nav button:focus-visible::before { content: "\25B6"; margin-right: 12px; color: var(--hot); }
+  #help, .stats { margin: 0; padding: 0; list-style: none; font: bold 15px/1.7 "Courier New", monospace; max-width: 640px; }
+  kbd { font: inherit; color: var(--ink); background: var(--paper); border-radius: 3px; padding: 0 6px; }
+  .big { font-size: clamp(48px, 10vw, 130px); line-height: 1; color: var(--gold); }
+  footer { font: 12px/1.4 "Courier New", monospace; opacity: .7; max-width: 560px; }
+  footer a { color: inherit; }
+
+  /* in-game HUD */
+  #hud > * { position: fixed; }
+  #pager { top: calc(10px + var(--t)); left: calc(12px + var(--l)); width: min(330px, 56vw); box-sizing: border-box; padding: 6px 10px 10px;
+    border-radius: 10px; background: linear-gradient(#41444c, #1c1e23); box-shadow: 0 4px 0 #000, inset 0 1px 0 #777;
+    font: bold 10px/1.6 "Courier New", monospace; letter-spacing: .2em; color: #9aa0aa; pointer-events: none; }
+  #pager i { float: right; width: 8px; height: 8px; margin-top: 4px; border-radius: 50%; background: #521; }
+  #pager.ring i { background: #f33; box-shadow: 0 0 8px #f33; animation: blink .25s 6 alternate; }
+  #lcd { min-height: 3.9em; padding: 6px 8px; border-radius: 3px; background: var(--lcd); color: #1b2310;
+    box-shadow: inset 0 2px 5px rgba(0, 0, 0, .5); font: bold clamp(12px, 1.9vw, 15px)/1.3 "Courier New", monospace; letter-spacing: 0;
+    text-transform: uppercase; overflow-wrap: anywhere; }
+  #lcd::after { content: "_"; animation: blink .5s infinite alternate; }
+  #side { top: calc(6px + var(--t)); right: calc(14px + var(--r)); display: grid; justify-items: end; gap: 2px; pointer-events: none; }
+  #money { font-size: clamp(30px, 5vw, 62px); line-height: 1; color: var(--gold); }
+  #heat { min-height: 1em; font-size: clamp(22px, 3vw, 34px); line-height: 1; color: #4aa3ff; letter-spacing: .1em; }
+  #heat.hot { color: var(--hot); animation: blink .2s infinite alternate; }
+  #mission { min-width: 150px; text-align: right; font-size: clamp(22px, 3vw, 34px); letter-spacing: .04em; }
+  #mission div { height: 12px; margin-top: 4px; border: 3px solid #000; background: #333; }
+  #mission i { display: block; height: 100%; background: var(--teal); }
+  #mission.hurry { color: var(--hot); }
+  #tools { display: flex; gap: 6px; margin-top: 4px; pointer-events: auto; }
+  #tools button { width: 38px; height: 38px; border-radius: 8px; font-size: 20px; line-height: 1; background: rgba(12, 14, 17, .55);
+    box-shadow: 0 3px 0 #000; }
+  #tools button.off { color: #777; text-decoration: line-through; }
+  #flash { top: 30%; left: 0; right: 0; text-align: center; font-size: clamp(38px, 9vw, 120px); line-height: 1;
+    color: var(--hot); text-transform: uppercase; pointer-events: none; animation: pop 2.6s both; }
+  #flash small { display: block; font-size: .4em; color: var(--paper); }
+  #foot { left: calc(16px + var(--l)); bottom: calc(12px + var(--b)); display: grid; gap: 2px; pointer-events: none; font-size: 18px; letter-spacing: .08em; }
+  #where { color: var(--teal); min-height: 1.2em; }
+  #dmg div { display: inline-block; width: 130px; height: 10px; margin-left: 6px; border: 3px solid #000; background: #333; }
+  #dmg i { display: block; height: 100%; background: var(--gold); }
+  #info { color: var(--gold); animation: fade 4s both; }
+  #hint { left: 0; right: 0; bottom: calc(14px + var(--b)); text-align: center; font: bold 14px/1.4 "Courier New", monospace;
+    animation: fade 14s both; pointer-events: none; }
+  #pause { inset: 0; display: grid; place-content: center; justify-items: center; font-size: 12vw; background: rgba(12, 14, 17, .6); }
+  #pause small { font: bold 14px/1.4 "Courier New", monospace; }
+
+  /* thumb stick and buttons, only on touch screens */
+  #zone, #btns, #stick { display: none; }
+  .touch #zone { display: block; left: 0; top: 30%; bottom: 0; width: 55%; }
+  .touch #stick.on { display: block; width: 104px; height: 104px; margin: -52px 0 0 -52px; border-radius: 50%;
+    background: rgba(243, 236, 219, .12); border: 3px solid rgba(243, 236, 219, .45); box-sizing: border-box; pointer-events: none; }
+  #stick i { position: absolute; left: 50%; top: 50%; width: 46px; height: 46px; margin: -23px 0 0 -23px; border-radius: 50%;
+    background: rgba(255, 210, 62, .75); box-shadow: 0 3px 0 rgba(0, 0, 0, .6); }
+  .touch #btns { display: grid; grid-template-columns: auto auto; gap: 12px; align-items: end; justify-items: end;
+    right: calc(14px + var(--r)); bottom: calc(18px + var(--b)); }
+  #btns button { width: 74px; height: 74px; border-radius: 50%; font-size: 15px; letter-spacing: .04em; line-height: 1.05;
+    background: rgba(12, 14, 17, .5); border: 3px solid rgba(243, 236, 219, .55); box-shadow: 0 4px 0 rgba(0, 0, 0, .7); }
+  #btns button:active { background: rgba(255, 210, 62, .5); transform: translateY(3px); box-shadow: none; }
+  #btns #bA { width: 92px; height: 92px; font-size: 18px; border-color: var(--gold); color: var(--gold); }
+  #btns #bH { grid-column: 2; width: 60px; height: 60px; font-size: 13px; }
+  .touch #hint { display: none; }
+  .touch #foot { left: 50%; transform: translateX(-50%); justify-items: center; text-align: center; font-size: 15px; }
+  @keyframes blink { to { opacity: .15; } }
+  @keyframes pop { 0% { opacity: 0; scale: var(--from, 2.2); } 10% { opacity: 1; scale: 1; } 80% { opacity: 1; } 100% { opacity: 0; } }
+  @keyframes fade { 0%, 80% { opacity: 1; } 100% { opacity: 0; } }
+  @media (max-height: 520px) { #btns button { width: 62px; height: 62px; } #btns #bA { width: 78px; height: 78px; } #btns #bH { width: 52px; height: 52px; } }
+</style>
+</head>
+<body>
+<canvas id="game" aria-label="Spielansicht"></canvas>
+
+<div id="hud" hidden>
+  <div id="pager"><i></i>FLO-FUNK 3000<div id="lcd"></div></div>
+  <div id="side">
+    <div id="money" class="out">0 €</div>
+    <div id="heat" class="out" aria-label="Fahndungsstufe"></div>
+    <div id="mission" class="out" hidden><span></span><div><i></i></div></div>
+    <div id="tools">
+      <button id="bR" aria-label="Radiosender wechseln">♪</button>
+      <button id="bM" aria-label="Ton an oder aus">♫</button>
+      <button id="bP" aria-label="Pause">II</button>
+    </div>
+  </div>
+  <div id="flash" class="out" hidden><span></span><small></small></div>
+  <div id="foot">
+    <div id="info" class="out" hidden></div>
+    <div id="where" class="out"></div>
+    <div id="dmg" class="out">KAROSSE<div><i></i></div></div>
+  </div>
+  <div id="hint" class="out">PFEILE / WASD fahren &nbsp;·&nbsp; LEERTASTE Handbremse &nbsp;·&nbsp; F ein-/aussteigen &nbsp;·&nbsp; H Hupe &nbsp;·&nbsp; R Radio &nbsp;·&nbsp; P Pause</div>
+  <div id="zone"></div>
+  <div id="stick"><i></i></div>
+  <div id="btns">
+    <button id="bH">HUPE</button>
+    <button id="bB">BREMSE</button>
+    <button id="bA">EIN<br>AUS</button>
+  </div>
+  <div id="pause" class="out" hidden>PAUSE<small>Tippen oder P drücken</small></div>
+</div>
+
+<section id="menu" class="screen">
+  <h1><small>Grand Theft</small>Wachenroth</h1>
+  <p class="place">Markt Wachenroth · 96193 · Steigerwald</p>
+  <nav>
+    <button id="resume" hidden>Weiterspielen</button>
+    <button id="start" autofocus>Neues Spiel</button>
+    <button id="how" aria-expanded="false" aria-controls="help">Steuerung</button>
+  </nav>
+  <ul id="help" hidden>
+    <li><kbd>↑</kbd> <kbd>↓</kbd> <kbd>←</kbd> <kbd>→</kbd> oder <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> fahren und laufen</li>
+    <li><kbd>Leertaste</kbd> Handbremse &nbsp; <kbd>F</kbd> ein- und aussteigen (auch in fremde Autos)</li>
+    <li><kbd>H</kbd> Hupe / Blaulicht &nbsp; <kbd>R</kbd> Radiosender &nbsp; <kbd>P</kbd> Pause &nbsp; <kbd>M</kbd> Ton</li>
+    <li>Am Handy: links der Daumen-Stick, rechts EIN/AUS, BREMSE und HUPE.</li>
+    <li>Der Pager piept: Flo Ganzmann hat Aufträge. Der gelbe Pfeil zeigt den Weg.</li>
+    <li>Sterne oben rechts = Polizei. Die Waschstraße beim Murk macht dich wieder sauber.</li>
+  </ul>
+  <footer>Inoffizielle Parodie von und für Wachenröther. Alle Geschichten sind frei erfunden.
+    Kartendaten © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>-Mitwirkende.</footer>
+</section>
+
+<section id="end" class="screen" hidden>
+  <h2>Wachenroth<br>gehört dir</h2>
+  <p class="place">Kasse gemacht</p>
+  <div id="total" class="big out"></div>
+  <ul id="stats" class="stats"></ul>
+  <nav><button id="again">Nochmal spielen</button></nav>
+</section>
+
+<script src="map.js"></script>
+<script src="audio.js"></script>
+<script src="missions.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

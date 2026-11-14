@@ -59,6 +59,12 @@ POIS = {
     'weiher': (49.74498, 10.71090),    # carp pond
     'hof': (49.74890, 10.71823),       # farmyard by the old railway
     'spielplatz': (49.75227, 10.71083),
+    'schwall': (49.75088, 10.71262),   # Schwallclub clubhouse, Hauptstraße 2, opposite the bakery
+    'baustelle': (49.75245, 10.71595),  # Schulstraße is being rebuilt
+    'getraenke': (49.74719, 10.72087),  # Getränke Braun, Kleinwachenroth 25
+    'lagerhaus': (49.75125, 10.71829),  # Lagerhaus, Am Graben 9
+    'festplatz': (49.74950, 10.71430),  # Kerwa tent in the Frühmessgarten off Kirchstraße
+    'linsner': (49.75086, 10.71445),   # Gasthof Linsner, Hauptstraße 7
 }
 
 KX = 111320 * math.cos(math.radians((S + N) / 2))
