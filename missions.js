@@ -1,4 +1,4 @@
-// Flo Ganzmann's jobs. Place keys come from the POIS table in tools/osm2map.py.
+// Flo's jobs. Place keys come from the POIS table in tools/osm2map.py.
 //
 // Step kinds:
 // goto reach a place (foot: true = walk in) steal take the car that waits at a
@@ -77,7 +77,7 @@ export const RANKS = [
 
 export const TALK = {
   hello: [
-    'Servus! Hier ist der Flo Ganzmann.',
+    'Servus! Hier ist der Flo.',
     'Du willst in Wachenroth was werden? Dann arbeitest du ab heute für mich.',
     'Mein Hauptquartier: Johann-Philipp-Ring 9. Merk dir das.',
   ],
