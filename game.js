@@ -1141,18 +1141,11 @@ const pick2 = (a, r) => a[(r() * a.length) | 0];
       );
     }
   }
-  for (const b of [...BUILD]) {
-    // every house remembers its street; every third one gets a shed in the back
-    // garden
-    if (b.k !== 'h' || b.a < 50 || b.a > 420) {
-      continue;
-    }
-    const n = b.p.length / 2;
-    const cx = b.p.reduce((sum, v, i) => (i % 2 ? sum : sum + v), 0) / n;
-    const cy = b.p.reduce((sum, v, i) => (i % 2 ? sum + v : sum), 0) / n;
+  // The street a house stands on: [x, y of the closest point, the stretch of
+  // road, the distance], or null when no village street is within 32 m.
+  const streetOf = (cx, cy) => {
+    let found = null;
     let far = 32;
-    let q = null;
-    let seg = null;
     for (const sg of SEGS) {
       if (
         Math.abs(sg[0] - cx) > 160 ||
@@ -1165,16 +1158,54 @@ const pick2 = (a, r) => a[(r() * a.length) | 0];
       const d = Math.hypot(cx - pt[0], cy - pt[1]);
       if (d < far) {
         far = d;
-        q = pt;
-        seg = sg;
+        found = [pt[0], pt[1], sg, d];
       }
     }
-    if (!seg) {
+    return found;
+  };
+  // House number 11, east of Flo's, is newer than the map: put it there.
+  const [hx, hy] = MAP.pois.hq;
+  const flosStreet = streetOf(hx, hy);
+  if (flosStreet) {
+    const sg = flosStreet[2];
+    const east = sg[2] > sg[0] ? 1 : -1;
+    const dx = ((sg[2] - sg[0]) / sg[5]) * east;
+    const dy = ((sg[3] - sg[1]) / sg[5]) * east;
+    const cx = hx + dx * 25;
+    const cy = hy + dy * 25;
+    const corners = [
+      [-6.5, -5],
+      [6.5, -5],
+      [6.5, 5],
+      [-6.5, 5],
+    ];
+    BUILD.push({
+      p: corners.flatMap(([u, v]) => [
+        cx + u * dx - v * dy,
+        cy + u * dy + v * dx,
+      ]),
+      h: 7,
+      a: 130,
+      k: 'h',
+    });
+    boxes.push([cx - 9, cy - 9, cx + 9, cy + 9]);
+  }
+  for (const b of [...BUILD]) {
+    // every house remembers its street; every third one gets a shed in the back
+    // garden
+    if (b.k !== 'h' || b.a < 50 || b.a > 420) {
       continue;
     }
-    b.rd = [q[0], q[1], seg, far];
-    const ux = (cx - q[0]) / far;
-    const uy = (cy - q[1]) / far;
+    const n = b.p.length / 2;
+    const cx = b.p.reduce((sum, v, i) => (i % 2 ? sum : sum + v), 0) / n;
+    const cy = b.p.reduce((sum, v, i) => (i % 2 ? sum + v : sum), 0) / n;
+    b.rd = streetOf(cx, cy);
+    if (!b.rd) {
+      continue;
+    }
+    const [qx, qy, , far] = b.rd;
+    const ux = (cx - qx) / far;
+    const uy = (cy - qy) / far;
     const back = Math.sqrt(b.a) / 2 + 4.5 + r() * 3;
     const side = (r() - 0.5) * 9;
     const keep = r() < 0.36;
@@ -1319,6 +1350,10 @@ for (const h of MAP.hedges) {
 const blocked = (x, y, r) =>
   at(buildingGrid, x, y).some(b => pushOut(x, y, r, b.p));
 
+// Johann-Philipp-Ring is a new estate: the gardens are still bare earth, there
+// are no fences yet, and every house has a paved drive down to the street.
+const NEW_ESTATE = 'Johann-Philipp-Ring';
+
 // Street furniture. Fences are painted on; lanterns and hydrants give way when
 // a car hits them.
 const FENCES = new Path2D();
@@ -1338,7 +1373,7 @@ for (const f of MAP.fences || []) {
   for (const b of BUILD) {
     // a garden fence along the street in front of most houses, with a gap for
     // the gate
-    if (!b.rd || r() > 0.75) {
+    if (!b.rd || r() > 0.75 || b.rd[2][6].n === NEW_ESTATE) {
       continue;
     }
     const [qx, qy, sg, far] = b.rd;
@@ -1506,8 +1541,31 @@ for (const [key, text] of Object.entries(SIGNS)) {
   }
   if (best) {
     best.label = text;
+    best.poi = key;
   }
 }
+
+const NEW_HOUSES = BUILD.filter(b => b.rd && b.rd[2][6].n === NEW_ESTATE);
+
+/**
+ * Where a car stands on the drive of a house, nose to the street.
+ * @param {!Building} b A house that knows its street.
+ * @return {{x: number, y: number, a: number}}
+ */
+function driveSpot(b) {
+  const [qx, qy, seg, far] = b.rd;
+  const ux = (b.mx - qx) / far;
+  const uy = (b.my - qy) / far;
+  let along = seg[4] / 2 + 6.5;
+  while (
+    along > seg[4] / 2 + 3 &&
+    blocked(qx + ux * along, qy + uy * along, 2.6)
+  ) {
+    along -= 0.5;
+  }
+  return {x: qx + ux * along, y: qy + uy * along, a: Math.atan2(-uy, -ux)};
+}
+const HOME = BUILD.find(b => b.poi === 'hq');
 
 /**
  * Index of the junction closest to a point.
@@ -2104,8 +2162,8 @@ function reset(mode, save) {
     state.money = state.shown = save.money;
     Object.assign(state.stats, save.stats);
   }
-  const hq = SPOT.hq;
-  const car = makeCar(hq.x, hq.y, hq.a, 'car', '#e0b21c');
+  const hq = HOME && HOME.rd ? driveSpot(HOME) : SPOT.hq;
+  const car = makeCar(hq.x, hq.y, hq.a, 'car', '#e8e6df');
   state.player = {
     x: hq.x + Math.sin(hq.a) * 2.4,
     y: hq.y - Math.cos(hq.a) * 2.4,
@@ -4455,6 +4513,26 @@ function paintGround(g, x0, y0, x1, y1) {
       drawPitch(g, a);
     }
   }
+  for (const b of NEW_HOUSES) {
+    if (b.x1 < x0 - 30 || b.x0 > x1 + 30 || b.y1 < y0 - 30 || b.y0 > y1 + 30) {
+      continue;
+    }
+    g.save();
+    g.transform(b.ca, b.sa, -b.sa, b.ca, b.mx, b.my);
+    g.fillStyle = textures.constr;
+    g.fillRect(b.u0 - 6, b.v0 - 6, b.u1 - b.u0 + 12, b.v1 - b.v0 + 12);
+    g.restore();
+  }
+  g.lineCap = 'butt';
+  g.strokeStyle = textures.school;
+  for (const b of NEW_HOUSES) {
+    g.lineWidth = b === HOME ? 6.5 : 4.5;
+    g.beginPath();
+    g.moveTo(b.mx, b.my);
+    g.lineTo(b.rd[0], b.rd[1]);
+    g.stroke();
+  }
+  g.lineCap = 'round';
   strokeLayer(g, ROADS.stream, '#3a72a2');
   strokeLayer(g, ROADS.bank, '#3c6829');
   g.globalCompositeOperation = 'destination-out';
