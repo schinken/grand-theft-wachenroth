@@ -244,12 +244,12 @@ const ROADS = {
 };
 
 // Road graph: `car` links carry the through traffic, `gps` links are everything you can drive, `walk` is for people.
-const NODES = [];
+const NODES = [], LINKS = [];
 for (let i = 0; i < MAP.nodes.length; i += 2) NODES.push({x: MAP.nodes[i], y: MAP.nodes[i + 1], w: 0, car: [], walk: [], gps: []});
 for (let i = 0; i < MAP.edges.length; i += 4) {
   const a = MAP.edges[i], b = MAP.edges[i + 1], road = MAP.roads[MAP.edges[i + 2]], f = MAP.edges[i + 3], len = dist(NODES[a], NODES[b]);
   if (f & 2) { NODES[a].car.push({n: b, w: road.w}); if (!(f & 4)) NODES[b].car.push({n: a, w: road.w}); }
-  if (f & 9) { NODES[a].gps.push({n: b, len}); NODES[b].gps.push({n: a, len}); }
+  if (f & 9) { NODES[a].gps.push({n: b, len}); NODES[b].gps.push({n: a, len}); LINKS.push([a, b]); }
   if (town(road) || FOOT.includes(road.t)) { NODES[a].walk.push(b); NODES[b].walk.push(a); }
   NODES[a].w = Math.max(NODES[a].w, road.w); NODES[b].w = Math.max(NODES[b].w, road.w);
 }
@@ -437,28 +437,40 @@ function nearNode(o, links) {
   });
   return best;
 }
+function nearLink(o) { // the stretch of road next to `o`: [link, x, y of the closest point on it]
+  let best = 1e9, link = null, qx = 0, qy = 0;
+  for (const l of LINKS) {
+    const a = NODES[l[0]], b = NODES[l[1]], q = nearest(o.x, o.y, a.x, a.y, b.x, b.y), d = (o.x - q[0]) ** 2 + (o.y - q[1]) ** 2;
+    if (d < best) { best = d; link = l; qx = q[0]; qy = q[1]; }
+  }
+  return [link, qx, qy];
+}
 function field(o) {
-  const d = new Float32Array(NODES.length).fill(1e9), start = nearNode(o, 'gps');
-  d[start] = 0;
-  for (const q = [start]; q.length;) {
+  const d = new Float32Array(NODES.length).fill(1e9), [link, x, y] = nearLink(o), q = [...link];
+  for (const n of link) d[n] = Math.hypot(NODES[n].x - x, NODES[n].y - y);
+  while (q.length) {
     const i = q.shift();
     for (const e of NODES[i].gps) if (d[i] + e.len < d[e.n]) { d[e.n] = d[i] + e.len; q.push(e.n); }
   }
   return d;
 }
-function downhill(f, n) { // the neighbour that is closer to the field's origin
-  let best = -1;
-  for (const e of NODES[n].gps) if (f[e.n] < f[n] && (best < 0 || f[e.n] < f[best])) best = e.n;
+function downhill(f, n) { // the next junction on the shortest way to the field's origin
+  let best = -1, cost = 1e9;
+  for (const e of NODES[n].gps) if (f[e.n] < f[n] && f[e.n] + e.len < cost) { cost = f[e.n] + e.len; best = e.n; }
   return best;
 }
-function waypoint(f, o, ahead) { // a point further down the road from `o`
-  let n = nearNode(o, 'gps');
-  for (let go = ahead; go > 0;) {
+function waypoint(f, o, ahead) { // the point `ahead` metres down the road from `o`, or null where no road leads on
+  const [link, qx, qy] = nearLink(o), cost = n => f[n] + Math.hypot(NODES[n].x - qx, NODES[n].y - qy);
+  let n = cost(link[0]) < cost(link[1]) ? link[0] : link[1], x = qx, y = qy;
+  if (f[n] > 1e8) return null;
+  for (let go = ahead; ;) {
+    const N = NODES[n], d = Math.hypot(N.x - x, N.y - y);
+    if (d >= go) return {x: x + (N.x - x) / d * go, y: y + (N.y - y) / d * go};
+    go -= d; x = N.x; y = N.y;
     const m = downhill(f, n);
-    if (m < 0) break;
-    go -= dist(NODES[n], NODES[m]); n = m;
+    if (m < 0) return {x, y};
+    n = m;
   }
-  return NODES[n];
 }
 
 // ---------- sprites
@@ -670,7 +682,7 @@ function damage(c, imp) {
     AUDIO.play('crash', imp);
     for (let i = 0; i < 6; i++) puff(c.x, c.y, 'spark');
   }
-  c.hp -= (imp - 5) * .8 / c.T.mass;
+  c.hp -= (imp - 5) * .55 / c.T.mass;
   if (c.ai) c.ai.rage = 5;
   const j = S.job;
   if (j && j.fragile && c === S.P.car) { // the load does not like this
@@ -678,7 +690,7 @@ function damage(c, imp) {
     float(c, pick(['KLIRR!', 'SCHEPPER!', 'AUWEH!']), '#ff5a1f');
     AUDIO.play('glass');
   }
-  if (c.hp <= 0 && !c.burn) { c.burn = 3.5; bail(c); }
+  if (c.hp <= 0 && !c.burn) { c.burn = 4.5; bail(c); if (c === S.P.car) flash('Raus hier!', 'Die Karre brennt'); }
 }
 
 function bail(c) { // the driver jumps out and runs for it
@@ -745,7 +757,7 @@ function stepCar(c, dt) {
   if (!c.thr && Math.abs(vf) < .05 && Math.abs(vl) < .05) { vf = vl = 0; if (Math.abs(c.spin) < .02) c.spin = 0; }
   c.vx = fx * vf - fy * vl; c.vy = fy * vf + fx * vl; c.vf = vf;
   c.x += c.vx * dt; c.y += c.vy * dt;
-  if (c.tr) c.tr.a = c.a - clamp(wrap(c.a - c.tr.a - vf / c.tr.T.L * Math.sin(c.tr.a - c.a) * dt), -1.3, 1.3); // the trailer swings in behind
+  if (c.tr) c.tr.a = c.a - clamp(wrap(c.a - c.tr.a - vf / c.tr.T.L * Math.sin(c.a - c.tr.a) * dt), -1.3, 1.3); // the trailer swings in behind
   for (const off of T.offs) { // walls and tree trunks
     const px = c.x + fx * off, py = c.y + fy * off;
     if (surfAt(px, py) & 2) continue;
@@ -1210,7 +1222,7 @@ function toggleCar() {
   const P = S.P, c = P.car;
   if (S.wasted || S.paused || S.mode !== 'play') return;
   if (c) {
-    if (Math.hypot(c.vx, c.vy) > 5) return;
+    if (Math.hypot(c.vx, c.vy) > 5 && !c.burn) return; // jump out of a burning car at any speed
     const side = c.T.Wd / 2 + .8; // driver's door is on the left
     Object.assign(P, {x: c.x + Math.sin(c.a) * side, y: c.y - Math.cos(c.a) * side, a: c.a, car: null});
     c.thr = c.steer = 0; c.hb = false; c.siren = false;
@@ -1218,7 +1230,10 @@ function toggleCar() {
     return AUDIO.play('door');
   }
   let best = null, bd = 4.2;
-  for (const o of S.cars) { const d = dist(o, P) - o.T.L / 4; if (!o.dead && !o.burn && d < bd) { bd = d; best = o; } }
+  for (const o of S.cars) { // the nearest car; the one Flo wants counts as closer
+    const d = dist(o, P) - o.T.L / 4 - (S.job && o === S.job.veh ? 2.5 : 0);
+    if (!o.dead && !o.burn && d < bd) { bd = d; best = o; }
+  }
   if (!best) return;
   if (best.ai) {
     if (best.ai.cop) crime(1);
@@ -1313,8 +1328,7 @@ function guide(dt) { // keep the yellow arrow pointing down the road to the curr
   if (!S.gps || Math.hypot(S.gps.x - to.x, S.gps.y - to.y) > 25) S.gps = {x: to.x, y: to.y, f: field(to), wp: null};
   if ((S.gpsT -= dt) > 0) return;
   S.gpsT = .25;
-  const g = S.gps, n = nearNode(P, 'gps'), far = dist(P, to);
-  g.wp = far < 55 || g.f[n] > 1e8 || dist(P, NODES[n]) > 60 ? to : waypoint(g.f, P, 40);
+  S.gps.wp = dist(P, to) < 50 ? to : waypoint(S.gps.f, P, 40) || to;
 }
 
 function hud(dt) {
@@ -1849,6 +1863,11 @@ const GTW = {
 
 if (location.search.includes('selftest')) { // open index.html?selftest and read the console
   const sq = [0, 0, 10, 0, 10, 10, 0, 10], a = pushOut(10.5, 5, 1, sq), b = pushOut(9, 5, 1, sq), home = field(SPOT.hq);
+  const ride = (from, to) => { // follow the yellow arrow from one place to another, as the crow walks the roads
+    const f = field(to), o = {x: from.x, y: from.y};
+    for (let i = 0; i < 400 && dist(o, to) > 50; i++) { const w = waypoint(f, o, 40); if (!w) return false; const d = dist(o, w) || 1; o.x += (w.x - o.x) / d * 12; o.y += (w.y - o.y) / d * 12; }
+    return dist(o, to) <= 50;
+  };
   const used = new Set(MISSIONS.flatMap(m => [...m.steps.flatMap(s => [s.to, s.at, s.near]), ...(m.props || []).map(p => p.at)]).filter(Boolean));
   const checks = {
     'clear of a wall: no push': pushOut(20, 5, 1, sq) === null,
@@ -1858,6 +1877,7 @@ if (location.search.includes('selftest')) { // open index.html?selftest and read
     'every place has room for a car': Object.values(SPOT).every(s => !blocked(s.x, s.y, 1.2) || console.error('blocked', s.key)),
     'no place is under water': Object.values(SPOT).every(s => (surfAt(s.x, s.y) & 9) !== 8 || console.error('wet', s.key)),
     'a road leads from the HQ to every place': Object.values(SPOT).every(s => home[nearNode(s, 'gps')] < 1e8 || console.error('cut off', s.key)),
+    'the yellow arrow leads from the HQ to every place and back': Object.values(SPOT).every(s => ride(SPOT.hq, s) && ride(s, SPOT.hq) || console.error('arrow lost', s.key)),
     'every mission pays and talks': MISSIONS.every(m => m.reward > 0 && m.intro.length && m.outro.length && m.steps.every(s => s.obj)),
   };
   for (const k in checks) console.assert(checks[k], k);

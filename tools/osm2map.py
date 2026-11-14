@@ -39,6 +39,7 @@ POIS = {
     'sport': (49.75512, 10.70155),     # Sportheim SV Wachenroth
     'platz': (49.75470, 10.70241),     # SV Wachenroth A-Platz
     'roeck': (49.74861, 10.71426),     # Röckelein works
+    'mischer': (49.74853, 10.71605),   # the works yard, where the mixers wait
     'rathaus': (49.75013, 10.71593),   # Hauptstraße 23
     'kirche': (49.75010, 10.71493),    # St. Gertrud
     'schule': (49.75162, 10.71486),

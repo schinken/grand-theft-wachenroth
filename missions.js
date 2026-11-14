@@ -12,7 +12,7 @@
 const PLACES = {
   hq: 'Flos Hauptquartier', murk: 'Bekleidungshaus Murk', tanke: 'Tankautomat Murk', wasch: 'Waschstraße Murk',
   baeck: 'Wachenröther Bäck', markt: 'Mein Markt 24', sport: 'Sportheim SV Wachenroth', platz: 'Sportplatz SV Wachenroth',
-  roeck: 'Röckelein Baustoffwerk', rathaus: 'Rathaus', kirche: 'St. Gertrud', schule: 'Grundschule', halle: 'Ebrachtalhalle',
+  roeck: 'Röckelein Baustoffwerk', mischer: 'Röckelein Werkshof', rathaus: 'Rathaus', kirche: 'St. Gertrud', schule: 'Grundschule', halle: 'Ebrachtalhalle',
   ffw: 'Feuerwehr Wachenroth', kiga: 'Kita Villa Kunterbunt', bank: 'Raiffeisenbank', friedhof: 'Friedhof',
   klaer: 'Kläranlage', deponie: 'Bauschuttdeponie', bahnhof: 'Alter Bahnhof', beach: 'Beachvolleyballplatz',
   lavite: 'Pizzeria La Vite', adler: 'Schwarzer Adler', baum: 'Gasthaus Grüner Baum', maras: 'Mara\'s Marktschänke',
@@ -64,7 +64,7 @@ const MISSIONS = [
   {id: 'beton', title: 'Stillstand ist Rückstand', reward: 600,
     intro: ['Die Schulstraße wird neu gemacht, aber der Beton fehlt.', 'Beim Röckelein steht ein voller Betonmischer rum. Den leihst du dir aus. Dauerhaft.'],
     steps: [
-      {do: 'steal', veh: 'mixer', at: 'roeck', obj: 'Klau den Betonmischer beim Röckelein'},
+      {do: 'steal', veh: 'mixer', at: 'mischer', obj: 'Klau den Betonmischer beim Röckelein'},
       {do: 'bring', to: 'baustelle', time: 110, wanted: 1, obj: 'Fahr den Beton zur Baustelle Schulstraße',
         say: 'Der Beton wird hart! Fahr zur Baustelle in der Schulstraße, schnell!'},
     ],
