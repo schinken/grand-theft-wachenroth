@@ -32,39 +32,39 @@ AREA = {'forest': 'forest', 'wood': 'forest', 'scrub': 'scrub', 'wetland': 'scru
 POIS = {
     'hq': (49.75477, 10.71925),        # Johann-Philipp-Ring 9
     'murk': (49.75185, 10.72136),      # Bekleidungshaus Murk, Anton-Murk-Straße 2
-    'tanke': (49.75100, 10.72129),     # Murk Tankstelle
-    'wasch': (49.75116, 10.72180),     # Murk Waschanlage
-    'baeck': (49.75119, 10.71248),     # Wachenröther Bäck, Hauptstraße 1
-    'markt': (49.75259, 10.70924),     # Mein Markt 24, Reumannswinder Straße 23; "Edeka Claudia" in the game
-    'sport': (49.75512, 10.70155),     # Sportheim SV Wachenroth
-    'platz': (49.75470, 10.70241),     # SV Wachenroth A-Platz
-    'roeck': (49.74861, 10.71426),     # Röckelein works
-    'mischer': (49.74853, 10.71605),   # the works yard, where the mixers wait
-    'rathaus': (49.75013, 10.71593),   # Hauptstraße 23
-    'kirche': (49.75010, 10.71493),    # St. Gertrud
-    'schule': (49.75162, 10.71486),
-    'halle': (49.75174, 10.71530),     # Ebrachtalhalle
-    'ffw': (49.75114, 10.71782),       # Feuerwehr, Am Graben 7
-    'kiga': (49.75214, 10.71469),      # Villa Kunterbunt
+    'fuel': (49.75100, 10.72129),     # Murk Tankstelle
+    'carwash': (49.75116, 10.72180),     # Murk Waschanlage
+    'bakery': (49.75119, 10.71248),     # Wachenröther Bäck, Hauptstraße 1
+    'shop': (49.75259, 10.70924),     # Mein Markt 24, Reumannswinder Straße 23; "Edeka Claudia" in the game
+    'clubhouse': (49.75512, 10.70155),     # Sportheim SV Wachenroth
+    'pitch': (49.75470, 10.70241),     # SV Wachenroth A-Platz
+    'works': (49.74861, 10.71426),     # Röckelein works
+    'depot': (49.74853, 10.71605),   # the works yard, where the mixers wait
+    'townhall': (49.75013, 10.71593),   # Hauptstraße 23
+    'church': (49.75010, 10.71493),    # St. Gertrud
+    'school': (49.75162, 10.71486),
+    'hall': (49.75174, 10.71530),     # Ebrachtalhalle
+    'firestation': (49.75114, 10.71782),       # Feuerwehr, Am Graben 7
+    'kindergarten': (49.75214, 10.71469),      # Villa Kunterbunt
     'bank': (49.75120, 10.71534),
-    'friedhof': (49.75093, 10.72012),
-    'klaer': (49.75061, 10.72681),     # Kläranlage
-    'deponie': (49.75682, 10.72239),   # Bauschuttdeponie
-    'bahnhof': (49.74919, 10.71809),   # old halt of the Steigerwaldbahn
+    'cemetery': (49.75093, 10.72012),
+    'sewage': (49.75061, 10.72681),     # Kläranlage
+    'dump': (49.75682, 10.72239),   # Bauschuttdeponie
+    'station': (49.74919, 10.71809),   # old halt of the Steigerwaldbahn
     'beach': (49.74815, 10.71911),     # beach volleyball court
     'lavite': (49.75183, 10.71148),
     'adler': (49.75025, 10.71620),     # Schwarzer Adler, Hauptstraße 25
-    'baum': (49.74986, 10.71655),      # Grüner Baum, Hauptstraße 30
+    'inn': (49.74986, 10.71655),      # Grüner Baum, Hauptstraße 30
     'maras': (49.74994, 10.71768),     # Maras Marktschänke, Hauptstraße 38
-    'metzger': (49.75211, 10.71376),   # Kellerstraße 1
-    'weiher': (49.74498, 10.71090),    # carp pond
-    'hof': (49.74890, 10.71823),       # farmyard by the old railway
-    'spielplatz': (49.75227, 10.71083),
-    'schwall': (49.75088, 10.71262),   # Schwallclub clubhouse, Hauptstraße 2, opposite the bakery
-    'baustelle': (49.75245, 10.71595),  # Schulstraße is being rebuilt
-    'getraenke': (49.74719, 10.72087),  # Getränke Braun, Kleinwachenroth 25
-    'lagerhaus': (49.75125, 10.71829),  # Lagerhaus, Am Graben 9
-    'festplatz': (49.74950, 10.71430),  # Kerwa tent in the Frühmessgarten off Kirchstraße
+    'butcher': (49.75211, 10.71376),   # Kellerstraße 1
+    'pond': (49.74498, 10.71090),    # carp pond
+    'farmyard': (49.74890, 10.71823),       # farmyard by the old railway
+    'playground': (49.75227, 10.71083),
+    'club': (49.75088, 10.71262),   # Schwallclub clubhouse, Hauptstraße 2, opposite the bakery
+    'roadworks': (49.75245, 10.71595),  # Schulstraße is being rebuilt
+    'drinks': (49.74719, 10.72087),  # Getränke Braun, Kleinwachenroth 25
+    'warehouse': (49.75125, 10.71829),  # Lagerhaus, Am Graben 9
+    'fairground': (49.74950, 10.71430),  # Kerwa tent in the Frühmessgarten off Kirchstraße
     'linsner': (49.75086, 10.71445),   # Gasthof Linsner, Hauptstraße 7
 }
 
