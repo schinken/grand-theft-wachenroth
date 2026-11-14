@@ -3203,6 +3203,17 @@ function parkCars() {
       }
     }
   }
+  // What belongs to a place stands there, mission or not, ready to be taken.
+  const fleet = [
+    ['fire', 'firestation'],
+    ['mixer', 'depot'],
+    ['truck', 'drinks'],
+    ['pizza', 'lavite'],
+    ['tractor', 'farmyard'],
+  ];
+  for (const [kind, key] of fleet) {
+    makeCar(SPOT[key].x, SPOT[key].y, SPOT[key].a, kind);
+  }
   for (let i = 0; i < 46; i++) {
     // and a few along the kerb in the village
     const s = SEGS[(r() * SEGS.length) | 0];
@@ -4418,6 +4429,156 @@ function drawPitch(g, a) {
   g.lineCap = 'round';
 }
 
+// What stands on the ground in front of the landmarks. Every painter draws in
+// a frame whose origin is the kerb in front of the place, x along the street
+// and y towards the building, in metres.
+const DECOR = {
+  // A hatched apron that has to stay clear: the fire engines come out here.
+  firestation(g) {
+    g.fillStyle = '#5e5e64';
+    g.fillRect(-10, 0.5, 20, 8);
+    g.strokeStyle = '#e8c21c';
+    g.lineWidth = 0.22;
+    g.beginPath();
+    for (let x = -10; x < 10; x += 1.6) {
+      g.moveTo(x, 0.5);
+      g.lineTo(x + 1.6, 8.5);
+    }
+    g.rect(-10, 0.5, 20, 8);
+    g.stroke();
+    for (let i = 0; i < 10; i++) {
+      g.fillStyle = i % 2 ? '#f4f4ef' : '#c8201c';
+      g.fillRect(-10 + i * 2, 0, 2, 0.5);
+    }
+  },
+  // Parking bays, a shelter for the trolleys and crates of vegetables.
+  shop(g) {
+    g.fillStyle = textures.park;
+    g.fillRect(-11, 0.5, 22, 7);
+    g.strokeStyle = 'rgba(236,236,226,.6)';
+    g.lineWidth = 0.14;
+    g.beginPath();
+    for (let x = -11; x <= 11; x += 2.75) {
+      g.moveTo(x, 0.5);
+      g.lineTo(x, 5.4);
+    }
+    g.stroke();
+    g.fillStyle = '#2b62c8'; // the trolley shelter
+    g.fillRect(6.4, 5.9, 4.2, 1.5);
+    g.fillStyle = '#c9cdd3';
+    for (let i = 0; i < 6; i++) {
+      g.fillRect(6.7 + i * 0.62, 6.2, 0.42, 0.9);
+    }
+    const crops = ['#d83a3a', '#f2a01c', '#4c9a34', '#f2d23e'];
+    crops.forEach((crop, i) => {
+      g.fillStyle = '#6b4a2a';
+      g.fillRect(-10.4 + i * 1.5, 6, 1.3, 1.3);
+      g.fillStyle = crop;
+      g.fillRect(-10.2 + i * 1.5, 6.2, 0.9, 0.9);
+    });
+    g.fillStyle = '#f2d23e'; // the sign by the road
+    g.fillRect(-12.6, 0.6, 1, 2.2);
+    g.fillStyle = '#2b62c8';
+    g.fillRect(-12.5, 0.75, 0.8, 0.8);
+  },
+  // The village square: paving, the fountain, benches and the bookcase.
+  townhall(g) {
+    g.fillStyle = textures.cobble;
+    g.fillRect(-12, 0.5, 24, 8.5);
+    g.fillStyle = '#8f897d';
+    g.beginPath();
+    g.arc(6, 4.6, 2.3, 0, TAU);
+    g.fill();
+    g.fillStyle = '#4a8fc4';
+    g.beginPath();
+    g.arc(6, 4.6, 1.7, 0, TAU);
+    g.fill();
+    g.fillStyle = '#d9e9f4';
+    g.fillRect(5.75, 4.35, 0.5, 0.5);
+    g.fillStyle = '#6b4a2a';
+    for (const x of [-2, 1.2]) {
+      g.fillRect(x, 7.4, 2.2, 0.6);
+    }
+    g.fillStyle = '#c8201c'; // the old phone box, full of books now
+    g.fillRect(-10.6, 6.2, 1.1, 1.1);
+    g.fillStyle = '#f2d23e';
+    g.fillRect(-10.4, 6.4, 0.7, 0.7);
+  },
+  // Beer benches on the gravel by the clubhouse.
+  club(g) {
+    g.fillStyle = textures.gravel;
+    g.fillRect(-9, 0.5, 18, 8);
+    for (let i = 0; i < 4; i++) {
+      const x = -7.5 + i * 4.1;
+      g.fillStyle = '#b97a2c';
+      g.fillRect(x, 3.2, 2.4, 0.7);
+      g.fillStyle = '#8a5a22';
+      g.fillRect(x, 2.4, 2.4, 0.35);
+      g.fillRect(x, 4.35, 2.4, 0.35);
+    }
+    g.fillStyle = '#d99a1a'; // a stack of crates for later
+    g.fillRect(6.6, 6.4, 1.6, 1.6);
+    g.fillStyle = '#8a5a22';
+    g.fillRect(6.9, 6.7, 1, 1);
+  },
+  // Tables under the vines.
+  lavite(g) {
+    g.fillStyle = '#b3a98f';
+    g.fillRect(-6, 0.6, 12, 6);
+    g.strokeStyle = '#2f7a2c';
+    g.lineWidth = 0.3;
+    g.beginPath();
+    for (let x = -6; x <= 6; x += 1.5) {
+      g.moveTo(x, 0.6);
+      g.lineTo(x, 6.6);
+    }
+    g.stroke();
+    for (let i = 0; i < 3; i++) {
+      g.fillStyle = i % 2 ? '#c8201c' : '#f4f4ef';
+      g.beginPath();
+      g.arc(-3.6 + i * 3.6, 3.6, 0.9, 0, TAU);
+      g.fill();
+    }
+  },
+  // Stacks of crates in the yard.
+  drinks(g) {
+    const crates = ['#d99a1a', '#2f8f4a', '#c8322b', '#2b62c8', '#d99a1a'];
+    crates.forEach((crate, i) => {
+      g.fillStyle = 'rgba(0,0,0,.25)';
+      g.fillRect(-6.7 + i * 2.2, 1.5, 1.8, 2.6);
+      g.fillStyle = crate;
+      g.fillRect(-7 + i * 2.2, 1.2, 1.8, 2.6);
+      g.fillStyle = 'rgba(0,0,0,.3)';
+      g.fillRect(-7 + i * 2.2, 2.4, 1.8, 0.12);
+      g.fillRect(-6.15 + i * 2.2, 1.2, 0.12, 2.6);
+    });
+  },
+};
+
+/**
+ * Paints what stands in front of the landmarks.
+ * @param {!CanvasRenderingContext2D} g
+ * @param {number} x0
+ * @param {number} y0
+ * @param {number} x1
+ * @param {number} y1
+ */
+function paintDecor(g, x0, y0, x1, y1) {
+  for (const key of Object.keys(DECOR)) {
+    const s = SPOT[key];
+    if (s.x < x0 - 30 || s.x > x1 + 30 || s.y < y0 - 30 || s.y > y1 + 30) {
+      continue;
+    }
+    const [px, py] = MAP.pois[key];
+    g.save();
+    g.translate(s.x, s.y);
+    g.rotate(Math.atan2(py - s.y, px - s.x) - Math.PI / 2);
+    g.lineCap = 'butt';
+    DECOR[key](g);
+    g.restore();
+  }
+}
+
 const GRAVE_BEDS = ['#4a3a2a', '#8f897d', '#2f6a2a', '#5a4632', '#3c7a30'];
 const GRAVE_STONES = ['#2b2b2e', '#8f8f8a', '#d9d6cc', '#6a5a4a'];
 const GRAVE_FLOWERS = ['#d83a3a', '#f2d23e', '#f4f4ef', '#c85aa8'];
@@ -4588,6 +4749,7 @@ function paintGround(g, x0, y0, x1, y1) {
     }
     g.restore();
   }
+  paintDecor(g, x0, y0, x1, y1);
   g.strokeStyle = '#2a5a22';
   g.lineWidth = 1.7;
   g.stroke(HEDGES);
