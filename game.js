@@ -161,6 +161,7 @@ const TEX = {
   tar: tex('#55565a', (g, r) => dots(g, r, 400, ['#4c4d51', '#5e5f63'], 2)),
   flat: tex('#7e7f84', (g, r) => { dots(g, r, 500, ['#74757a', '#88898e', '#6c6d72'], 2); g.fillStyle = '#5f6065'; g.fillRect(40, 12, 5, 5); }),
   flatLight: slabs('#a8aab0', '#989aa0', ['#9ea0a6', '#b2b4ba'], 32),
+  slab: tex('#bcbcb4', (g, r) => { dots(g, r, 200, ['#aeaea6', '#c8c8c0']); g.fillStyle = '#8e8e86'; for (let y = 0; y < 64; y += 5) g.fillRect(0, y, 64, 1); }),
   concrete: tex('#b4b4ae', (g, r) => dots(g, r, 300, ['#a8a8a2', '#c0c0ba'], 2)),
   solar: tex('#9a9ca2', g => {
     for (let y = 2; y < 64; y += 16) for (let x = 1; x < 64; x += 16) {
@@ -295,7 +296,7 @@ const BUILD = MAP.buildings, BG = grid(), LIGHT = [.6, .8]; // faces turned sout
 const WALLS = {
   h: ['#e8dfc8', '#f1ead8', '#d9c9a4', '#e3d0c0', '#f0e6b8', '#efe9df', '#dfe3d8', '#e6c79c', '#d6b596'],
   y: ['#cdbf9f', '#b99f7a', '#8f7152', '#d9cfb8'], i: ['#c8ccd2', '#d9dbde', '#b7bcc4', '#c4c8bc'],
-  g: ['#d8d4c8', '#c9c5b9', '#e2ddd0'], m: ['#ece8dc'], c: ['#ece2c6'], s: ['#bdbdb6'], o: ['#8a8d92'], t: ['#ece2c6'],
+  g: ['#d8d4c8', '#c9c5b9', '#e2ddd0'], m: ['#ece8dc'], c: ['#ece2c6'], s: ['#4a6fb5'], o: ['#8a8d92'], t: ['#ece2c6'], x: ['#b9b9b2', '#a9a9a2'],
 };
 function ridge(b, rise) { // split the outline along its long axis into the two slopes of a gable roof
   const mid = (b.v0 + b.v1) / 2, lp = b.lp, n = lp.length;
@@ -329,6 +330,7 @@ function prepBuilding(b, r) {
   const k = b.k, big = b.a > 900, v = r();
   let gable = b.p.length <= 28 && wide > 2.5;
   if (k === 's' || k === 't') { b.roof = k === 's' ? TEX.concrete : TEX.slate; b.apex = k === 's' ? 2 : 9; gable = false; }
+  else if (k === 'x') { b.roof = TEX.slab; gable = false; }
   else if (k === 'o') { b.roof = TEX.flatLight; gable = false; }
   else if (k === 'c') b.roof = TEX.slate;
   else if (k === 'm') { b.roof = b.a > 1500 ? TEX.flatLight : TEX.flat; gable = false; }
@@ -348,6 +350,26 @@ function prepBuilding(b, r) {
   if (k !== 'o') gridAdd(BG, b, b.x0 - 3, b.y0 - 3, b.x1 + 3, b.y1 + 3);
 }
 const pick2 = (a, r) => a[r() * a.length | 0];
+{ // Röckelein's yard: blue silos by the mixing plant and stacks of finished concrete slabs
+  const r = rng(7), [wx, wy] = MAP.pois.roeck, [mx, my] = MAP.pois.mischer, yard = AREAS.find(a => a.k === 'ind' && pip(wx, wy, a.p));
+  const boxes = BUILD.map(b => { const xs = b.p.filter((v, i) => i % 2 === 0), ys = b.p.filter((v, i) => i % 2); return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)]; });
+  const free = (x, y, rad) => !boxes.some(b => x > b[0] - rad && x < b[2] + rad && y > b[1] - rad && y < b[3] + rad)
+    && ![0, 1, 2, 3, 4, 5, 6, 7].some(i => surfAt(x + Math.cos(i * TAU / 8) * rad, y + Math.sin(i * TAU / 8) * rad) & 4);
+  const add = (pts, h, k) => { BUILD.push({p: pts, h, a: 20, k}); boxes.push([pts[0] - 8, pts[1] - 8, pts[0] + 8, pts[1] + 8]); };
+  const spots = [];
+  for (let y = yard ? yard.y0 : 0; yard && y < yard.y1; y += 9) for (let x = yard.x0; x < yard.x1; x += 11)
+    if (pip(x, y, yard.p) && free(x, y, 7)) spots.push([x, y, Math.hypot(x - mx, y - my)]);
+  spots.sort((a, b) => a[2] - b[2]);
+  for (const [x, y] of spots.filter(q => q[2] > 16).slice(0, 2)) for (let i = -1; i < 2; i++) { // two clusters of three silos
+    const pts = [];
+    for (let k = 0; k < 10; k++) pts.push(x + i * 6.4 + Math.cos(k * TAU / 10) * 2.9, y + Math.sin(k * TAU / 10) * 2.9);
+    add(pts, 13, 's');
+  }
+  for (const [x, y, d] of spots) if (d > 30 && free(x, y, 6) && r() < .45) {
+    const w = 2.6 + r() * 2.2, l = 1.3;
+    add([x - w, y - l, x + w, y - l, x + w, y + l, x - w, y + l], .8 + r() * 1.8, 'x');
+  }
+}
 {
   const r = rng(42);
   for (const b of [...BUILD]) {
@@ -1051,6 +1073,7 @@ function startJob() {
   const m = MISSIONS[S.jobN];
   S.job = {m, i: -1, step: null, veh: null, prey: null, to: null, left: 0, timed: false, cargo: 1, fragile: false, hold: 0, got: 0, need: 0};
   S.items = S.items.filter(v => !v.job);
+  flash(m.title, `Auftrag ${S.jobN + 1} von ${MISSIONS.length}`);
   page(...m.intro);
   nextStep();
 }
@@ -1283,7 +1306,7 @@ function respawn() { // back on the road in a fresh car, at the nearest junction
 }
 
 function camera(dt) {
-  const cam = S.cam, P = S.P, c = P.car, tall = VH > VW ? .85 : 1;
+  const cam = S.cam, P = S.P, c = P.car, tall = VH > VW ? .78 : 1;
   let tx = 1450 + Math.cos(S.t * .05) * 420, ty = 850 + Math.sin(S.t * .05) * 260, tz = 4.4; // title screen fly-over
   if (S.mode === 'end') { tx = SPOT.rathaus.x + Math.cos(S.t * .3) * 25; ty = SPOT.rathaus.y + Math.sin(S.t * .3) * 25; tz = 5; }
   if (S.mode === 'play') {
@@ -1344,10 +1367,10 @@ function hud(dt) {
     bar.style.background = k < .3 ? 'var(--hot)' : '';
   }
   // the pager types out Flo's messages one after the other, then shows what to do
-  if (!pg.cur && pg.q.length) { pg.cur = pg.q.shift(); pg.n = 0; pg.said = 0; pg.hold = 1.4 + pg.cur.length * .028; }
+  if (!pg.cur && pg.q.length) { pg.cur = pg.q.shift(); pg.n = 0; pg.said = 0; pg.hold = 1 + pg.cur.length * .014; }
   if (pg.cur) {
     if (pg.n < pg.cur.length) {
-      pg.n += dt * 34;
+      pg.n += dt * 46;
       const n = Math.min(pg.cur.length, pg.n | 0);
       $('lcd').textContent = 'FLO: ' + pg.cur.slice(0, n);
       if (n - pg.said >= 3) { pg.said = n; if (/\w/.test(pg.cur[n - 1] || '')) AUDIO.babble(); }
@@ -1391,6 +1414,7 @@ function start(save) {
   for (const id of ['flash', 'mission', 'pause', 'info']) $(id).hidden = true;
   replay($('hint'));
   document.activeElement.blur();
+  if (document.body.classList.contains('touch') && document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
   AUDIO.radio(-1);
   page(...(save ? TALK.back : TALK.hello));
 }
@@ -1455,6 +1479,7 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) pause
   $('bP').addEventListener('pointerdown', e => { e.preventDefault(); pause(!S.paused); });
   $('bM').addEventListener('pointerdown', e => { e.preventDefault(); AUDIO.mute(!AUDIO.muted); $('bM').classList.toggle('off', AUDIO.muted); });
   $('pause').addEventListener('pointerdown', () => pause(false));
+  $('pager').addEventListener('pointerdown', () => { const pg = S.pager; if (pg.n < pg.cur.length) pg.n = pg.cur.length; else pg.hold = 0; }); // tap: next message
   const touchy = () => document.body.classList.add('touch');
   if (matchMedia('(pointer: coarse)').matches) touchy();
   addEventListener('touchstart', touchy, {once: true, passive: true});
@@ -1534,6 +1559,16 @@ function drawGround(x0, y0, x1, y1) {
   ctx.setLineDash([3, 5]); ctx.lineCap = 'butt';
   strokeLayer(ROADS.line, '#d8d4c0', .28);
   ctx.setLineDash([]); ctx.lineCap = 'round';
+  { // the building site in Schulstraße: torn-up road, barriers, a heap of gravel
+    const b = SPOT.baustelle;
+    ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.a);
+    ctx.fillStyle = TEX.constr; ctx.fillRect(-16, -1, 32, 7);
+    ctx.fillStyle = '#6f6a60'; ctx.beginPath(); ctx.arc(11, 3.4, 2.4, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#8f897d'; ctx.beginPath(); ctx.arc(10.5, 3, 1.5, 0, TAU); ctx.fill();
+    for (const x of [-16, 15.4]) for (let i = 0; i < 7; i++) { ctx.fillStyle = i % 2 ? '#f4f4ef' : '#c8201c'; ctx.fillRect(x, -1 + i, .6, 1); }
+    for (let i = 0; i < 16; i++) { ctx.fillStyle = i % 2 ? '#f4f4ef' : '#c8201c'; ctx.fillRect(-16 + i * 2, 5.6, 2, .5); }
+    ctx.restore();
+  }
   ctx.strokeStyle = '#2a5a22'; ctx.lineWidth = 1.7; ctx.stroke(HEDGES);
   ctx.strokeStyle = '#3b7d2e'; ctx.lineWidth = .9; ctx.stroke(HEDGES);
   const j = S.job, to = j && j.to;
@@ -1639,7 +1674,7 @@ function drawBuildings(builds, cx, cy, hc) {
       }
     }
     if (b.label) {
-      const sl = b.halves ? s2 : 1, size = clamp(Math.min((b.u1 - b.u0) / (b.label.length * .56), (b.v1 - b.v0) * .5), 2.4, 13);
+      const sl = b.halves ? s2 : 1, size = clamp(Math.min((b.u1 - b.u0) / (b.label.length * .7), (b.v1 - b.v0) * .4), 2.2, 11);
       if (b.halves) ctx.transform(s2, 0, 0, s2, lx * k2, ly * k2);
       ctx.font = `${size}px Impact, Haettenschweiler, "Arial Narrow Bold", sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.lineWidth = size * .14 / sl; ctx.strokeStyle = 'rgba(0,0,0,.75)'; ctx.lineJoin = 'round';

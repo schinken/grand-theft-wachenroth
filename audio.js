@@ -16,10 +16,12 @@ const AUDIO = (() => {
     tap = AC.createAnalyser(); // lets the self-test see that sound is coming out
     master.connect(tap);
     sfx = AC.createGain(); sfx.connect(master);
-    music = AC.createGain(); music.gain.value = .5; music.connect(master);
+    music = AC.createGain(); music.gain.value = .3; music.connect(master);
     voiceBus = AC.createBiquadFilter(); // small pager speaker
     voiceBus.type = 'bandpass'; voiceBus.frequency.value = 1100; voiceBus.Q.value = .8;
-    voiceBus.connect(sfx);
+    const loud = AC.createGain();
+    loud.gain.value = 2.5;
+    voiceBus.connect(loud).connect(sfx);
     drive = AC.createWaveShaper(); // fuzz for the rock station
     drive.curve = Float32Array.from({length: 256}, (_, i) => Math.tanh((i / 128 - 1) * 5));
     const tone = AC.createBiquadFilter();
@@ -48,16 +50,17 @@ const AUDIO = (() => {
     setInterval(tick, 70);
   }
 
-  function env(g, t, a, d, vol) {
+  function env(g, t, a, d, vol, hold = 0) { // attack, then hold for a share of the length, then die away
     g.gain.setValueAtTime(.0001, t);
     g.gain.exponentialRampToValueAtTime(vol, t + a);
+    g.gain.setValueAtTime(vol, t + a + d * hold);
     g.gain.exponentialRampToValueAtTime(.0001, t + a + d);
   }
   function osc(type, f, t, dur, vol, out, to = 0, a = .004) {
     const o = AC.createOscillator(), g = AC.createGain();
     o.type = type; o.frequency.setValueAtTime(f, t);
     if (to) o.frequency.exponentialRampToValueAtTime(to, t + a + dur);
-    env(g, t, a, dur, vol);
+    env(g, t, a, dur, vol, .6);
     o.connect(g).connect(out);
     o.start(t); o.stop(t + a + dur + .03);
   }
@@ -79,7 +82,7 @@ const AUDIO = (() => {
     crash: imp => crack(.15 + imp / 60, Math.min(.5, Math.max(.08, imp / 35)), 1400),
     splat: () => { crack(.12, .3, 700); beep(170, .16, 0, .12, 'sawtooth', 60); },
     scream: () => beep(rnd(700, 950), .28, 0, .05, 'sawtooth', rnd(380, 480)),
-    pager: () => { for (let k = 0; k < 2; k++) for (let i = 0; i < 3; i++) beep(2350, .07, k * .55 + i * .13, .05); },
+    pager: () => { for (let k = 0; k < 2; k++) for (let i = 0; i < 3; i++) beep(2350, .07, k * .55 + i * .13, .07); },
     boom: () => { crack(1, .8, 500); beep(90, .6, 0, .3, 'sawtooth', 28); },
     win: () => [523, 659, 784, 1047, 1319].forEach((f, i) => beep(f, .22, i * .12, .07)),
     fail: () => { beep(300, .5, 0, .1, 'sawtooth', 70); beep(220, .7, .25, .08, 'sawtooth', 50); },
@@ -101,7 +104,7 @@ const AUDIO = (() => {
     o.type = 'sawtooth';
     o.frequency.setValueAtTime(f0, t);
     o.frequency.linearRampToValueAtTime(f0 * rnd(.88, 1.14), t + d);
-    env(g, t, .012, d, .55);
+    env(g, t, .012, d, .5, .5);
     for (const [lo, hi] of [[280, 850], [950, 2300]]) { // two wandering formants make it sound like speech
       const f = AC.createBiquadFilter();
       f.type = 'bandpass'; f.Q.value = 7;
@@ -122,7 +125,7 @@ const AUDIO = (() => {
     eng.lp.frequency.value = cut;
     eng.g.gain.setTargetAtTime(on ? .045 : 0, t, .05);
   }
-  function siren(on) { if (sirenGain) sirenGain.gain.setTargetAtTime(on ? .035 : 0, AC.currentTime, .05); }
+  function siren(on) { if (sirenGain) sirenGain.gain.setTargetAtTime(on ? .03 : 0, AC.currentTime, .05); }
 
   // ---------- car radio: four little step sequencers, sixteenth notes
 
@@ -133,7 +136,7 @@ const AUDIO = (() => {
     o.connect(g).connect(music);
     o.start(t); o.stop(t + .3);
   }
-  const snare = (t, v = .45) => { hiss(t, .15, v, 'bandpass', 1900, music); osc('triangle', 190, t, .08, v * .6, music, 120); };
+  const snare = (t, v = .45) => { hiss(t, .15, v, 'bandpass', 1900, music); osc('triangle', 190, t, .08, v * .3, music, 120); };
   const hat = (t, v = .16, open) => hiss(t, open ? .2 : .035, v, 'highpass', 7500, music);
   function note(t, n, dur, {type = 'sawtooth', vol = .16, cut = 1400, q = 1, sweep = 0, det = 0, att = .006, out = music} = {}) {
     const g = AC.createGain(), f = AC.createBiquadFilter();
@@ -199,7 +202,7 @@ const AUDIO = (() => {
       if (on('x.....x.x.......x.....x.x..x....', k)) kick(t);
       if (k % 8 === 4) snare(t, .5);
       if (k % 2 === 0) hat(t, .12, k % 16 === 14);
-      if (k % 2 === 0) chord(t, [RIFF[k >> 1], RIFF[k >> 1] + 7, RIFF[k >> 1] + 12], s * 1.5, {vol: .07, cut: 3000, out: drive});
+      if (k % 2 === 0) chord(t, [RIFF[k >> 1], RIFF[k >> 1] + 7, RIFF[k >> 1] + 12], s * 1.5, {vol: .045, cut: 3000, out: drive});
       if (k % 4 === 0) note(t, RIFF[k >> 1] - 12, s * 3, {type: 'square', vol: .16, cut: 380});
       if (solo && k % 2 === 0 && Math.random() < .8) note(t, [64, 67, 69, 71, 74, 76, 79][Math.random() * 7 | 0], s * 1.9, {type: 'square', vol: .05, cut: 2600, out: drive});
     }},
@@ -228,6 +231,7 @@ const AUDIO = (() => {
     pause(p) { if (AC) p ? AC.suspend() : AC.resume(); },
     level() { // loudness right now, 0 when silent
       if (!tap) return 0;
+      tap.fftSize = 8192;
       const d = new Float32Array(tap.fftSize);
       tap.getFloatTimeDomainData(d);
       return Math.sqrt(d.reduce((sum, v) => sum + v * v, 0) / d.length);
