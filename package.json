@@ -3,11 +3,13 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "build": "esbuild game.js --bundle --minify --format=esm --outfile=_site/game.js && cp index.html _site/index.html",
     "format": "prettier --write .",
     "lint": "eslint .",
     "check": "prettier --check . && eslint ."
   },
   "devDependencies": {
+    "esbuild": "^0.28.2",
     "eslint": "^10.15.0",
     "eslint-plugin-jsdoc": "^65.4.7",
     "globals": "^17.14.0",
