@@ -617,6 +617,7 @@ const TYPES = {
   car: {name: ['Familienkutsche', 'Rostlaube', 'Dorfschleuder', 'Kombi vom Nachbarn'], L: 4.4, Wd: 2, max: 38, acc: 15, hp: 100, mass: 1},
   sport: {name: ['Sportflitzer', 'Angeberkarre'], L: 4.4, Wd: 2, max: 48, acc: 20, hp: 80, mass: .9},
   van: {name: ['Kastenwagen', 'Handwerkerbus'], L: 5.6, Wd: 2.3, max: 30, acc: 11, hp: 140, mass: 1.7},
+  pizza: {name: ['Pizza-Flitzer'], L: 3.9, Wd: 1.9, max: 41, acc: 18, hp: 150, mass: .9},
   police: {name: ['Streifenwagen'], L: 4.6, Wd: 2, max: 45, acc: 19, hp: 150, mass: 1.1},
   tractor: {name: ['Bulldog'], L: 4.2, Wd: 2.3, max: 16, acc: 10, hp: 220, mass: 2.4},
   truck: {name: ['Bierlaster'], L: 7.4, Wd: 2.5, max: 27, acc: 9, hp: 230, mass: 3},
@@ -630,7 +631,7 @@ for (const T of Object.values(TYPES)) { // a row of collision circles along the 
   T.offs = T.L > 6 ? [e, 0, -e] : [e, -e];
 }
 const COLORS = ['#c8322b', '#2b62c8', '#e8e6df', '#22242a', '#2f8f4a', '#9aa2ad', '#d9651e', '#7a3fb0', '#e0b21c', '#6b4a2a'];
-const PAINT = {police: '#d9dcdf', tractor: '#2e7d32', truck: '#2b62c8', kipper: '#284d98', mixer: '#284d98', fire: '#c8201c', van: '#eeeee8'};
+const PAINT = {pizza: '#efece2', police: '#d9dcdf', tractor: '#2e7d32', truck: '#2b62c8', kipper: '#284d98', mixer: '#284d98', fire: '#c8201c', van: '#eeeee8'};
 const SPRITES = new Map();
 function carSprite(kind, col, frame = 0) { // drawn nose-right; col 'wreck' gives the burnt-out shell
   const key = kind + col + frame;
@@ -646,7 +647,7 @@ function carSprite(kind, col, frame = 0) { // drawn nose-right; col 'wreck' give
   };
   const cab = len => { box(w - len, w, body); R(w - len + 5, 2, 4, h - 4, glass); R(w - len + 1, 3, 4, h - 6, shade(body, 1.1)); };
   const lamps = () => { if (!wreck) { R(w - 2, 2, 1, 3, '#ffe9a0'); R(w - 2, h - 5, 1, 3, '#ffe9a0'); R(1, 2, 1, 3, '#e02a2a'); R(1, h - 5, 1, 3, '#e02a2a'); } };
-  if (kind === 'car' || kind === 'sport' || kind === 'police') {
+  if (kind === 'car' || kind === 'sport' || kind === 'police' || kind === 'pizza') {
     const a = Math.round(w * .2), b = Math.round(w * .6);
     box(0, w, body);
     if (kind === 'sport' && !wreck) R(2, mid - 1, w - 4, 2, '#f4f4ef');
@@ -656,6 +657,10 @@ function carSprite(kind, col, frame = 0) { // drawn nose-right; col 'wreck' give
     if (kind === 'police' && !wreck) {
       R(3, 1, w - 6, 2, '#1f5fbf'); R(3, h - 3, w - 6, 2, '#1f5fbf'); R(w - 9, 3, 6, h - 6, '#1f5fbf');
       R(a + 7, 3, 3, h - 6, '#cfd8e6');
+    }
+    if (kind === 'pizza' && !wreck) { // red and green flanks, and the sign on the roof
+      R(3, 1, w - 6, 2, '#c8201c'); R(3, h - 3, w - 6, 2, '#2f8f4a');
+      R(a + 4, mid - 4, 8, 8, '#0b0b0d'); R(a + 5, mid - 3, 2, 6, '#2f8f4a'); R(a + 7, mid - 3, 2, 6, '#f4f4ef'); R(a + 9, mid - 3, 2, 6, '#c8201c');
     }
   } else if (kind === 'van') {
     box(0, w, body);
@@ -1197,7 +1202,13 @@ function startJob() {
 }
 
 function nextStep() {
-  const j = S.job, st = j.m.steps[++j.i];
+  const j = S.job, done = j.step, st = j.m.steps[++j.i];
+  if (done && done.tip && j.timed) { // quick delivery, generous customer
+    const tip = Math.round(j.left) * 2;
+    S.money += tip;
+    float(S.P, 'Trinkgeld +' + fmt(tip));
+    AUDIO.play('coin');
+  }
   if (!st) return endJob();
   if (j.i) AUDIO.play('step');
   j.step = st; j.hold = 0; j.told = false; j.to = st.to ? SPOT[st.to] : null;
@@ -1289,7 +1300,7 @@ function failJob(why) {
 }
 
 function playRules(dt) { // pickups, missions and the grand finale
-  const P = S.P, reach = P.car ? 2.9 : 1.7;
+  const P = S.P, reach = P.car ? P.car.T.L / 2 + 1 : 1.7; // long lorries scoop things up with the whole bumper
   if (S.wasted) return;
   const got = S.items.filter(v => Math.hypot(v.x - P.x, v.y - P.y) < reach);
   if (got.length) { S.items = S.items.filter(v => !got.includes(v)); got.forEach(grab); }
@@ -1541,6 +1552,8 @@ function start(save) {
   document.activeElement.blur();
   if (document.body.classList.contains('touch') && document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
   AUDIO.radio(-1);
+  const pickN = +new URLSearchParams(location.search).get('auftrag'); // index.html?auftrag=3 jumps straight to a job
+  if (pickN) S.jobN = clamp(Math.round(pickN) - 1, 0, MISSIONS.length - 1);
   page(...(save ? TALK.back : TALK.hello));
 }
 

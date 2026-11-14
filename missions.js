@@ -6,7 +6,7 @@
 //   bring   park the mission car at a place             collect pick up n things scattered near a place
 //   hold    stay at a place for some seconds            chase   ram the getaway car until it gives up
 //   take    get into the car you just stopped           lose    shake off the police
-// Options: time (seconds, runs on until the next `time`), fragile (crashes break the load),
+// Options: time (seconds, runs on until the next `time`), fragile (crashes break the load), tip (seconds left pay extra),
 // wanted (police heat), drop (the mission car is no longer needed), say (Flo on the pager).
 
 const PLACES = {
@@ -60,6 +60,22 @@ const MISSIONS = [
         say: 'Gleich ist Halbzeit! Ab zum Sportplatz, aber flott!'},
     ],
     outro: ['Die Mannschaft ist satt und gewinnt 3:1. Mit rot-weißem Gruß!']},
+
+  {id: 'pizza', title: 'Pizza-Express', reward: 500,
+    intro: ['Der Fahrer von der Pizzeria La Vite ist krank, und die Bestellungen stapeln sich.',
+      'Ich hab gesagt, du springst ein. Der Pizza-Flitzer steht vor der Tür, Reumannswinder Straße 5!'],
+    steps: [
+      {do: 'steal', veh: 'pizza', at: 'lavite', obj: 'Steig in den Pizza-Flitzer bei La Vite'},
+      {do: 'bring', to: 'sport', time: 85, tip: true, obj: 'Sechs Familienpizzen zum Sportheim vom SV',
+        say: 'Vier Bestellungen. Je schneller du lieferst, desto mehr Trinkgeld! Erst zum Sportheim.'},
+      {do: 'bring', to: 'ffw', time: 120, tip: true, obj: 'Pizza Diavolo zur Feuerwehr, Am Graben 7',
+        say: 'Die Feuerwehr hat Diavolo bestellt. Extra scharf, die können ja löschen.'},
+      {do: 'bring', to: 'klaer', time: 75, tip: true, obj: 'Pizza Salami zur Kläranlage',
+        say: 'Jetzt raus zur Kläranlage. Der Klärwärter hat sich seine Salami verdient.'},
+      {do: 'bring', to: 'hq', time: 100, tip: true, obj: 'Die letzte Pizza zum Flo, Johann-Philipp-Ring 9',
+        say: 'Und die letzte ist für mich. Mit extra Käse. Vergiss das Tiramisu nicht!'},
+    ],
+    outro: ['Alle satt, keiner hat gemeckert. La Vite will dich fest anstellen.', 'Das Tiramisu behalte ich als Vermittlungsgebühr.']},
 
   {id: 'beton', title: 'Stillstand ist Rückstand', reward: 600,
     intro: ['Die Schulstraße wird neu gemacht, aber der Beton fehlt.', 'Beim Röckelein steht ein voller Betonmischer rum. Den leihst du dir aus. Dauerhaft.'],
@@ -129,17 +145,6 @@ const MISSIONS = [
         say: 'Um 19 Uhr wird aufgestellt. Bring den Baam zum Rathaus!'},
     ],
     outro: ['Der Baam steht! Die Baamwacht hält heut der Schwallclub.']},
-
-  {id: 'pizza', title: 'Pizza-Express', reward: 700,
-    intro: ['Hunger! Und nicht nur ich.', 'Hol Pizza bei La Vite in der Reumannswinder Straße und fahr sie aus.'],
-    steps: [
-      {do: 'goto', to: 'lavite', foot: true, obj: 'Fahr zu La Vite und hol die Pizzen (zu Fuß rein)'},
-      {do: 'goto', to: 'klaer', time: 80, obj: 'Pizza zur Kläranlage',
-        say: 'Erste Pizza: Kläranlage. Der Klärwärter hat sich eine Salami verdient.'},
-      {do: 'goto', to: 'deponie', time: 75, obj: 'Pizza zur Bauschuttdeponie', say: 'Nummer zwei: Bauschuttdeponie. Frag nicht.'},
-      {do: 'goto', to: 'hq', time: 60, obj: 'Pizza zum Flo', say: 'Die letzte ist für mich. Mit extra Käse. Und vergiss das Tiramisu nicht!'},
-    ],
-    outro: ['Mmh. Noch warm. Du bist schneller als jeder Lieferdienst.']},
 
   {id: 'kerwa', title: 'Kerwa ausgraben', reward: 900,
     props: [{k: 'zelt', at: 'festplatz'}],

@@ -51,6 +51,8 @@ async (page) => {
       const stop = st.do !== 'chase' && st.do !== 'collect' && st.do !== 'lose';
       const turn = Math.abs(wrap(Math.atan2(wp.y - P.y, wp.x - P.x) - c.a)), limit = turn > .5 ? 9 : d < 30 && stop ? 9 : st.do === 'collect' && d < 18 ? 7 : 21; // drive like a person, not a rocket
       head(wp, sp > limit ? .16 : 1);
+      pad.brake = sp > limit + 3; // a light stick still accelerates, so brake when well over the limit
+      if (st.do === 'collect' && d < 10 && turn > 1 && sp > 2) { B.rev = .9; B.side = 0; } // circling the thing: back up and try again
       if (stop && d < 6 && sp > 5) { pad.x = pad.y = 0; pad.brake = true; }
       if (st.do === 'hold' && d < (st.r || 10) - 3) { pad.x = pad.y = 0; pad.brake = sp > 1; return; }
       if ((B.stuck += dt) > 2.5) { // no headway in a while: wedged somewhere
@@ -58,8 +60,9 @@ async (page) => {
         B.tries = wedged ? B.tries + 1 : 0;
         if (wedged) { B.rev = 1.6; B.side = Math.random() < .5 ? -.6 : .6; }
         if (B.tries > 2) { // still wedged after backing out twice: lift the car back onto the road
-          const [l, x, y] = nearLink(P), n = NODES[l[1]];
+          const [l, x, y] = nearLink(P), n = (S.gps && waypoint(S.gps.f, {x, y}, 15)) || NODES[l[1]]; // facing the way the arrow points
           Object.assign(c, {x, y, a: Math.atan2(n.y - y, n.x - x), vx: 0, vy: 0, spin: 0});
+          if (c.tr) c.tr.a = c.a;
           B.tries = 0; B.rev = 0; B.helps++; say('  help: car lifted back onto the road');
         }
         B.stuck = 0; B.px = P.x; B.py = P.y;
