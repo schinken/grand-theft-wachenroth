@@ -112,7 +112,7 @@ const MISSIONS = [
     outro: ['Feuer aus, Rasen gerettet. Der Platzwart weint vor Glück.']},
 
   {id: 'karpfen', title: 'Aischgründer Gold', reward: 700,
-    intro: ['Im Grünen Baum sind die Karpfen aus. Ein Skandal im Aischgrund!', 'Im Weiher hinter Kleinwachenroth schwimmen die dicksten. Hol welche raus.'],
+    intro: ['Im Grünen Baum sind die Karpfen aus. Ein Skandal im Aischgrund!', 'Im Weiher hinter Kleinwachenroth schwimmen die dicksten. Hol welche raus. Und fahr mir net in den Weiher!'],
     steps: [
       {do: 'collect', n: 4, near: 'weiher', r: 230, item: 'fisch', obj: 'Fang 4 Karpfen am Weiher hinter Kleinwachenroth'},
       {do: 'goto', to: 'baum', time: 110, obj: 'Bring die Karpfen zum Gasthaus Grüner Baum',

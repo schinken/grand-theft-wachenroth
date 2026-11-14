@@ -635,7 +635,7 @@ function store() { try { localStorage.setItem(SAVE, JSON.stringify({n: S.jobN, m
 function reset(mode, save) {
   S = {mode, t: 0, money: 0, shown: 0, cars: [], peds: [], items: [], parts: [], decals: [], texts: [],
     job: null, jobN: 0, nextJob: 5, pager: {q: [], cur: '', n: 0, hold: 0, said: 0, idle: ''}, spawnT: 0, shake: 0, wasted: 0, paused: false,
-    crashT: 0, wanted: 0, seen: 0, bust: 0, gps: null, gpsT: 0, copF: null, copT: 0, whereT: 0, note: 0, stuck: 0,
+    crashT: 0, wanted: 0, seen: 0, bust: 0, gps: null, gpsT: 0, copF: null, copT: 0, whereT: 0, finale: 0,
     stats: {missions: 0, stolen: 0, peds: 0, wrecks: 0, busted: 0, wasted: 0}, cam: {x: 1450, y: 900, z: 4.4}, P: null};
   if (save) { S.jobN = save.n; S.money = S.shown = save.money; Object.assign(S.stats, save.stats); }
   const hq = SPOT.hq, car = makeCar(hq.x, hq.y, hq.a, 'car', '#e0b21c');
