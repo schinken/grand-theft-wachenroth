@@ -250,7 +250,12 @@ for (let i = 0; i < MAP.nodes.length; i += 2) NODES.push({x: MAP.nodes[i], y: MA
 for (let i = 0; i < MAP.edges.length; i += 4) {
   const a = MAP.edges[i], b = MAP.edges[i + 1], road = MAP.roads[MAP.edges[i + 2]], f = MAP.edges[i + 3], len = dist(NODES[a], NODES[b]);
   if (f & 2) { NODES[a].car.push({n: b, w: road.w}); if (!(f & 4)) NODES[b].car.push({n: a, w: road.w}); }
-  if (f & 9) { NODES[a].gps.push({n: b, len}); NODES[b].gps.push({n: a, len}); LINKS.push([a, b]); }
+  if (f & 9) { // the sat-nav likes main roads and avoids farm tracks, like somebody who lives here
+    const l = [a, b];
+    l.k = {track: 3, service: 1.5, living_street: 1.25, residential: 1.1}[road.t] || 1;
+    NODES[a].gps.push({n: b, cost: len * l.k}); NODES[b].gps.push({n: a, cost: len * l.k});
+    LINKS.push(l);
+  }
   if (town(road) || FOOT.includes(road.t)) { NODES[a].walk.push(b); NODES[b].walk.push(a); }
   NODES[a].w = Math.max(NODES[a].w, road.w); NODES[b].w = Math.max(NODES[b].w, road.w);
 }
@@ -469,20 +474,20 @@ function nearLink(o) { // the stretch of road next to `o`: [link, x, y of the cl
 }
 function field(o) {
   const d = new Float32Array(NODES.length).fill(1e9), [link, x, y] = nearLink(o), q = [...link];
-  for (const n of link) d[n] = Math.hypot(NODES[n].x - x, NODES[n].y - y);
+  for (const n of link) d[n] = Math.hypot(NODES[n].x - x, NODES[n].y - y) * link.k;
   while (q.length) {
     const i = q.shift();
-    for (const e of NODES[i].gps) if (d[i] + e.len < d[e.n]) { d[e.n] = d[i] + e.len; q.push(e.n); }
+    for (const e of NODES[i].gps) if (d[i] + e.cost < d[e.n]) { d[e.n] = d[i] + e.cost; q.push(e.n); }
   }
   return d;
 }
 function downhill(f, n) { // the next junction on the shortest way to the field's origin
   let best = -1, cost = 1e9;
-  for (const e of NODES[n].gps) if (f[e.n] < f[n] && f[e.n] + e.len < cost) { cost = f[e.n] + e.len; best = e.n; }
+  for (const e of NODES[n].gps) if (f[e.n] < f[n] && f[e.n] + e.cost < cost) { cost = f[e.n] + e.cost; best = e.n; }
   return best;
 }
 function waypoint(f, o, ahead) { // the point `ahead` metres down the road from `o`, or null where no road leads on
-  const [link, qx, qy] = nearLink(o), cost = n => f[n] + Math.hypot(NODES[n].x - qx, NODES[n].y - qy);
+  const [link, qx, qy] = nearLink(o), cost = n => f[n] + Math.hypot(NODES[n].x - qx, NODES[n].y - qy) * link.k;
   let n = cost(link[0]) < cost(link[1]) ? link[0] : link[1], x = qx, y = qy;
   if (f[n] > 1e8) return null;
   for (let go = ahead; ;) {
@@ -1353,6 +1358,7 @@ function guide(dt) { // keep the yellow arrow pointing down the road to the curr
   if ((S.gpsT -= dt) > 0) return;
   S.gpsT = .25;
   S.gps.wp = dist(P, to) < 50 ? to : waypoint(S.gps.f, P, 40) || to;
+  S.gps.far = pathLength(routeLine(S.gps.f, P, to)); // how far it is by road
 }
 
 function hud(dt) {
@@ -1849,8 +1855,8 @@ function drawOverlay(cx, cy, z) { // labels and pointers, in screen pixels
   ctx.font = 'bold 11px "Courier New", monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   for (const v of S.items) if (v.job) pointer(v, '#ffd23e');
   if (j && j.to) {
-    const to = j.to, far = Math.round(dist(P, to));
-    pointer(to, '#ffd23e', (to.name || (to.T && to.name) || 'ZIEL').toUpperCase() + ' ' + far + 'm');
+    const to = j.to, far = dist(P, to);
+    pointer(to, '#ffd23e', (to.name || 'ZIEL').toUpperCase() + ' ' + metres(S.gps && S.gps.far || far));
     if (to === j.veh || to === j.prey) { // the car you are after
       const bob = Math.sin(S.t * 6) * 3;
       arrow(sx(to.x), sy(to.y) - 3.2 * z - 12 + bob, Math.PI / 2, to === j.prey ? '#ff5a1f' : '#ffd23e', .8);
@@ -1939,8 +1945,11 @@ function showMap(on) {
   mapBase = mapPaint(k, dpr);
 }
 
+const pathLength = p => { let d = 0; for (let i = 2; i < p.length; i += 2) d += Math.hypot(p[i] - p[i - 2], p[i + 1] - p[i - 1]); return d; };
+const metres = d => d < 950 ? Math.round(d / 10) * 10 + ' m' : (d / 1000).toFixed(1).replace('.', ',') + ' km';
+
 function routeLine(f, o, to) { // the way from `o` to `to` along the roads, as a flat list of points
-  const [link, qx, qy] = nearLink(o), [goal, tx, ty] = nearLink(to), cost = n => f[n] + Math.hypot(NODES[n].x - qx, NODES[n].y - qy), pts = [o.x, o.y];
+  const [link, qx, qy] = nearLink(o), [goal, tx, ty] = nearLink(to), cost = n => f[n] + Math.hypot(NODES[n].x - qx, NODES[n].y - qy) * link.k, pts = [o.x, o.y];
   let n = cost(link[0]) < cost(link[1]) ? link[0] : link[1];
   if (f[n] > 1e8) return [o.x, o.y, to.x, to.y];
   if (link !== goal) for (pts.push(qx, qy); n >= 0; n = goal.includes(n) ? -1 : downhill(f, n)) pts.push(NODES[n].x, NODES[n].y);
@@ -1963,8 +1972,10 @@ function drawMap() {
   g.fillStyle = '#0c0e11'; g.fillRect(0, 0, cw, ch);
   g.drawImage(mapBase, ox, oy);
   g.lineJoin = g.lineCap = 'round';
+  let far = 0;
   if (to) { // the route in gold, like the yellow arrow would lead you
     const pts = routeLine(S.gps ? S.gps.f : field(to), P, to);
+    far = pathLength(pts);
     for (const [w, col] of [[6 * d, '#0c0e11'], [3.4 * d, '#ffd23e']]) {
       g.strokeStyle = col; g.lineWidth = w;
       g.beginPath();
@@ -1977,7 +1988,7 @@ function drawMap() {
   if (to) {
     g.strokeStyle = '#0c0e11'; g.lineWidth = 6 * d; g.beginPath(); g.arc(X(to.x), Y(to.y), (8 + pulse * 4) * d, 0, TAU); g.stroke();
     g.strokeStyle = '#ffd23e'; g.lineWidth = 3 * d; g.stroke();
-    chip(`${to.name || 'Ziel'} · ${Math.round(dist(P, to))} m`, X(to.x), Y(to.y) - 24 * d, 'center', '#ffd23e');
+    chip(`${to.name || 'Ziel'} · ${metres(far)}`, X(to.x), Y(to.y) - 24 * d, 'center', '#ffd23e');
   }
   g.save(); // you: an arrow pointing the way you face
   g.translate(X(P.x), Y(P.y)); g.rotate(P.a);
