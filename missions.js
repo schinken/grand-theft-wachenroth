@@ -1,12 +1,17 @@
 // Flo Ganzmann's jobs. Place keys come from the POIS table in tools/osm2map.py.
 //
 // Step kinds:
-//   goto    reach a place (foot: true = walk in)        steal   take the car that waits at a place
-//   bring   park the mission car at a place             collect pick up n things scattered near a place
-//   hold    stay at a place for some seconds            chase   ram the getaway car until it gives up
-//   take    get into the car you just stopped           lose    shake off the police
-// Options: time (seconds, runs on until the next `time`), fragile (crashes break the load), tip (seconds left pay extra),
-// wanted (police heat), drop (the mission car is no longer needed), say (Flo on the pager).
+// goto reach a place (foot: true = walk in) steal take the car that waits at a
+// place
+// bring park the mission car at a place collect pick up n things scattered near
+// a place
+// hold stay at a place for some seconds chase ram the getaway car until it
+// gives up
+// take get into the car you just stopped lose shake off the police
+// Options: time (seconds, runs on until the next `time`), fragile (crashes
+// break the load), tip (seconds left pay extra),
+// wanted (police heat), drop (the mission car is no longer needed), say (Flo on
+// the pager).
 
 export const PLACES = {
   hq: 'Flos Hauptquartier',

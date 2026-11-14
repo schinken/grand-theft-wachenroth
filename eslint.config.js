@@ -50,7 +50,8 @@ const rules = {
   'no-new-wrappers': 'error',
   'no-extend-native': 'error',
   // 6 Naming
-  camelcase: 'error',
+  // Property names may come from outside, like OpenStreetMap's road types.
+  camelcase: ['error', {properties: 'never'}],
   'new-cap': 'error',
   // 7 JSDoc on named functions, with parameter and return types
   'jsdoc/require-jsdoc': [

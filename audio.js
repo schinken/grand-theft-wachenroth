@@ -1,4 +1,5 @@
-// Everything you hear is synthesised here: effects, Flo's pager voice, engines and the car radio.
+// Everything you hear is synthesised here: effects, Flo's pager voice, engines
+// and the car radio.
 
 let audioCtx;
 let master;
@@ -18,9 +19,7 @@ let voicePitch = 118;
 const midi = n => 440 * 2 ** ((n - 69) / 12);
 const rnd = (a, b) => a + Math.random() * (b - a);
 
-/**
- *
- */
+/** Creates the audio graph. Browsers allow this only after a click or tap. */
 export function init() {
   if (audioCtx) {
     if (audioCtx.state !== 'running') {
@@ -34,7 +33,8 @@ export function init() {
   master
     .connect(audioCtx.createDynamicsCompressor())
     .connect(audioCtx.destination);
-  tap = audioCtx.createAnalyser(); // lets the self-test see that sound is coming out
+  // Lets the self-test see that sound is coming out
+  tap = audioCtx.createAnalyser();
   master.connect(tap);
   sfx = audioCtx.createGain();
   sfx.connect(master);
@@ -99,31 +99,30 @@ export function init() {
 }
 
 /**
- *
- * @param g
- * @param t
- * @param a
- * @param d
- * @param vol
- * @param hold
+ * Shapes a note: attack, hold for a share of the length, then die away.
+ * @param {!GainNode} g
+ * @param {number} t
+ * @param {number} a Attack, in seconds.
+ * @param {number} d Length, in seconds.
+ * @param {number} vol
+ * @param {number=} hold Share of the length held at full volume.
  */
 function env(g, t, a, d, vol, hold = 0) {
-  // attack, then hold for a share of the length, then die away
   g.gain.setValueAtTime(0.0001, t);
   g.gain.exponentialRampToValueAtTime(vol, t + a);
   g.gain.setValueAtTime(vol, t + a + d * hold);
   g.gain.exponentialRampToValueAtTime(0.0001, t + a + d);
 }
 /**
- *
- * @param type
- * @param f
- * @param t
- * @param dur
- * @param vol
- * @param out
- * @param to
- * @param a
+ * Plays one oscillator note.
+ * @param {string} type
+ * @param {number} f Frequency, in hertz.
+ * @param {number} t When it sounds, in audio context seconds.
+ * @param {number} dur
+ * @param {number} vol
+ * @param {!AudioNode} out
+ * @param {number=} to Frequency to slide to.
+ * @param {number=} a Attack, in seconds.
  */
 function osc(type, f, t, dur, vol, out, to = 0, a = 0.004) {
   const o = audioCtx.createOscillator();
@@ -139,14 +138,14 @@ function osc(type, f, t, dur, vol, out, to = 0, a = 0.004) {
   o.stop(t + a + dur + 0.03);
 }
 /**
- *
- * @param t
- * @param dur
- * @param vol
- * @param type
- * @param freq
- * @param out
- * @param q
+ * Plays a burst of filtered noise.
+ * @param {number} t When it sounds, in audio context seconds.
+ * @param {number} dur
+ * @param {number} vol
+ * @param {string} type Filter type.
+ * @param {number} freq
+ * @param {!AudioNode} out
+ * @param {number=} q
  */
 function hiss(t, dur, vol, type, freq, out, q = 0.7) {
   const s = audioCtx.createBufferSource();
@@ -225,9 +224,9 @@ const SFX = {
   },
 };
 /**
- *
- * @param name
- * @param arg
+ * Plays a sound effect.
+ * @param {string} name
+ * @param {*=} arg Passed on to the effect, e.g. the impact speed.
  */
 export function play(name, arg) {
   if (audioCtx && !muted) {
@@ -235,11 +234,8 @@ export function play(name, arg) {
   }
 }
 
-/**
- *
- */
+/** One muffled syllable of Flo on the pager. */
 export function babble() {
-  // one muffled syllable of Flo on the pager
   if (!audioCtx || muted) {
     return;
   }
@@ -277,10 +273,10 @@ const ENGINES = {
   sport: [55, 6.5, 520],
 };
 /**
- *
- * @param speed
- * @param on
- * @param kind
+ * Tunes the engine drone to the speed.
+ * @param {number} speed
+ * @param {boolean} on
+ * @param {string} kind Vehicle kind.
  */
 export function engine(speed, on, kind) {
   if (!engineNodes) {
@@ -295,8 +291,8 @@ export function engine(speed, on, kind) {
   engineNodes.g.gain.setTargetAtTime(on ? 0.045 : 0, t, 0.05);
 }
 /**
- *
- * @param on
+ * Switches the police siren on or off.
+ * @param {boolean} on
  */
 export function siren(on) {
   if (sirenGain) {
@@ -307,9 +303,9 @@ export function siren(on) {
 // ---------- car radio: four little step sequencers, sixteenth notes
 
 /**
- *
- * @param t
- * @param v
+ * Bass drum.
+ * @param {number} t When it sounds, in audio context seconds.
+ * @param {number=} v
  */
 function kick(t, v = 0.9) {
   const o = audioCtx.createOscillator();
@@ -329,25 +325,14 @@ const snare = (t, v = 0.45) => {
 const hat = (t, v = 0.16, open) =>
   hiss(t, open ? 0.2 : 0.035, v, 'highpass', 7500, music);
 /**
- *
- * @param t
- * @param n
- * @param dur
- * @param root0
- * @param root0.type
- * @param root0.vol
- * @param root0.cut
- * @param root0.q
- * @param root0.sweep
- * @param root0.det
- * @param root0.att
- * @param root0.out
+ * Plays one note of a filtered synth voice.
+ * @param {number} t When it sounds, in audio context seconds.
+ * @param {number} n MIDI note number.
+ * @param {number} dur
+ * @param {!Object=} opt Timbre: type, vol, cut, q, sweep, det, att, out.
  */
-function note(
-  t,
-  n,
-  dur,
-  {
+function note(t, n, dur, opt = {}) {
+  const {
     type = 'sawtooth',
     vol = 0.16,
     cut = 1400,
@@ -356,8 +341,7 @@ function note(
     det = 0,
     att = 0.006,
     out = music,
-  } = {}
-) {
+  } = opt;
   const g = audioCtx.createGain();
   const f = audioCtx.createBiquadFilter();
   f.type = 'lowpass';
@@ -384,7 +368,8 @@ function note(
 const chord = (t, ns, dur, o) => ns.forEach(n => note(t, n, dur, o));
 const on = (pat, i) => pat[i % pat.length] === 'x';
 
-// Kerwa polka: [chord, four eighth notes of melody] per bar, 0 = hold, -1 = rest
+// Kerwa polka: [chord, four eighth notes of melody] per bar, 0 = hold, -1 =
+// rest
 const CHORD_F = {tuba: [41, 36], pah: [57, 60, 65]};
 const CHORD_C7 = {tuba: [36, 43], pah: [55, 58, 64]};
 const CHORD_BB = {tuba: [34, 41], pah: [58, 62, 65]};
@@ -594,9 +579,7 @@ const STATIONS = [
   },
 ];
 
-/**
- *
- */
+/** Schedules the radio a quarter of a second ahead. */
 function tick() {
   if (station < 0 || audioCtx.state !== 'running') {
     return;
@@ -617,11 +600,10 @@ function tick() {
   }
 }
 /**
- *
- * @param i
+ * Tunes the car radio.
+ * @param {number} i Station index, -1 switches it off.
  */
 export function radio(i) {
-  // -1 switches it off
   if (i === station) {
     return;
   }
@@ -633,17 +615,12 @@ export function radio(i) {
 /** The names of the radio stations, in dial order. */
 export const stations = STATIONS.map(s => s.name);
 
-/**
- *
- */
+/** @return {boolean}  */
 export function isMuted() {
   return muted;
 }
 
-/**
- *
- * @param m
- */
+/** @param {boolean} m  */
 export function mute(m) {
   muted = m;
   if (master) {
@@ -652,8 +629,8 @@ export function mute(m) {
 }
 
 /**
- *
- * @param p
+ * Suspends or resumes all sound.
+ * @param {boolean} p
  */
 export function pause(p) {
   if (audioCtx) {
@@ -662,10 +639,10 @@ export function pause(p) {
 }
 
 /**
- *
+ * Loudness right now.
+ * @return {number} 0 when silent.
  */
 export function level() {
-  // loudness right now, 0 when silent
   if (!tap) {
     return 0;
   }

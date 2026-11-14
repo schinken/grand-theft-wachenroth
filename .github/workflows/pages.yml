@@ -27,6 +27,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Check formatting and the Google style rules
+        run: npm run check
       - name: Bundle and minify the game into _site
         run: npm run build
       - uses: actions/configure-pages@v5

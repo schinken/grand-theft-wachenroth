@@ -8,6 +8,56 @@ import * as audio from './audio.js';
 import {MAP} from './map.js';
 import {MISSIONS, PLACES, RANKS, SIGNS, TALK} from './missions.js';
 
+/**
+ * A point in the world, in metres.
+ * @typedef {{x: number, y: number}}
+ */
+let Point;
+
+/**
+ * An outline as a flat list of x, y pairs, clockwise.
+ * @typedef {!Array<number>}
+ */
+let Polygon;
+
+/**
+ * A seeded random number generator.
+ * @typedef {function(): number}
+ */
+let Rng;
+
+/**
+ * A uniform grid of buckets, for finding buildings, trees and street
+ * furniture near a point.
+ * @typedef {!Array<!Array<!Object>>}
+ */
+let Grid;
+
+/**
+ * A vehicle: position x and y, heading a, velocity vx and vy, its `type` from
+ * TYPES, health hp, and `ai` while the computer drives it.
+ * @typedef {!Object}
+ */
+let Car;
+
+/**
+ * A pedestrian, walking beside the road from one junction to the next.
+ * @typedef {!Object}
+ */
+let Ped;
+
+/**
+ * A building from the map: outline p, height h, walls and roof.
+ * @typedef {!Object}
+ */
+let Building;
+
+/**
+ * A lantern or a hydrant: kind k, position, and whether it is knocked down.
+ * @typedef {!Object}
+ */
+let Prop;
+
 const byId = id => document.getElementById(id);
 const gameCanvas = byId('game');
 const ctx = gameCanvas.getContext('2d');
@@ -38,11 +88,11 @@ const shade = (hex, f) =>
     .join('')}`;
 
 /**
- *
- * @param seed
+ * Mulberry32 random numbers, so the scenery is the same on every load.
+ * @param {number} seed
+ * @return {function():} number
  */
 function rng(seed) {
-  // mulberry32, so the scenery is the same on every load
   return () => {
     let t = (seed += 0x6d2b79f5);
     t = Math.imul(t ^ (t >>> 15), t | 1);
@@ -54,16 +104,16 @@ function rng(seed) {
 // ---------- geometry
 
 /**
- *
- * @param x
- * @param y
- * @param ax
- * @param ay
- * @param bx
- * @param by
+ * The closest point to (x, y) on the segment a-b.
+ * @param {number} x
+ * @param {number} y
+ * @param {number} ax
+ * @param {number} ay
+ * @param {number} bx
+ * @param {number} by
+ * @return {!Array<number>}
  */
 function nearest(x, y, ax, ay, bx, by) {
-  // closest point to (x, y) on segment a-b
   const dx = bx - ax;
   const dy = by - ay;
   const t = clamp(
@@ -75,10 +125,11 @@ function nearest(x, y, ax, ay, bx, by) {
 }
 
 /**
- *
- * @param x
- * @param y
- * @param p
+ * Whether a point lies inside a polygon.
+ * @param {number} x
+ * @param {number} y
+ * @param {!Polygon} p
+ * @return {boolean}
  */
 function pip(x, y, p) {
   let inside = false;
@@ -93,13 +144,14 @@ function pip(x, y, p) {
   return inside;
 }
 
-// Circle vs polygon: [nx, ny, depth] that pushes the circle out, or null when they do not touch.
 /**
- *
- * @param x
- * @param y
- * @param r
- * @param p
+ * Circle against polygon.
+ * @param {number} x
+ * @param {number} y
+ * @param {number} r
+ * @param {!Polygon} p
+ * @return {?Array<number>} [nx, ny, depth] that pushes the circle out, or null
+ *     when they do not touch.
  */
 function pushOut(x, y, r, p) {
   let best = 1e9;
@@ -132,13 +184,13 @@ const cell = (v, n) => clamp(Math.floor(v / CELL) + 2, 0, n - 1);
 const grid = () => Array.from({length: GRID_W * GRID_H}, () => []);
 const at = (g, x, y) => g[cell(y, GRID_H) * GRID_W + cell(x, GRID_W)];
 /**
- *
- * @param g
- * @param o
- * @param x0
- * @param y0
- * @param x1
- * @param y1
+ * Files an object under every grid cell its bounding box touches.
+ * @param {!Grid} g
+ * @param {!Object} o
+ * @param {number} x0
+ * @param {number} y0
+ * @param {number} x1
+ * @param {number} y1
  */
 function gridAdd(g, o, x0, y0, x1, y1) {
   for (let y = cell(y0, GRID_H); y <= cell(y1, GRID_H); y++) {
@@ -149,12 +201,13 @@ function gridAdd(g, o, x0, y0, x1, y1) {
 }
 let stamp = 0;
 /**
- *
- * @param g
- * @param x0
- * @param y0
- * @param x1
- * @param y1
+ * Everything filed under the cells of a rectangle, each object once.
+ * @param {!Grid} g
+ * @param {number} x0
+ * @param {number} y0
+ * @param {number} x1
+ * @param {number} y1
+ * @return {!Array<!Object>}
  */
 function gridFind(g, x0, y0, x1, y1) {
   const out = [];
@@ -175,13 +228,15 @@ function gridFind(g, x0, y0, x1, y1) {
 // ---------- textures (all drawn here, 8 px per metre)
 
 /**
- *
- * @param base
- * @param draw
- * @param n
+ * A repeating ground or roof texture, 8 pixels per metre.
+ * @param {string} base Hex colour; it also seeds the random numbers.
+ * @param {function(!CanvasRenderingContext2D, !Rng, number)=} draw Paints the
+ *     details.
+ * @param {number=} n Pixels square; the big ground textures use 128 so they
+ *     repeat less.
+ * @return {!CanvasPattern}
  */
 function tex(base, draw, n = 64) {
-  // n pixels square; the big ground textures use 128 so they repeat less
   const c = canvas(n, n);
   const g = c.getContext('2d');
   g.fillStyle = base;
@@ -194,13 +249,13 @@ function tex(base, draw, n = 64) {
   return p;
 }
 /**
- *
- * @param g
- * @param r
- * @param n
- * @param cols
- * @param w
- * @param size
+ * Speckles a texture with short dashes in random colours.
+ * @param {!CanvasRenderingContext2D} g
+ * @param {!Rng} r
+ * @param {number} n
+ * @param {!Array<string>} cols
+ * @param {number=} w
+ * @param {number=} size
  */
 function dots(g, r, n, cols, w = 1, size = 64) {
   for (let i = 0; i < n; i++) {
@@ -209,15 +264,14 @@ function dots(g, r, n, cols, w = 1, size = 64) {
   }
 }
 /**
- *
- * @param g
- * @param r
- * @param n
- * @param cols
- * @param size
+ * Soft patches, so lawns and tarmac are not one flat colour.
+ * @param {!CanvasRenderingContext2D} g
+ * @param {!Rng} r
+ * @param {number} n
+ * @param {!Array<string>} cols
+ * @param {number} size
  */
 function blots(g, r, n, cols, size) {
-  // soft patches, so lawns and tarmac are not one flat colour
   g.globalAlpha = 0.35;
   for (let i = 0; i < n; i++) {
     g.fillStyle = cols[(r() * cols.length) | 0];
@@ -239,12 +293,12 @@ function blots(g, r, n, cols, size) {
   g.globalAlpha = 1;
 }
 /**
- *
- * @param g
- * @param r
- * @param n
- * @param cols
- * @param size
+ * Blades of grass, two pixels tall.
+ * @param {!CanvasRenderingContext2D} g
+ * @param {!Rng} r
+ * @param {number} n
+ * @param {!Array<string>} cols
+ * @param {number} size
  */
 function tufts(g, r, n, cols, size) {
   for (let i = 0; i < n; i++) {
@@ -516,11 +570,11 @@ const CANOPY = [
 // ---------- world
 
 /**
- *
- * @param o
+ * Adds what drawing and collisions need to a polygon: path, bounding box, area
+ * and a local frame along its longest edge.
+ * @param {!Object} o An area or building with its outline in `p`.
  */
 function prepPoly(o) {
-  // path, bounding box, area and the direction of the longest edge
   const p = o.p;
   o.path = new Path2D();
   o.x0 = o.y0 = 1e9;
@@ -583,7 +637,8 @@ AREAS.forEach((a, i) => {
   }
   const ca = Math.cos(a.ang);
   const sa = Math.sin(a.ang);
-  const radius = Math.hypot(a.x1 - a.x0, a.y1 - a.y0) / 2; // bay lines, on the grid parkCars() fills
+  // Bay lines, on the grid parkCars() fills
+  const radius = Math.hypot(a.x1 - a.x0, a.y1 - a.y0) / 2;
   a.bays = new Path2D();
   for (let v = -radius; v < radius; v += 5.8) {
     for (let u = -radius - 1.4; u < radius; u += 2.8) {
@@ -608,7 +663,8 @@ const DRIVE = [
   'service',
 ];
 const FOOT = ['path', 'footway', 'steps', 'cycleway'];
-const town = r => r.n && !/^(St|ERH|BA) /.test(r.n); // a street with a name, so it has pavements and people
+// A street with a name, so it has pavements and people
+const town = r => r.n && !/^(St|ERH|BA) /.test(r.n);
 for (const r of MAP.roads) {
   r.path = new Path2D();
   for (let i = 0; i < r.p.length; i += 2) {
@@ -620,12 +676,12 @@ for (const r of MAP.roads) {
   }
 }
 /**
- *
- * @param ok
- * @param extra
+ * Collects the roads that pass a test into one path per stroke width.
+ * @param {function(!Object):} ok boolean
+ * @param {number=} extra Added to every stroke width.
+ * @return {!Array<!Array>}
  */
 function layer(ok, extra = 0) {
-  // one path per stroke width
   const out = new Map();
   for (const r of MAP.roads) {
     if (ok(r)) {
@@ -655,7 +711,8 @@ const ROADS = {
   line: layer(is('secondary', 'tertiary')),
 };
 
-// Road graph: `car` links carry the through traffic, `gps` links are everything you can drive, `walk` is for people.
+// Road graph: `car` links carry the through traffic, `gps` links are everything
+// you can drive, `walk` is for people.
 const NODES = [];
 const LINKS = [];
 for (let i = 0; i < MAP.nodes.length; i += 2) {
@@ -681,7 +738,8 @@ for (let i = 0; i < MAP.edges.length; i += 4) {
     }
   }
   if (f & 9) {
-    // the sat-nav likes main roads and avoids farm tracks, like somebody who lives here
+    // the sat-nav likes main roads and avoids farm tracks, like somebody who
+    // lives here
     const l = [a, b];
     l.k =
       {track: 3, service: 1.5, living_street: 1.25, residential: 1.1}[road.t] ||
@@ -698,7 +756,8 @@ for (let i = 0; i < MAP.edges.length; i += 4) {
   NODES[b].w = Math.max(NODES[b].w, road.w);
 }
 
-// Low-res ground lookup, 2 m per cell. Bits: 1 = hard surface, 2 = passage under a building, 4 = road, 8 = deep water.
+// Low-res ground lookup, 2 m per cell. Bits: 1 = hard surface, 2 = passage
+// under a building, 4 = road, 8 = deep water.
 const SURF_W = (WORLD_W + 2 * EDGE) >> 1;
 const SURF_H = (WORLD_H + 2 * EDGE) >> 1;
 const SURF = (() => {
@@ -765,9 +824,11 @@ const SURF = (() => {
   return out;
 })();
 /**
- *
- * @param x
- * @param y
+ * What the ground is like at a point.
+ * @param {number} x
+ * @param {number} y
+ * @return {number} Bits: 1 hard surface, 2 passage under a building, 4 road, 8
+ *     deep water.
  */
 function surfAt(x, y) {
   const ix = (x + EDGE) >> 1;
@@ -796,7 +857,8 @@ for (const r of MAP.roads) {
 }
 const SEG_MAX = Math.max(...SEGS.map(s => s[5]));
 
-// ---------- buildings: walls lean away from the camera, roofs get a ridge and two slopes
+// ---------- buildings: walls lean away from the camera, roofs get a ridge and
+// two slopes
 
 const BUILD = MAP.buildings;
 const buildingGrid = grid();
@@ -825,12 +887,11 @@ const WALLS = {
   d: ['#8a6a48', '#a07a50', '#6f7f5a', '#7a5a3c', '#9a8f7a'],
 };
 /**
- *
- * @param b
- * @param rise
+ * Splits a roof outline along its long axis into the two slopes of a gable.
+ * @param {!Building} b
+ * @param {number} rise How far the ridge stands above the eaves, in metres.
  */
 function ridge(b, rise) {
-  // split the outline along its long axis into the two slopes of a gable roof
   const mid = (b.v0 + b.v1) / 2;
   const lp = b.lp;
   const n = lp.length;
@@ -851,7 +912,8 @@ function ridge(b, rise) {
     b.gables.push([k, lp[i], lp[i + 1], x, mid, lp[j], lp[j + 1]]);
   }
   b.rh = rise;
-  const lit = -b.sa * LIGHT[0] + b.ca * LIGHT[1]; // how much the first slope faces the dark side
+  // How much the first slope faces the dark side
+  const lit = -b.sa * LIGHT[0] + b.ca * LIGHT[1];
   b.tint = [lit, -lit].map(v =>
     v > 0
       ? `rgba(0,0,0,${(0.3 * v).toFixed(2)})`
@@ -863,9 +925,9 @@ function ridge(b, rise) {
   b.ry = mid;
 }
 /**
- *
- * @param b
- * @param r
+ * Picks walls and a roof for a building and files it in the grid.
+ * @param {!Building} b
+ * @param {!Rng} r
  */
 function prepBuilding(b, r) {
   prepPoly(b);
@@ -986,7 +1048,8 @@ function prepBuilding(b, r) {
 }
 const pick2 = (a, r) => a[(r() * a.length) | 0];
 {
-  // Not on the map, so made up: Röckelein's yard with silos and stacks of concrete slabs, and garden sheds
+  // Not on the map, so made up: Röckelein's yard with silos and stacks of
+  // concrete slabs, and garden sheds
   const r = rng(7);
   const [wx, wy] = MAP.pois.works;
   const [mx, my] = MAP.pois.depot;
@@ -1045,7 +1108,8 @@ const pick2 = (a, r) => a[(r() * a.length) | 0];
     }
   }
   for (const b of [...BUILD]) {
-    // every house remembers its street; every third one gets a shed in the back garden
+    // every house remembers its street; every third one gets a shed in the back
+    // garden
     if (b.k !== 'h' || b.a < 50 || b.a > 420) {
       continue;
     }
@@ -1221,7 +1285,8 @@ for (const h of MAP.hedges) {
 const blocked = (x, y, r) =>
   at(buildingGrid, x, y).some(b => pushOut(x, y, r, b.p));
 
-// Street furniture. Fences are painted on; lanterns and hydrants give way when a car hits them.
+// Street furniture. Fences are painted on; lanterns and hydrants give way when
+// a car hits them.
 const FENCES = new Path2D();
 const streetProps = [];
 const propGrid = grid();
@@ -1237,7 +1302,8 @@ for (const f of MAP.fences || []) {
 {
   const r = rng(5);
   for (const b of BUILD) {
-    // a garden fence along the street in front of most houses, with a gap for the gate
+    // a garden fence along the street in front of most houses, with a gap for
+    // the gate
     if (!b.rd || r() > 0.75) {
       continue;
     }
@@ -1327,12 +1393,11 @@ for (const f of MAP.fences || []) {
   }
 }
 /**
- *
- * @param p
- * @param c
+ * A car takes a lantern or a hydrant with it.
+ * @param {!Prop} p
+ * @param {!Car} c
  */
 function knock(p, c) {
-  // a car takes a lantern or a hydrant with it
   if (Math.hypot(c.vx, c.vy) < 2.5) {
     return;
   }
@@ -1355,11 +1420,12 @@ function knock(p, c) {
   }
 }
 
-// Where you pull up for a place: at the edge of the nearest road, on the side the place is on.
 /**
- *
- * @param x
- * @param y
+ * Where you pull up for a place: at the edge of the nearest road, on the side
+ * the place is on.
+ * @param {number} x
+ * @param {number} y
+ * @return {{x: number, y: number, a: number}}
  */
 function roadside(x, y) {
   let best = 1e9;
@@ -1385,7 +1451,7 @@ function roadside(x, y) {
   return {x: q[0], y: q[1], a};
 }
 const SPOT = {};
-for (const k in MAP.pois) {
+for (const k of Object.keys(MAP.pois)) {
   SPOT[k] = Object.assign(roadside(...MAP.pois[k]), {
     key: k,
     name: PLACES[k] || k,
@@ -1409,11 +1475,12 @@ for (const [key, text] of Object.entries(SIGNS)) {
   }
 }
 
-// Road distance from every junction to one place, for the yellow arrow and the police.
 /**
- *
- * @param o
- * @param links
+ * Index of the junction closest to a point.
+ * @param {!Point} o
+ * @param {string} links The links the junction must have: 'car', 'gps' or
+ *     'walk'.
+ * @return {number}
  */
 function nearNode(o, links) {
   let best = 0;
@@ -1435,11 +1502,11 @@ function nearNode(o, links) {
   return best;
 }
 /**
- *
- * @param o
+ * The stretch of road next to a point.
+ * @param {!Point} o
+ * @return {!Array} [link, x, y] with the closest point on the link.
  */
 function nearLink(o) {
-  // the stretch of road next to `o`: [link, x, y of the closest point on it]
   let best = 1e9;
   let link = null;
   let qx = 0;
@@ -1459,8 +1526,10 @@ function nearLink(o) {
   return [link, qx, qy];
 }
 /**
- *
- * @param o
+ * Road cost from every junction to one place, for the yellow arrow and the
+ * police.
+ * @param {!Point} o
+ * @return {!Float32Array}
  */
 function field(o) {
   const d = new Float32Array(NODES.length).fill(1e9);
@@ -1481,12 +1550,12 @@ function field(o) {
   return d;
 }
 /**
- *
- * @param f
- * @param n
+ * The next junction on the cheapest way to the origin of a field.
+ * @param {!Float32Array} f
+ * @param {number} n
+ * @return {number} The junction index, or -1 at the origin.
  */
 function downhill(f, n) {
-  // the next junction on the shortest way to the field's origin
   let best = -1;
   let cost = 1e9;
   for (const e of NODES[n].gps) {
@@ -1498,13 +1567,13 @@ function downhill(f, n) {
   return best;
 }
 /**
- *
- * @param f
- * @param o
- * @param ahead
+ * The point some metres further down the road.
+ * @param {!Float32Array} f
+ * @param {!Point} o
+ * @param {number} ahead
+ * @return {?Point} Null where no road leads on.
  */
 function waypoint(f, o, ahead) {
-  // the point `ahead` metres down the road from `o`, or null where no road leads on
   const [link, qx, qy] = nearLink(o);
   const cost = n =>
     f[n] + Math.hypot(NODES[n].x - qx, NODES[n].y - qy) * link.k;
@@ -1660,13 +1729,13 @@ const PAINT = {
 };
 const spriteCache = new Map();
 /**
- *
- * @param kind
- * @param col
- * @param frame
+ * The picture of a vehicle, drawn nose-right.
+ * @param {string} kind
+ * @param {string} col Body colour; 'wreck' gives the burnt-out shell.
+ * @param {number=} frame Animation frame or livery.
+ * @return {!HTMLCanvasElement}
  */
 function carSprite(kind, col, frame = 0) {
-  // drawn nose-right; col 'wreck' gives the burnt-out shell
   const key = kind + col + frame;
   if (spriteCache.has(key)) {
     return spriteCache.get(key);
@@ -1880,11 +1949,11 @@ for (const [kind, type] of Object.entries(TRAILERS)) {
 
 const iconCache = {};
 /**
- *
- * @param kind
+ * Little pixel pictures for the things you carry around.
+ * @param {string} kind
+ * @return {!HTMLCanvasElement}
  */
 function icon(kind) {
-  // little pixel pictures for the things you carry around
   if (iconCache[kind]) {
     return iconCache[kind];
   }
@@ -1930,33 +1999,32 @@ let state;
 const fmt = v => `${Math.round(v).toLocaleString('de-DE')} €`;
 const SAVE_KEY = 'gtw-save';
 /**
- *
+ * Reads the saved game.
+ * @return {?Object}
  */
 function load() {
   try {
     return JSON.parse(localStorage.getItem(SAVE_KEY));
-  } catch (e) {
+  } catch {
     return null;
   }
 }
-/**
- *
- */
+/** Saves the progress in the browser. */
 function store() {
   try {
     localStorage.setItem(
       SAVE_KEY,
       JSON.stringify({n: state.jobN, money: state.money, stats: state.stats})
     );
-  } catch (e) {
+  } catch {
     /* private mode */
   }
 }
 
 /**
- *
- * @param mode
- * @param save
+ * Builds a fresh world.
+ * @param {string} mode 'menu' or 'play'.
+ * @param {?Object=} save A saved game to continue.
  */
 function reset(mode, save) {
   for (const p of streetProps) {
@@ -2025,12 +2093,13 @@ function reset(mode, save) {
 }
 
 /**
- *
- * @param x
- * @param y
- * @param a
- * @param kind
- * @param col
+ * Puts a vehicle into the world.
+ * @param {number} x
+ * @param {number} y
+ * @param {number} a Heading, in radians.
+ * @param {string} kind
+ * @param {string=} col
+ * @return {!Car}
  */
 function makeCar(x, y, a, kind, col = PAINT[kind] || pick(COLORS)) {
   const type = TYPES[kind];
@@ -2065,9 +2134,10 @@ function makeCar(x, y, a, kind, col = PAINT[kind] || pick(COLORS)) {
   return c;
 }
 /**
- *
- * @param c
- * @param kind
+ * Hangs a trailer on a vehicle.
+ * @param {!Car} c
+ * @param {string} kind
+ * @return {!Car}
  */
 function hitch(c, kind) {
   c.tr = {kind, a: c.a, type: TRAILERS[kind]};
@@ -2077,10 +2147,10 @@ function hitch(c, kind) {
 // ---------- effects
 
 /**
- *
- * @param x
- * @param y
- * @param kind
+ * Emits one particle.
+ * @param {number} x
+ * @param {number} y
+ * @param {string} kind
  */
 function puff(x, y, kind) {
   if (state.parts.length > 400) {
@@ -2104,10 +2174,10 @@ function puff(x, y, kind) {
   });
 }
 /**
- *
- * @param x
- * @param y
- * @param kind
+ * Leaves a stain on the ground.
+ * @param {number} x
+ * @param {number} y
+ * @param {string} kind
  */
 function decal(x, y, kind) {
   for (let i = 0; i < 3; i++) {
@@ -2125,20 +2195,19 @@ function decal(x, y, kind) {
 const float = (o, s, col = '#ffd23e') =>
   state.texts.push({x: o.x, y: o.y, s, life: 1.5, col});
 /**
- *
- * @param el
+ * Shows an element and restarts its CSS animation.
+ * @param {!Element} el
  */
 function replay(el) {
-  // show an element and restart its CSS animation
   el.hidden = false;
   el.style.animation = 'none';
   el.offsetWidth;
   el.style.animation = '';
 }
 /**
- *
- * @param big
- * @param small
+ * Big letters across the screen.
+ * @param {string} big
+ * @param {string=} small
  */
 function flash(big, small = '') {
   const el = byId('flash');
@@ -2147,11 +2216,10 @@ function flash(big, small = '') {
   replay(el);
 }
 /**
- *
- * @param text
+ * The small line at the bottom: car names, radio stations.
+ * @param {string} text
  */
 function info(text) {
-  // small line at the bottom: car names, radio stations
   byId('info').textContent = text;
   replay(byId('info'));
 }
@@ -2159,13 +2227,13 @@ function info(text) {
 // ---------- cars
 
 /**
- *
- * @param c
- * @param h
- * @param off
+ * Pushes a car out of something it hit.
+ * @param {!Car} c
+ * @param {!Array<number>} h [nx, ny, depth].
+ * @param {number} off Where along the car it was hit.
+ * @return {number} The impact speed.
  */
 function bounce(c, h, off) {
-  // push a car out along [nx, ny, depth]; returns the impact speed
   c.x += h[0] * h[2];
   c.y += h[1] * h[2];
   const vn = c.vx * h[0] + c.vy * h[1];
@@ -2179,9 +2247,9 @@ function bounce(c, h, off) {
 }
 
 /**
- *
- * @param c
- * @param imp
+ * Dents a car; enough of it sets the car on fire.
+ * @param {!Car} c
+ * @param {number} imp Impact speed.
  */
 function damage(c, imp) {
   if (imp < 5 || c.dead) {
@@ -2215,11 +2283,10 @@ function damage(c, imp) {
 }
 
 /**
- *
- * @param c
+ * The driver jumps out and runs for it.
+ * @param {!Car} c
  */
 function bail(c) {
-  // the driver jumps out and runs for it
   if (!c.ai) {
     return;
   }
@@ -2238,8 +2305,8 @@ function bail(c) {
 }
 
 /**
- *
- * @param c
+ * Blows a car up, with everything standing next to it.
+ * @param {!Car} c
  */
 function explode(c) {
   c.burn = 0;
@@ -2291,11 +2358,10 @@ function explode(c) {
 }
 
 /**
- *
- * @param c
+ * Cars cannot swim.
+ * @param {!Car} c
  */
 function sink(c) {
-  // cars cannot swim
   for (let i = 0; i < 30; i++) {
     puff(c.x + rand(-2, 2), c.y + rand(-2, 2), 'water');
   }
@@ -2310,9 +2376,9 @@ function sink(c) {
 }
 
 /**
- *
- * @param c
- * @param dt
+ * Moves one vehicle: engine, steering, grip, walls, trees and street furniture.
+ * @param {!Car} c
+ * @param {number} dt
  */
 function stepCar(c, dt) {
   const type = c.type;
@@ -2343,7 +2409,8 @@ function stepCar(c, dt) {
   const ground = surfAt(c.x, c.y);
   const road = ground & 1 || c.ai;
   if ((ground & 9) === 8 && !c.dead) {
-    return sink(c);
+    sink(c);
+    return;
   }
   let fx = Math.cos(c.a);
   let fy = Math.sin(c.a);
@@ -2432,9 +2499,7 @@ function stepCar(c, dt) {
   }
 }
 
-/**
- *
- */
+/** Vehicle against vehicle. */
 function collideCars() {
   const cs = state.cars;
   const player = state.player;
@@ -2499,13 +2564,13 @@ function collideCars() {
 // ---------- traffic, police and pedestrians
 
 /**
- *
- * @param from
- * @param to
- * @param ai
+ * Where an AI car turns next; wide roads and gentle turns are more likely.
+ * @param {number} from
+ * @param {number} to
+ * @param {!Object} ai
+ * @return {number} The junction index, or -1 when the road leaves the map.
  */
 function nextNode(from, to, ai) {
-  // where an AI car turns next; wide roads and gentle turns are more likely
   const a = NODES[from];
   const b = NODES[to];
   if (ai.cop && state.copF) {
@@ -2538,9 +2603,9 @@ function nextNode(from, to, ai) {
 }
 
 /**
- *
- * @param c
- * @param dt
+ * Steers a computer-driven car: traffic, police and getaway drivers.
+ * @param {!Car} c
+ * @param {number} dt
  */
 function driveAI(c, dt) {
   const ai = c.ai;
@@ -2645,8 +2710,8 @@ const newAI = (from, to, more) =>
   );
 
 /**
- *
- * @param heat
+ * Raises the wanted level.
+ * @param {number} heat
  */
 function crime(heat) {
   state.wanted = Math.min(4, state.wanted + heat);
@@ -2654,8 +2719,8 @@ function crime(heat) {
 }
 
 /**
- *
- * @param dt
+ * Runs the wanted level, the patrol cars and arrests.
+ * @param {number} dt
  */
 function police(dt) {
   const player = state.player;
@@ -2728,9 +2793,7 @@ function police(dt) {
   }
 }
 
-/**
- *
- */
+/** The police got you: a fine, and back to the town hall on foot. */
 function busted() {
   const player = state.player;
   const fine = Math.round((state.money * 0.1) / 5) * 5;
@@ -2775,11 +2838,12 @@ const SHIRTS = [
 const HAIR = ['#2a1d12', '#4a3018', '#8a6a3a', '#c8c2b4', '#15151a', '#a8452a'];
 
 /**
- *
- * @param x
- * @param y
- * @param from
- * @param to
+ * Puts a pedestrian on the pavement between two junctions.
+ * @param {number} x
+ * @param {number} y
+ * @param {number} from
+ * @param {number} to
+ * @return {!Ped}
  */
 function spawnPed(x, y, from, to) {
   const p = {
@@ -2802,9 +2866,9 @@ function spawnPed(x, y, from, to) {
 }
 
 /**
- *
- * @param p
- * @param dt
+ * Walks one pedestrian along the road.
+ * @param {!Ped} p
+ * @param {number} dt
  */
 function stepPed(p, dt) {
   let sp = p.sp;
@@ -2822,7 +2886,8 @@ function stepPed(p, dt) {
     const ty = b.y + (dx / len) * off;
     if (Math.hypot(tx - p.x, ty - p.y) < 0.9) {
       const opts = b.walk.filter(n => n !== p.from);
-      [p.from, p.to] = [p.to, opts.length ? pick(opts) : p.from]; // dead end: turn around
+      // Dead end: turn around
+      [p.from, p.to] = [p.to, opts.length ? pick(opts) : p.from];
     } else {
       p.a += clamp(wrap(Math.atan2(ty - p.y, tx - p.x) - p.a), -6 * dt, 6 * dt);
     }
@@ -2834,9 +2899,9 @@ function stepPed(p, dt) {
 }
 
 /**
- *
- * @param p
- * @param byPlayer
+ * Runs a pedestrian over.
+ * @param {!Ped} p
+ * @param {boolean=} byPlayer
  */
 function killPed(p, byPlayer) {
   if (p.dead) {
@@ -2858,13 +2923,13 @@ function killPed(p, byPlayer) {
 }
 
 /**
- *
- * @param o
- * @param c
- * @param r
+ * Whether a walker is under a car.
+ * @param {!Point} o
+ * @param {!Car} c
+ * @param {number} r
+ * @return {boolean}
  */
 function touching(o, c, r) {
-  // is walker `o` under car `c`?
   for (const off of c.type.offs) {
     if (
       Math.hypot(
@@ -2879,9 +2944,7 @@ function touching(o, c, r) {
   return false;
 }
 
-/**
- *
- */
+/** Pedestrians and the player on foot against cars. */
 function walkersVsCars() {
   const player = state.player;
   for (const c of state.cars) {
@@ -2892,7 +2955,8 @@ function walkersVsCars() {
       if (Math.abs(dx) > 12 || Math.abs(dy) > 12) {
         continue;
       }
-      const side = dx * c.vy - dy * c.vx; // which side of the car's path the walker is on
+      // Which side of the car's path the walker is on
+      const side = dx * c.vy - dy * c.vx;
       if (
         sp > 5 &&
         p.alert &&
@@ -2901,7 +2965,8 @@ function walkersVsCars() {
         Math.abs(side) / sp < 3
       ) {
         p.flee = 1;
-        p.a = Math.atan2(c.vy, c.vx) + ((side > 0 ? -1 : 1) * Math.PI) / 2; // jump out of the way
+        // Jump out of the way
+        p.a = Math.atan2(c.vy, c.vx) + ((side > 0 ? -1 : 1) * Math.PI) / 2;
         if (c === player.car && Math.random() < 0.5) {
           audio.play('scream');
         }
@@ -2936,11 +3001,10 @@ function walkersVsCars() {
   }
 }
 
-// Keep the streets around `f` busy; `near` is how close things may appear.
 /**
- *
- * @param dt
- * @param near
+ * Keeps the streets around the player busy.
+ * @param {number} dt
+ * @param {number} near How close things may appear.
  */
 function populate(dt, near) {
   const player = state.player;
@@ -3007,11 +3071,8 @@ function populate(dt, near) {
   }
 }
 
-/**
- *
- */
+/** Fills the car parks in tidy rows and lines the kerbs. */
 function parkCars() {
-  // fill the car parks in tidy rows
   const r = rng(11);
   for (const a of AREAS) {
     if (a.k === 'park') {
@@ -3083,11 +3144,11 @@ function parkCars() {
 // ---------- money on the street
 
 /**
- *
- * @param ok
+ * A random spot on a road, uniform by length.
+ * @param {function(number, number):} ok boolean
+ * @return {({x: number, y: number}|undefined)}
  */
 function roadPoint(ok) {
-  // random spot on a road (uniform by length) that passes `ok`
   for (let n = 0; n < 600; n++) {
     const s = pick(SEGS);
     if (Math.random() * SEG_MAX > s[5]) {
@@ -3109,9 +3170,7 @@ function roadPoint(ok) {
     }
   }
 }
-/**
- *
- */
+/** Leaves a banknote somewhere on a road. */
 function dropCash() {
   const spot = roadPoint(
     (x, y) =>
@@ -3128,15 +3187,16 @@ function dropCash() {
   }
 }
 /**
- *
- * @param v
+ * Picks something up.
+ * @param {!Object} v
  */
 function grab(v) {
   audio.play('coin');
   if (v.kind === 'cash') {
     state.money += v.val;
     float(v, `+${fmt(v.val)}`);
-    return dropCash();
+    dropCash();
+    return;
   }
   const j = state.job;
   const left = state.items.filter(o => o.job).length;
@@ -3149,11 +3209,10 @@ function grab(v) {
 // ---------- the pager and Flo's jobs
 
 /**
- *
- * @param {...any} msgs
+ * Flo is calling: queues his messages for the pager.
+ * @param {...string} msgs
  */
 function page(...msgs) {
-  // Flo is calling
   const pg = state.pager;
   if (!pg.q.length && !pg.cur) {
     replay(byId('pager').firstElementChild);
@@ -3164,22 +3223,16 @@ function page(...msgs) {
 }
 
 /**
- *
- * @param o
- */
-function place(o) {
-  // a step's target: a place name or the mission car
-  return typeof o === 'string' ? SPOT[o] : o;
-}
-/**
- *
- * @param kind
- * @param key
- * @param trailer
+ * Parks a mission vehicle at a place.
+ * @param {string} kind
+ * @param {string} key
+ * @param {string=} trailer
+ * @return {!Car}
  */
 function spawnAt(kind, key, trailer) {
   const s = SPOT[key];
-  state.cars = state.cars.filter(c => c === state.player.car || dist(c, s) > 9); // make room
+  // Make room
+  state.cars = state.cars.filter(c => c === state.player.car || dist(c, s) > 9);
   const c = makeCar(s.x, s.y, s.a, kind);
   if (trailer) {
     hitch(c, trailer);
@@ -3187,9 +3240,7 @@ function spawnAt(kind, key, trailer) {
   return c;
 }
 
-/**
- *
- */
+/** Starts the next mission. */
 function startJob() {
   const m = MISSIONS[state.jobN];
   state.job = {
@@ -3213,9 +3264,7 @@ function startJob() {
   nextStep();
 }
 
-/**
- *
- */
+/** Moves the mission on to its next step, or ends it. */
 function nextStep() {
   const j = state.job;
   const done = j.step;
@@ -3228,7 +3277,8 @@ function nextStep() {
     audio.play('coin');
   }
   if (!st) {
-    return endJob();
+    endJob();
+    return;
   }
   if (j.i) {
     audio.play('step');
@@ -3301,8 +3351,8 @@ function nextStep() {
 }
 
 /**
- *
- * @param dt
+ * Checks whether the current step is done or the mission lost.
+ * @param {number} dt
  */
 function jobRules(dt) {
   const j = state.job;
@@ -3311,13 +3361,16 @@ function jobRules(dt) {
   const sp = player.car ? Math.hypot(player.car.vx, player.car.vy) : 0;
   const lost = c => c && (c.dead || c.burn > 0 || c.gone);
   if (lost(j.veh) || lost(j.prey)) {
-    return failJob(j.prey && j.prey.gone ? 'gone' : 'wreck');
+    failJob(j.prey && j.prey.gone ? 'gone' : 'wreck');
+    return;
   }
   if (j.timed && (j.left -= dt) <= 0) {
-    return failJob('time');
+    failJob('time');
+    return;
   }
   if (j.fragile && j.cargo <= 0) {
-    return failJob('cargo');
+    failJob('cargo');
+    return;
   }
   const near = r => j.to && dist(player, j.to) < r;
   switch (st.do) {
@@ -3380,12 +3433,12 @@ function jobRules(dt) {
         nextStep();
       }
       break;
+    default:
+      throw new Error(`unknown step: ${st.do}`);
   }
 }
 
-/**
- *
- */
+/** Mission accomplished. */
 function endJob() {
   const j = state.job;
   const m = j.m;
@@ -3409,8 +3462,8 @@ function endJob() {
 }
 
 /**
- *
- * @param why
+ * Mission failed.
+ * @param {string} why
  */
 function failJob(why) {
   const j = state.job;
@@ -3443,13 +3496,13 @@ function failJob(why) {
 }
 
 /**
- *
- * @param dt
+ * Pickups, missions and the grand finale.
+ * @param {number} dt
  */
 function playRules(dt) {
-  // pickups, missions and the grand finale
   const player = state.player;
-  const reach = player.car ? player.car.type.length / 2 + 1 : 1.7; // long lorries scoop things up with the whole bumper
+  // Long lorries scoop things up with the whole bumper
+  const reach = player.car ? player.car.type.length / 2 + 1 : 1.7;
   if (state.wasted) {
     return;
   }
@@ -3473,11 +3526,8 @@ function playRules(dt) {
   }
 }
 
-/**
- *
- */
+/** The car wash at Murk: new paint, nobody recognises you. */
 function wash() {
-  // the car wash at Murk: new paint, nobody recognises you
   const c = state.player.car;
   state.wanted = 0;
   state.money -= 15;
@@ -3490,9 +3540,7 @@ function wash() {
   audio.play('splash');
 }
 
-/**
- *
- */
+/** Shows the end screen. */
 function finish() {
   const st = state.stats;
   const rank = RANKS.find(r => state.money >= r[0])[1];
@@ -3516,7 +3564,7 @@ function finish() {
   audio.siren(false);
   try {
     localStorage.removeItem(SAVE_KEY);
-  } catch (e) {
+  } catch {
     /* private mode */
   }
   byId('again').focus();
@@ -3530,12 +3578,11 @@ const axis = (neg, pos) =>
   (pos.some(k => keys[k]) ? 1 : 0) - (neg.some(k => keys[k]) ? 1 : 0);
 
 /**
- *
- * @param o
- * @param r
+ * Keeps a walker out of buildings.
+ * @param {!Point} o
+ * @param {number} r
  */
 function shove(o, r) {
-  // keep a walker out of buildings
   if (surfAt(o.x, o.y) & 2) {
     return;
   }
@@ -3549,8 +3596,8 @@ function shove(o, r) {
 }
 
 /**
- *
- * @param dt
+ * Turns keys and the thumb stick into driving and walking.
+ * @param {number} dt
  */
 function controlPlayer(dt) {
   const player = state.player;
@@ -3601,9 +3648,7 @@ function controlPlayer(dt) {
   shove(player, 0.4);
 }
 
-/**
- *
- */
+/** Gets into the nearest car, or out of this one. */
 function toggleCar() {
   const player = state.player;
   const c = player.car;
@@ -3625,7 +3670,8 @@ function toggleCar() {
     c.hb = false;
     c.siren = false;
     audio.radio(-1);
-    return audio.play('door');
+    audio.play('door');
+    return;
   }
   let best = null;
   let bd = 4.2;
@@ -3660,9 +3706,7 @@ function toggleCar() {
   );
 }
 
-/**
- *
- */
+/** Turns the radio dial. */
 function nextStation() {
   const c = state.player.car;
   if (!c) {
@@ -3672,9 +3716,7 @@ function nextStation() {
   audio.radio(c.radio);
   info(c.radio < 0 ? 'Radio aus' : `♪ ${audio.stations[c.radio]}`);
 }
-/**
- *
- */
+/** Sounds the horn; pedestrians jump. */
 function honk() {
   const c = state.player.car;
   if (!c || c.kind === 'police' || c.kind === 'fire') {
@@ -3690,8 +3732,8 @@ function honk() {
 }
 
 /**
- *
- * @param title
+ * The player dies.
+ * @param {string=} title
  */
 function waste(title = 'Erledigt!') {
   const player = state.player;
@@ -3720,11 +3762,8 @@ function waste(title = 'Erledigt!') {
   page(pick(TALK.wasted));
 }
 
-/**
- *
- */
+/** Back on the road in a fresh car, at the nearest junction. */
 function respawn() {
-  // back on the road in a fresh car, at the nearest junction
   const player = state.player;
   const best = NODES[nearNode(player, 'car')];
   const to = NODES[best.car[0].n];
@@ -3740,8 +3779,8 @@ function respawn() {
 }
 
 /**
- *
- * @param dt
+ * Follows the player and pulls up when going fast.
+ * @param {number} dt
  */
 function camera(dt) {
   const cam = state.cam;
@@ -3771,8 +3810,8 @@ function camera(dt) {
 }
 
 /**
- *
- * @param dt
+ * Advances the whole world by one step.
+ * @param {number} dt
  */
 function update(dt) {
   const player = state.player;
@@ -3837,11 +3876,10 @@ function update(dt) {
 }
 
 /**
- *
- * @param dt
+ * Keeps the yellow arrow pointing down the road to the current target.
+ * @param {number} dt
  */
 function guide(dt) {
-  // keep the yellow arrow pointing down the road to the current target
   const j = state.job;
   const player = state.player;
   const to = j && j.to;
@@ -3858,12 +3896,13 @@ function guide(dt) {
   state.gpsT = 0.25;
   state.gps.wp =
     dist(player, to) < 50 ? to : waypoint(state.gps.f, player, 40) || to;
-  state.gps.far = pathLength(routeLine(state.gps.f, player, to)); // how far it is by road
+  // How far it is by road
+  state.gps.far = pathLength(routeLine(state.gps.f, player, to));
 }
 
 /**
- *
- * @param dt
+ * Refreshes money, pager, mission bar and the engine sound.
+ * @param {number} dt
  */
 function hud(dt) {
   const player = state.player;
@@ -3884,7 +3923,8 @@ function hud(dt) {
     bar.style.width = `${k * 100}%`;
     bar.style.background = k < 0.3 ? 'var(--hot)' : '';
   }
-  // the pager types out Flo's messages one after the other, then shows what to do
+  // the pager types out Flo's messages one after the other, then shows what to
+  // do
   if (!pg.cur && pg.q.length) {
     pg.cur = pg.q.shift();
     pg.n = 0;
@@ -3964,7 +4004,7 @@ function hud(dt) {
     state.whereT = 0.5;
     let name = '';
     let bd = 34;
-    for (const k in SPOT) {
+    for (const k of Object.keys(SPOT)) {
       const d = dist(player, SPOT[k]);
       if (d < bd && PLACES[k]) {
         bd = d;
@@ -3998,8 +4038,8 @@ function hud(dt) {
 }
 
 /**
- *
- * @param save
+ * Starts a game.
+ * @param {?Object=} save A saved game to continue.
  */
 function start(save) {
   audio.init();
@@ -4019,7 +4059,8 @@ function start(save) {
     document.documentElement.requestFullscreen().catch(() => {});
   }
   audio.radio(-1);
-  const pickN = +new URLSearchParams(location.search).get('job'); // index.html?job=3 jumps straight to a job
+  // Index.html?job=3 jumps straight to a job
+  const pickN = +new URLSearchParams(location.search).get('job');
   if (pickN) {
     state.jobN = clamp(Math.round(pickN) - 1, 0, MISSIONS.length - 1);
   }
@@ -4027,8 +4068,8 @@ function start(save) {
 }
 
 /**
- *
- * @param p
+ * Pauses or resumes.
+ * @param {boolean} p
  */
 function pause(p) {
   if (state.mode !== 'play' || state.map) {
@@ -4049,7 +4090,8 @@ addEventListener('keydown', e => {
     e.preventDefault();
   }
   if (e.code === 'Tab' && !e.repeat) {
-    return showMap(!state.map);
+    showMap(!state.map);
+    return;
   }
   if (state.map) {
     if (e.code === 'Escape') {
@@ -4081,7 +4123,7 @@ addEventListener('keyup', e => {
   keys[e.code] = false;
 });
 addEventListener('blur', () => {
-  for (const k in keys) {
+  for (const k of Object.keys(keys)) {
     keys[k] = false;
   }
 });
@@ -4212,11 +4254,11 @@ byId('how').onclick = () => {
 // ---------- rendering
 
 /**
- *
- * @param l
- * @param style
- * @param w
- * @param grow
+ * Strokes every path of a road layer.
+ * @param {!Array<!Array>} l
+ * @param {(string|!CanvasPattern)} style
+ * @param {number=} w One width for all, instead of each road's own.
+ * @param {number=} grow
  */
 function strokeLayer(l, style, w, grow = 0) {
   ctx.strokeStyle = style;
@@ -4227,8 +4269,8 @@ function strokeLayer(l, style, w, grow = 0) {
 }
 
 /**
- *
- * @param a
+ * Paints a football pitch, tennis or volleyball court.
+ * @param {!Object} a
  */
 function drawPitch(a) {
   const length = a.u1 - a.u0;
@@ -4283,11 +4325,11 @@ function drawPitch(a) {
 }
 
 /**
- *
- * @param x0
- * @param y0
- * @param x1
- * @param y1
+ * Paints land, water, roads, hedges and fences.
+ * @param {number} x0
+ * @param {number} y0
+ * @param {number} x1
+ * @param {number} y1
  */
 function drawGround(x0, y0, x1, y1) {
   ctx.fillStyle = textures.grass;
@@ -4351,7 +4393,8 @@ function drawGround(x0, y0, x1, y1) {
   ctx.setLineDash([]);
   ctx.lineCap = 'round';
   {
-    // the building site in Schulstraße: torn-up road, barriers, a heap of gravel
+    // the building site in Schulstraße: torn-up road, barriers, a heap of
+    // gravel
     const b = SPOT.roadworks;
     ctx.save();
     ctx.translate(b.x, b.y);
@@ -4384,7 +4427,8 @@ function drawGround(x0, y0, x1, y1) {
   ctx.strokeStyle = '#3b7d2e';
   ctx.lineWidth = 0.9;
   ctx.stroke(HEDGES);
-  ctx.lineCap = 'butt'; // garden fences: a rail with pale pickets, and a thin shadow
+  // Garden fences: a rail with pale pickets, and a thin shadow
+  ctx.lineCap = 'butt';
   ctx.save();
   ctx.translate(0.25, 0.25);
   ctx.strokeStyle = 'rgba(0,0,0,.22)';
@@ -4419,7 +4463,7 @@ function drawGround(x0, y0, x1, y1) {
     }
   }
   if (DEBUG) {
-    for (const k in SPOT) {
+    for (const k of Object.keys(SPOT)) {
       ctx.fillStyle = '#f0f';
       ctx.beginPath();
       ctx.arc(SPOT[k].x, SPOT[k].y, 1.5, 0, TAU);
@@ -4429,9 +4473,8 @@ function drawGround(x0, y0, x1, y1) {
 }
 
 /**
- *
- * @param builds
- * @param trees
+ * @param {!Array<!Building>} builds
+ * @param {!Array<!Object>} trees
  */
 function drawShadows(builds, trees) {
   ctx.fillStyle = 'rgba(0,0,0,.28)';
@@ -4449,13 +4492,13 @@ function drawShadows(builds, trees) {
   ctx.fill();
 }
 
-// Buildings lean away from the screen centre, like looking straight down from a helicopter.
 /**
- *
- * @param builds
- * @param cx
- * @param cy
- * @param hc
+ * Buildings lean away from the screen centre, like looking straight down from a
+ * helicopter.
+ * @param {!Array<!Building>} builds
+ * @param {number} cx Camera centre, in metres.
+ * @param {number} cy
+ * @param {number} hc Camera height, in metres.
  */
 function drawBuildings(builds, cx, cy, hc) {
   for (const b of builds) {
@@ -4536,7 +4579,8 @@ function drawBuildings(builds, cx, cy, hc) {
     ctx.save();
     local(b);
     const lx = (cx - b.mx) * b.ca + (cy - b.my) * b.sa;
-    const ly = (cy - b.my) * b.ca - (cx - b.mx) * b.sa; // the camera in the roof's own frame
+    // The camera in the roof's own frame
+    const ly = (cy - b.my) * b.ca - (cx - b.mx) * b.sa;
     ctx.strokeStyle = 'rgba(0,0,0,.5)';
     ctx.lineWidth = 0.3;
     const top = Math.min(h + (b.rh || b.apex || 0), hc * 0.62);
@@ -4681,11 +4725,11 @@ function drawBuildings(builds, cx, cy, hc) {
 }
 
 /**
- *
- * @param list
- * @param cx
- * @param cy
- * @param hc
+ * Lanterns and hydrants.
+ * @param {!Array<!Prop>} list
+ * @param {number} cx Camera centre, in metres.
+ * @param {number} cy
+ * @param {number} hc Camera height, in metres.
  */
 function drawFurniture(list, cx, cy, hc) {
   const line = (x0, y0, x1, y1) => {
@@ -4713,7 +4757,8 @@ function drawFurniture(list, cx, cy, hc) {
     }
     const h = 6.5;
     const s = p.down ? 1 : hc / (hc - h);
-    const k = 1 - s; // standing lanterns lean like the houses do, fallen ones lie flat
+    // Standing lanterns lean like the houses do, fallen ones lie flat
+    const k = 1 - s;
     const tx = p.down ? p.x + Math.cos(p.fa) * h : p.x * s + cx * k;
     const ty = p.down ? p.y + Math.sin(p.fa) * h : p.y * s + cy * k;
     const hx = tx + Math.cos(p.down ? p.fa + 1.2 : p.a) * 1.4 * s;
@@ -4736,11 +4781,10 @@ function drawFurniture(list, cx, cy, hc) {
 }
 
 /**
- *
- * @param trees
- * @param cx
- * @param cy
- * @param hc
+ * @param {!Array<!Object>} trees
+ * @param {number} cx Camera centre, in metres.
+ * @param {number} cy
+ * @param {number} hc Camera height, in metres.
  */
 function drawTrees(trees, cx, cy, hc) {
   ctx.strokeStyle = '#4a3420';
@@ -4764,10 +4808,9 @@ function drawTrees(trees, cx, cy, hc) {
 }
 
 /**
- *
- * @param p
- * @param shirt
- * @param hair
+ * @param {!Object} p
+ * @param {string} shirt
+ * @param {string} hair
  */
 function drawPerson(p, shirt, hair) {
   const sw = Math.sin(p.t * 4) * 0.22;
@@ -4788,11 +4831,8 @@ function drawPerson(p, shirt, hair) {
   ctx.restore();
 }
 
-/**
- *
- */
+/** Mission scenery: bonfires, tents, people waiting for a lift. */
 function drawProps() {
-  // mission scenery: bonfires, tents, people waiting for a lift
   const j = state.job;
   for (const pr of j ? j.m.props || [] : []) {
     const s = SPOT[pr.at];
@@ -4848,11 +4888,11 @@ function drawProps() {
 }
 
 /**
- *
- * @param x0
- * @param y0
- * @param x1
- * @param y1
+ * Stains, pickups, people and vehicles.
+ * @param {number} x0
+ * @param {number} y0
+ * @param {number} x1
+ * @param {number} y1
  */
 function drawSprites(x0, y0, x1, y1) {
   const player = state.player;
@@ -4964,7 +5004,6 @@ function drawSprites(x0, y0, x1, y1) {
 }
 
 /**
- *
  */
 function drawParticles() {
   for (const p of state.parts) {
@@ -5003,9 +5042,7 @@ function drawParticles() {
   }
 }
 
-/**
- *
- */
+/** Draws one frame. */
 function render() {
   const z = state.cam.z;
   const cx = state.cam.x + rand(-1, 1) * state.shake;
@@ -5063,13 +5100,12 @@ function render() {
 }
 
 /**
- *
- * @param cx
- * @param cy
- * @param z
+ * Labels and pointers, in screen pixels.
+ * @param {number} cx
+ * @param {number} cy
+ * @param {number} z Zoom, in pixels per metre.
  */
 function drawOverlay(cx, cy, z) {
-  // labels and pointers, in screen pixels
   const player = state.player;
   const j = state.job;
   const sx = x => (x - cx) * z + viewW / 2;
@@ -5116,7 +5152,8 @@ function drawOverlay(cx, cy, z) {
     const px = viewW / 2 + ca * k;
     const py = viewH / 2 + sa * k;
     arrow(px, py, a, col);
-    const half = text ? ctx.measureText(text).width / 2 + 4 : 0; // keep the whole label on the screen
+    // Keep the whole label on the screen
+    const half = text ? ctx.measureText(text).width / 2 + 4 : 0;
     if (text) {
       label(
         text,
@@ -5170,7 +5207,7 @@ function drawOverlay(cx, cy, z) {
     }
   }
   if (DEBUG) {
-    for (const k in SPOT) {
+    for (const k of Object.keys(SPOT)) {
       label(k, sx(SPOT[k].x), sy(SPOT[k].y) - 8, '#f0f');
     }
   }
@@ -5236,12 +5273,12 @@ let mapK = 0;
 let mapDpr = 1;
 
 /**
- *
- * @param k
- * @param dpr
+ * Paints the paper layer of the fold-out map.
+ * @param {number} k Device pixels per metre.
+ * @param {number} dpr Device pixel ratio.
+ * @return {!HTMLCanvasElement}
  */
 function mapPaint(k, dpr) {
-  // the paper layer, k device pixels per metre
   const c = canvas(Math.ceil(WORLD_W * k), Math.ceil(WORLD_H * k));
   const g = c.getContext('2d');
   const px = 1 / k;
@@ -5331,7 +5368,8 @@ function mapPaint(k, dpr) {
   }
   g.font = `italic ${9.5 * dpr}px Arial, sans-serif`;
   g.textAlign = 'center';
-  const longest = new Map(); // street names along the longest stretch of each street
+  // Street names along the longest stretch of each street
+  const longest = new Map();
   for (const sg of SEGS) {
     if (
       sg[6].n &&
@@ -5365,8 +5403,8 @@ function mapPaint(k, dpr) {
 }
 
 /**
- *
- * @param on
+ * Opens or closes the map; the game holds its breath meanwhile.
+ * @param {boolean} on
  */
 function showMap(on) {
   if (state.mode !== 'play' || (on && state.paused)) {
@@ -5409,13 +5447,13 @@ const metres = d =>
     : `${(d / 1000).toFixed(1).replace('.', ',')} km`;
 
 /**
- *
- * @param f
- * @param o
- * @param to
+ * The way between two points along the roads.
+ * @param {!Float32Array} f
+ * @param {!Point} o
+ * @param {!Point} to
+ * @return {!Array<number>} A flat list of x, y pairs.
  */
 function routeLine(f, o, to) {
-  // the way from `o` to `to` along the roads, as a flat list of points
   const [link, qx, qy] = nearLink(o);
   const [goal, tx, ty] = nearLink(to);
   const cost = n =>
@@ -5434,9 +5472,7 @@ function routeLine(f, o, to) {
   return pts;
 }
 
-/**
- *
- */
+/** Draws the map with the route, the target and the player. */
 function drawMap() {
   const player = state.player;
   const j = state.job;
@@ -5447,7 +5483,8 @@ function drawMap() {
   const ch = mapCanvas.height;
   const g = mapCtx;
   const fx = to ? (player.x + to.x) / 2 : player.x;
-  const fy = to ? (player.y + to.y) / 2 : player.y; // keep you and the target in view
+  // Keep you and the target in view
+  const fy = to ? (player.y + to.y) / 2 : player.y;
   const ox =
     WORLD_W * k <= cw
       ? (cw - WORLD_W * k) / 2
@@ -5586,9 +5623,7 @@ function drawMap() {
 
 // ---------- main loop
 
-/**
- *
- */
+/** Fits the canvas to the window. */
 function resize() {
   const a = innerWidth / innerHeight;
   if (a >= 1) {
@@ -5612,8 +5647,8 @@ resize();
 
 let last = 0;
 /**
- *
- * @param now
+ * One tick of the main loop.
+ * @param {number} now
  */
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000 || 0);
@@ -5640,7 +5675,8 @@ function frame(now) {
 reset('menu');
 requestAnimationFrame(frame);
 
-// Hooks for play-testing: the browser console and tools/playtest.js reach the game through window.GTW.
+// Hooks for play-testing: the browser console and tools/playtest.js reach the
+// game through window.GTW.
 window.GTW = {
   get state() {
     return state;
@@ -5696,7 +5732,8 @@ if (location.search.includes('selftest')) {
   const b = pushOut(9, 5, 1, sq);
   const home = field(SPOT.hq);
   const ride = (from, to) => {
-    // follow the yellow arrow from one place to another, as the crow walks the roads
+    // follow the yellow arrow from one place to another, as the crow walks the
+    // roads
     const f = field(to);
     const o = {x: from.x, y: from.y};
     for (let i = 0; i < 400 && dist(o, to) > 50; i++) {
@@ -5749,7 +5786,7 @@ if (location.search.includes('selftest')) {
         m.steps.every(s => s.obj)
     ),
   };
-  for (const k in checks) {
+  for (const k of Object.keys(checks)) {
     console.assert(checks[k], k);
   }
   document.title = Object.values(checks).every(Boolean)
