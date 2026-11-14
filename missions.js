@@ -11,7 +11,7 @@
 
 const PLACES = {
   hq: 'Flos Hauptquartier', murk: 'Bekleidungshaus Murk', tanke: 'Tankautomat Murk', wasch: 'Waschstraße Murk',
-  baeck: 'Wachenröther Bäck', markt: 'Mein Markt 24', sport: 'Sportheim SV Wachenroth', platz: 'Sportplatz SV Wachenroth',
+  baeck: 'Wachenröther Bäck', markt: 'Edeka Claudia', sport: 'Sportheim SV Wachenroth', platz: 'Sportplatz SV Wachenroth',
   roeck: 'Röckelein Baustoffwerk', mischer: 'Röckelein Werkshof', rathaus: 'Rathaus', kirche: 'St. Gertrud', schule: 'Grundschule', halle: 'Ebrachtalhalle',
   ffw: 'Feuerwehr Wachenroth', kiga: 'Kita Villa Kunterbunt', bank: 'Raiffeisenbank', friedhof: 'Friedhof',
   klaer: 'Kläranlage', deponie: 'Bauschuttdeponie', bahnhof: 'Alter Bahnhof', beach: 'Beachvolleyballplatz',
@@ -23,7 +23,7 @@ const PLACES = {
 
 // Painted on the roofs of the landmarks.
 const SIGNS = {murk: 'MURK', roeck: 'RÖCKELEIN', halle: 'EBRACHTALHALLE', ffw: 'FEUERWEHR', rathaus: 'RATHAUS',
-  sport: 'SV WACHENROTH', markt: 'MEIN MARKT 24', baeck: 'BÄCK', hq: 'FLO', schule: 'SCHULE', lagerhaus: 'LAGERHAUS'};
+  sport: 'SV WACHENROTH', markt: 'EDEKA CLAUDIA', baeck: 'BÄCK', hq: 'FLO', schule: 'SCHULE', lagerhaus: 'LAGERHAUS'};
 
 const RANKS = [[10000, 'Pate von Wachenroth'], [7500, 'Rechte Hand vom Flo'], [5000, 'Schwallkönig'], [2500, 'Kerwasbursch'], [-1e9, 'Dorfdepp']];
 
@@ -40,9 +40,9 @@ const TALK = {
 
 const MISSIONS = [
   {id: 'dosen', title: 'Dosen zum Saufen', reward: 300,
-    intro: ['Ich hab Durst. Großen Durst.', 'Hol mir Dosen zum Saufen: Jacky Cola! Der Mein Markt 24 in der Reumannswinder Straße hat welche. Nimm das Auto, das ist ein guter Kilometer.'],
+    intro: ['Ich hab Durst. Großen Durst.', 'Hol mir Dosen zum Saufen: Jacky Cola! Die Claudia im Edeka in der Reumannswinder Straße hat welche. Nimm das Auto, das ist ein guter Kilometer.'],
     steps: [
-      {do: 'goto', to: 'markt', foot: true, obj: 'Fahr zum Mein Markt 24 und geh zu Fuß rein'},
+      {do: 'goto', to: 'markt', foot: true, obj: 'Fahr zum Edeka Claudia und geh zu Fuß rein'},
       {do: 'collect', n: 5, near: 'markt', r: 300, item: 'dose', obj: 'Sammle 5 Dosen Jacky Cola ein',
         say: 'Die Claudia sagt: Der Lieferant hat die Palette auf der Straße verloren. Sammel die Dosen ein!'},
       {do: 'goto', to: 'hq', time: 90, obj: 'Bring die Dosen zum Flo, Johann-Philipp-Ring 9',
@@ -51,9 +51,9 @@ const MISSIONS = [
     outro: ['Zisch! Ahh. Des is fei a Dosen zum Saufen.', 'Du bist brauchbar. Ich meld mich.']},
 
   {id: 'brotzeit', title: 'Brotzeit für den SV', reward: 400,
-    intro: ['Der SV Wachenroth spielt, und im Sportheim ist die Brotzeit aus. Eine Katastrophe!', 'Hol Essen bei der Claudia im Mein Markt 24.'],
+    intro: ['Der SV Wachenroth spielt, und im Sportheim ist die Brotzeit aus. Eine Katastrophe!', 'Hol Essen bei der Claudia im Edeka.'],
     steps: [
-      {do: 'goto', to: 'markt', foot: true, obj: 'Fahr zum Mein Markt 24 und hol das Essen (zu Fuß rein)'},
+      {do: 'goto', to: 'markt', foot: true, obj: 'Fahr zum Edeka Claudia und hol das Essen (zu Fuß rein)'},
       {do: 'goto', to: 'metzger', foot: true, obj: 'Fahr zur Metzgerei in der Kellerstraße (zu Fuß rein)',
         say: 'Und Leberkäs vom Metzger in der Kellerstraße. Ohne Leberkäs kein Sieg.'},
       {do: 'goto', to: 'sport', time: 80, obj: 'Bring die Brotzeit zum Sportheim vom SV',
@@ -159,7 +159,7 @@ const MISSIONS = [
       {do: 'goto', to: 'hq', obj: 'Hol den Flo am Hauptquartier ab'},
       {do: 'goto', to: 'halle', wanted: 2.5, obj: 'Hol die Blaskapelle an der Ebrachtalhalle ab',
         say: 'Los! Zur Ebrachtalhalle, die Blaskapelle wartet. Und häng die Polizei ab!'},
-      {do: 'goto', to: 'festplatz', time: 120, wanted: 1, obj: 'Bring alle zum Festzelt an der Kirchstraße',
+      {do: 'goto', to: 'festplatz', time: 120, obj: 'Bring alle zum Festzelt an der Kirchstraße',
         say: 'Alle drin? Dann auf zum Festzelt!'},
     ],
     outro: ['Wir sind da! Die Musik spielt, das Bier läuft.', 'Wachenroth gehört jetzt uns. Also mir. Aber du darfst mitfeiern.']},

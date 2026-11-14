@@ -49,7 +49,7 @@ async (page) => {
       if (B.rev > 0) { B.rev -= dt; pad.brake = true; pad.x = Math.cos(c.a + B.side); pad.y = Math.sin(c.a + B.side); return; } // stuck: back out, turning
       const wp = st.do === 'collect' || st.do === 'chase' ? far(to) : (S.gps && S.gps.wp) || to;
       const stop = st.do !== 'chase' && st.do !== 'collect' && st.do !== 'lose';
-      const turn = Math.abs(wrap(Math.atan2(wp.y - P.y, wp.x - P.x) - c.a)), limit = turn > .5 ? 9 : d < 30 && stop ? 9 : 21; // drive like a person, not a rocket
+      const turn = Math.abs(wrap(Math.atan2(wp.y - P.y, wp.x - P.x) - c.a)), limit = turn > .5 ? 9 : d < 30 && stop ? 9 : st.do === 'collect' && d < 18 ? 7 : 21; // drive like a person, not a rocket
       head(wp, sp > limit ? .16 : 1);
       if (stop && d < 6 && sp > 5) { pad.x = pad.y = 0; pad.brake = true; }
       if (st.do === 'hold' && d < (st.r || 10) - 3) { pad.x = pad.y = 0; pad.brake = sp > 1; return; }

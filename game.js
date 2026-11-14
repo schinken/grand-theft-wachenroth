@@ -74,34 +74,55 @@ function gridFind(g, x0, y0, x1, y1) {
 
 // ---------- textures (all drawn here, 8 px per metre)
 
-function tex(base, draw) {
-  const c = canvas(64, 64), g = c.getContext('2d');
+function tex(base, draw, n = 64) { // n pixels square; the big ground textures use 128 so they repeat less
+  const c = canvas(n, n), g = c.getContext('2d');
   g.fillStyle = base;
-  g.fillRect(0, 0, 64, 64);
-  if (draw) draw(g, rng(parseInt(base.slice(1), 16)));
+  g.fillRect(0, 0, n, n);
+  if (draw) draw(g, rng(parseInt(base.slice(1), 16)), n);
   const p = ctx.createPattern(c, 'repeat');
   p.setTransform(new DOMMatrix().scaleSelf(1 / PPM));
   return p;
 }
-function dots(g, r, n, cols, w = 1) {
+function dots(g, r, n, cols, w = 1, size = 64) {
   for (let i = 0; i < n; i++) {
     g.fillStyle = cols[r() * cols.length | 0];
-    g.fillRect(r() * 64 | 0, r() * 64 | 0, w + (r() * 2 | 0), 1);
+    g.fillRect(r() * size | 0, r() * size | 0, w + (r() * 2 | 0), 1);
   }
 }
-const rows = (base, line, speck) => tex(base, (g, r) => {
-  g.fillStyle = line;
-  for (let y = 0; y < 64; y += 4) g.fillRect(0, y, 64, 1);
-  dots(g, r, 150, speck);
-});
-const tiles = (base, dark, light) => tex(base, (g, r) => { // roof tiles, rows run along the ridge
-  for (let y = 0; y < 64; y += 4) {
-    g.fillStyle = dark;
-    g.fillRect(0, y, 64, 1);
-    for (let x = (y / 4 % 2) * 3; x < 64; x += 6) {
-      g.fillStyle = r() < .3 ? light : dark;
-      g.fillRect(x, y + 1, 1, 3);
-    }
+function blots(g, r, n, cols, size) { // soft patches, so lawns and tarmac are not one flat colour
+  g.globalAlpha = .35;
+  for (let i = 0; i < n; i++) {
+    g.fillStyle = cols[r() * cols.length | 0];
+    const x = r() * size, y = r() * size, rad = 4 + r() * 9;
+    for (const [ox, oy] of [[0, 0], [size, 0], [-size, 0], [0, size], [0, -size]]) { g.beginPath(); g.ellipse(x + ox, y + oy, rad, rad * .7, r() * 3, 0, TAU); g.fill(); } // wraps at the edges
+  }
+  g.globalAlpha = 1;
+}
+function tufts(g, r, n, cols, size) {
+  for (let i = 0; i < n; i++) { g.fillStyle = cols[r() * cols.length | 0]; g.fillRect(r() * size | 0, r() * size | 0, 1, 2); }
+}
+const lawn = (base, blot, speck, tuft, flowers) => tex(base, (g, r, n) => {
+  blots(g, r, 26, blot, n);
+  dots(g, r, 2600, speck, 1, n);
+  tufts(g, r, 110, tuft, n);
+  if (flowers) dots(g, r, flowers, ['#e8e06a', '#f2f2e6', '#d86a8a', '#f2f2e6'], 1, n);
+}, 128);
+const rows = (base, line, speck, plants) => tex(base, (g, r, n) => { // a field: furrows, and the lanes the tractor leaves
+  blots(g, r, 16, [shade(base, .92), shade(base, 1.07)], n);
+  for (let y = 0; y < n; y += 4) {
+    g.fillStyle = line; g.fillRect(0, y, n, 1);
+    g.fillStyle = shade(base, 1.1); g.fillRect(0, y + 1, n, 1); // every furrow has a dark and a sunny side
+    if (plants) for (let x = (y % 8) / 2; x < n; x += 4) { g.fillStyle = plants[r() * plants.length | 0]; g.fillRect(x, y + 2, 2, 2); }
+  }
+  dots(g, r, 900, speck, 2, n);
+  g.fillStyle = shade(base, .72);
+  g.fillRect(0, 49, n, 2); g.fillRect(0, 65, n, 2);
+}, 128);
+const tiles = (base, dark, light) => tex(base, (g, r) => { // roof tiles, every one a slightly different red; rows run along the ridge
+  for (let y = 0; y < 64; y += 4) for (let x = (y / 4 % 2) * 2 - 2; x < 64; x += 4) {
+    g.fillStyle = shade(base, .86 + r() * .28); g.fillRect(x, y, 4, 4);
+    g.fillStyle = dark; g.fillRect(x, y + 3, 4, 1); g.fillRect(x, y, 1, 3);
+    if (r() < .14) { g.fillStyle = light; g.fillRect(x + 1, y, 3, 1); }
   }
 });
 const slabs = (base, line, speck, step) => tex(base, (g, r) => {
@@ -115,12 +136,12 @@ const sheet = (base, line, step) => tex(base, g => { // corrugated metal, ribs r
 });
 
 const TEX = {
-  grass: tex('#417a2e', (g, r) => dots(g, r, 700, ['#39702a', '#4a8634', '#346826', '#52913a'])),
-  meadow: tex('#5b9440', (g, r) => dots(g, r, 500, ['#538a3a', '#66a048', '#6fa84e', '#4c8236'])),
+  grass: lawn('#417a2e', ['#376f28', '#4b8935', '#3c782b'], ['#39702a', '#4a8634', '#346826', '#52913a'], ['#2d6022', '#5c9c42']),
+  meadow: lawn('#5b9440', ['#52893a', '#68a24a', '#5f9a42'], ['#538a3a', '#66a048', '#6fa84e', '#4c8236'], ['#467c32', '#7cb458'], 40),
   forest: tex('#2c4f22', (g, r) => dots(g, r, 600, ['#25441c', '#335a27', '#1f3b18'], 2)),
   scrub: tex('#4b7a34', (g, r) => dots(g, r, 500, ['#3c6829', '#5a8a3c', '#34591f'], 2)),
   orchard: tex('#55903c', (g, r) => dots(g, r, 400, ['#4c8236', '#63a046', '#467a30'])),
-  resi: tex('#4d8436', (g, r) => { dots(g, r, 500, ['#447a30', '#57903d', '#3e7029']); dots(g, r, 14, ['#e8e06a', '#f2f2e6', '#d86a8a']); }),
+  resi: lawn('#4d8436', ['#457c31', '#58923e', '#4a8234'], ['#447a30', '#57903d', '#3e7029', '#5a9440'], ['#356a27', '#66a048'], 26),
   ind: slabs('#8b8b86', '#7b7b76', ['#84847f', '#93938e', '#7e7e79'], 32),
   com: slabs('#9c9a92', '#8c8a82', ['#94928a', '#a6a49c'], 16),
   school: slabs('#b3a98f', '#a09679', ['#a99f85', '#bdb399'], 8),
@@ -138,11 +159,24 @@ const TEX = {
   play: tex('#c9b27a', (g, r) => dots(g, r, 300, ['#bba46c', '#d6c08a'])),
   clay: tex('#b5573a', (g, r) => dots(g, r, 300, ['#a84e33', '#c06343'])),
   water: tex('#2d6190', (g, r) => { g.fillStyle = '#4079aa'; for (let i = 0; i < 40; i++) g.fillRect(r() * 60 | 0, r() * 64 | 0, 5, 1); }),
-  farmA: rows('#9a8d45', '#877a39', ['#a89a50', '#8f823f']),
-  farmB: rows('#6f5637', '#5f482c', ['#7b6140', '#584226']),
-  farmC: rows('#57892f', '#487626', ['#629636', '#3f6a20']),
-  farmD: rows('#c2a84c', '#a89040', ['#d0b85a', '#b39a44']),
-  asphalt: tex('#48484d', (g, r) => dots(g, r, 600, ['#404045', '#505056', '#3a3a3f', '#57575c'])),
+  farmA: rows('#a39343', '#7f7030', ['#b3a350', '#8f823f']),
+  farmB: rows('#6f5637', '#523d25', ['#7b6140', '#584226']),
+  farmC: rows('#5b4a30', '#4a3a24', ['#66543a'], ['#4f9a34', '#5fae3e', '#3f8a2c']),
+  farmD: rows('#c9ad4a', '#9f8636', ['#d8bf5c', '#b39a44']),
+  asphalt: tex('#48484d', (g, r, n) => { // worn tarmac: patches, cracks and a manhole now and then
+    blots(g, r, 9, ['#424247', '#4f4f55'], n);
+    dots(g, r, 2400, ['#404045', '#505056', '#3a3a3f', '#57575c'], 1, n);
+    g.fillStyle = '#45454a'; g.fillRect(18, 70, 24, 13);
+    g.strokeStyle = '#38383c'; g.lineWidth = 1;
+    for (let i = 0; i < 5; i++) {
+      let x = r() * n, y = r() * n;
+      g.beginPath(); g.moveTo(x, y);
+      for (let k = 0; k < 5; k++) { x += (r() - .5) * 14; y += (r() - .2) * 9; g.lineTo(x, y); }
+      g.stroke();
+    }
+    g.fillStyle = '#2e2e32'; g.beginPath(); g.arc(90, 38, 3.2, 0, TAU); g.fill();
+    g.strokeStyle = '#5e5e64'; g.beginPath(); g.arc(90, 38, 3.2, 0, TAU); g.stroke();
+  }, 128),
   cobble: tex('#8a867c', (g, r) => {
     g.fillStyle = '#726e66';
     for (let y = 0; y < 64; y += 4) { g.fillRect(0, y, 64, 1); for (let x = (y / 4 % 2) * 4; x < 64; x += 8) g.fillRect(x, y, 1, 4); }
@@ -218,6 +252,14 @@ const AREAS = MAP.areas, FARM = [TEX.farmA, TEX.farmB, TEX.farmC, TEX.farmD];
 AREAS.forEach((a, i) => {
   prepPoly(a);
   a.fill = a.k === 'farm' ? FARM[i % 4] : a.k === 'pitch' ? null : TEX[a.k];
+  a.lpath = new Path2D(`M${a.lp.join(' ')}Z`);
+  if (a.k !== 'park') return;
+  const ca = Math.cos(a.ang), sa = Math.sin(a.ang), R = Math.hypot(a.x1 - a.x0, a.y1 - a.y0) / 2; // bay lines, on the grid parkCars() fills
+  a.bays = new Path2D();
+  for (let v = -R; v < R; v += 5.8) for (let u = -R - 1.4; u < R; u += 2.8) {
+    a.bays.moveTo(a.mx + ca * u - sa * (v - 2.6), a.my + sa * u + ca * (v - 2.6));
+    a.bays.lineTo(a.mx + ca * u - sa * (v + 2.6), a.my + sa * u + ca * (v + 2.6));
+  }
 });
 
 const DRIVE = ['secondary', 'tertiary', 'unclassified', 'residential', 'living_street', 'service'];
@@ -295,6 +337,12 @@ function surfAt(x, y) {
   return ix < 0 || iy < 0 || ix >= SW || iy >= SH ? 0 : SURF[iy * SW + ix];
 }
 
+// Every stretch of road: [ax, ay, bx, by, width, length, road].
+const SEGS = [];
+for (const r of MAP.roads) if (DRIVE.includes(r.t) || r.t === 'track') for (let i = 0; i + 3 < r.p.length; i += 2)
+  SEGS.push([r.p[i], r.p[i + 1], r.p[i + 2], r.p[i + 3], r.w, Math.hypot(r.p[i + 2] - r.p[i], r.p[i + 3] - r.p[i + 1]), r]);
+const SEGMAX = Math.max(...SEGS.map(s => s[5]));
+
 // ---------- buildings: walls lean away from the camera, roofs get a ridge and two slopes
 
 const BUILD = MAP.buildings, BG = grid(), LIGHT = [.6, .8]; // faces turned south-east lie in shadow
@@ -302,6 +350,7 @@ const WALLS = {
   h: ['#e8dfc8', '#f1ead8', '#d9c9a4', '#e3d0c0', '#f0e6b8', '#efe9df', '#dfe3d8', '#e6c79c', '#d6b596'],
   y: ['#cdbf9f', '#b99f7a', '#8f7152', '#d9cfb8'], i: ['#c8ccd2', '#d9dbde', '#b7bcc4', '#c4c8bc'],
   g: ['#d8d4c8', '#c9c5b9', '#e2ddd0'], m: ['#ece8dc'], c: ['#ece2c6'], s: ['#4a6fb5'], o: ['#8a8d92'], t: ['#ece2c6'], x: ['#b9b9b2', '#a9a9a2'],
+  d: ['#8a6a48', '#a07a50', '#6f7f5a', '#7a5a3c', '#9a8f7a'],
 };
 function ridge(b, rise) { // split the outline along its long axis into the two slopes of a gable roof
   const mid = (b.v0 + b.v1) / 2, lp = b.lp, n = lp.length;
@@ -336,6 +385,7 @@ function prepBuilding(b, r) {
   let gable = b.p.length <= 28 && wide > 2.5;
   if (k === 's' || k === 't') { b.roof = k === 's' ? TEX.concrete : TEX.slate; b.apex = k === 's' ? 2 : 9; gable = false; }
   else if (k === 'x') { b.roof = TEX.slab; gable = false; }
+  else if (k === 'd') { b.roof = v < .5 ? TEX.tar : v < .8 ? TEX.tile3 : TEX.metal; gable = v >= .25; }
   else if (k === 'o') { b.roof = TEX.flatLight; gable = false; }
   else if (k === 'c') b.roof = TEX.slate;
   else if (k === 'm') { b.roof = b.a > 1500 ? TEX.flatLight : TEX.flat; gable = false; }
@@ -355,7 +405,7 @@ function prepBuilding(b, r) {
   if (k !== 'o') gridAdd(BG, b, b.x0 - 3, b.y0 - 3, b.x1 + 3, b.y1 + 3);
 }
 const pick2 = (a, r) => a[r() * a.length | 0];
-{ // Röckelein's yard: blue silos by the mixing plant and stacks of finished concrete slabs
+{ // Not on the map, so made up: Röckelein's yard with silos and stacks of concrete slabs, and garden sheds
   const r = rng(7), [wx, wy] = MAP.pois.roeck, [mx, my] = MAP.pois.mischer, yard = AREAS.find(a => a.k === 'ind' && pip(wx, wy, a.p));
   const boxes = BUILD.map(b => { const xs = b.p.filter((v, i) => i % 2 === 0), ys = b.p.filter((v, i) => i % 2); return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)]; });
   const free = (x, y, rad) => !boxes.some(b => x > b[0] - rad && x < b[2] + rad && y > b[1] - rad && y < b[3] + rad)
@@ -373,6 +423,22 @@ const pick2 = (a, r) => a[r() * a.length | 0];
   for (const [x, y, d] of spots) if (d > 30 && free(x, y, 6) && r() < .45) {
     const w = 2.6 + r() * 2.2, l = 1.3;
     add([x - w, y - l, x + w, y - l, x + w, y + l, x - w, y + l], .8 + r() * 1.8, 'x');
+  }
+  for (const b of [...BUILD]) { // every house remembers its street; every third one gets a shed in the back garden
+    if (b.k !== 'h' || b.a < 50 || b.a > 420) continue;
+    const n = b.p.length / 2, cx = b.p.reduce((sum, v, i) => i % 2 ? sum : sum + v, 0) / n, cy = b.p.reduce((sum, v, i) => i % 2 ? sum + v : sum, 0) / n;
+    let far = 32, q = null, seg = null;
+    for (const sg of SEGS) {
+      if (Math.abs(sg[0] - cx) > 160 || Math.abs(sg[1] - cy) > 160 || !town(sg[6])) continue;
+      const pt = nearest(cx, cy, sg[0], sg[1], sg[2], sg[3]), d = Math.hypot(cx - pt[0], cy - pt[1]);
+      if (d < far) { far = d; q = pt; seg = sg; }
+    }
+    if (!seg) continue;
+    b.rd = [q[0], q[1], seg, far];
+    const ux = (cx - q[0]) / far, uy = (cy - q[1]) / far, back = Math.sqrt(b.a) / 2 + 4.5 + r() * 3, side = (r() - .5) * 9, keep = r() < .36;
+    const sx = cx + ux * back - uy * side, sy = cy + uy * back + ux * side, w = 1.3 + r() * .5, l = 1.6 + r() * .7;
+    if (!keep || b.a < 70 || !free(sx, sy, 3.6) || surfAt(sx, sy) || sx < 8 || sy < 8 || sx > W - 8 || sy > H - 8) continue;
+    add([[-w, -l], [w, -l], [w, l], [-w, l]].flatMap(([u, v]) => [sx + u * ux - v * uy, sy + u * uy + v * ux]), 2.1 + r() * .5, 'd');
   }
 }
 {
@@ -420,12 +486,57 @@ const TREES = [], TG = grid();
 const HEDGES = new Path2D();
 for (const h of MAP.hedges) for (let i = 0; i < h.length; i += 2) if (i) HEDGES.lineTo(h[i], h[i + 1]); else HEDGES.moveTo(h[i], h[i + 1]);
 
-// Every stretch of road: [ax, ay, bx, by, width, length, drivable].
-const SEGS = [];
-for (const r of MAP.roads) if (DRIVE.includes(r.t) || r.t === 'track') for (let i = 0; i + 3 < r.p.length; i += 2)
-  SEGS.push([r.p[i], r.p[i + 1], r.p[i + 2], r.p[i + 3], r.w, Math.hypot(r.p[i + 2] - r.p[i], r.p[i + 3] - r.p[i + 1]), r]);
-const SEGMAX = Math.max(...SEGS.map(s => s[5]));
 const blocked = (x, y, r) => at(BG, x, y).some(b => pushOut(x, y, r, b.p));
+
+// Street furniture. Fences are painted on; lanterns and hydrants give way when a car hits them.
+const FENCES = new Path2D(), PROPS = [], PG = grid();
+for (const f of MAP.fences || []) for (let i = 0; i < f.length; i += 2) if (i) FENCES.lineTo(f[i], f[i + 1]); else FENCES.moveTo(f[i], f[i + 1]);
+{
+  const r = rng(5);
+  for (const b of BUILD) { // a garden fence along the street in front of most houses, with a gap for the gate
+    if (!b.rd || r() > .75) continue;
+    const [qx, qy, sg, far] = b.rd, dx = (sg[2] - sg[0]) / sg[5], dy = (sg[3] - sg[1]) / sg[5], off = sg[4] / 2 + 2.3;
+    if (far < off + 3) continue; // the house stands right at the kerb
+    const side = Math.sign((b.mx - qx) * -dy + (b.my - qy) * dx) || 1, along = (qx - sg[0]) * dx + (qy - sg[1]) * dy;
+    const half = Math.max(b.u1 - b.u0, b.v1 - b.v0) / 2 + 1.5, gate = along + (r() - .5) * half;
+    let from = null;
+    for (let t = Math.max(1, along - half); ; t += .5) {
+      const x = sg[0] + dx * t - dy * off * side, y = sg[1] + dy * t + dx * off * side;
+      const ok = t < Math.min(sg[5] - 1, along + half) && Math.abs(t - gate) > 1.5 && !(surfAt(x, y) & 4) && !blocked(x, y, .7);
+      if (ok && !from) from = [x, y];
+      if (!ok && from) { if (Math.hypot(x - from[0], y - from[1]) > 2) { FENCES.moveTo(from[0], from[1]); FENCES.lineTo(x, y); } from = null; }
+      if (t > along + half) break;
+    }
+  }
+  const crossings = NODES.filter(n => n.gps.length > 2);
+  const put = (k, x, y, a) => {
+    if (blocked(x, y, .9) || x < 6 || y < 6 || x > W - 6 || y > H - 6 || crossings.some(n => Math.hypot(n.x - x, n.y - y) < 8)) return;
+    const o = {k, x, y, a, down: 0, fa: 0};
+    PROPS.push(o);
+    gridAdd(PG, o, x - 1, y - 1, x + 1, y + 1);
+  };
+  for (const road of MAP.roads) if (DRIVE.includes(road.t) && town(road)) { // a lantern every 36 m, changing sides; now and then a hydrant
+    let run = r() * 30, n = r() * 5 | 0;
+    for (let i = 0; i + 3 < road.p.length; i += 2) {
+      const ax = road.p[i], ay = road.p[i + 1], len = Math.hypot(road.p[i + 2] - ax, road.p[i + 3] - ay) || 1, dx = (road.p[i + 2] - ax) / len, dy = (road.p[i + 3] - ay) / len;
+      for (; run < len; run += 36, n++) {
+        const side = n % 2 ? 1 : -1, off = road.w / 2 + 1.1;
+        put('lamp', ax + dx * run - dy * off * side, ay + dy * run + dx * off * side, Math.atan2(-dx * side, dy * side));
+        if (n % 4 === 1 && run + 15 < len) put('hydrant', ax + dx * (run + 15) + dy * (off - .2) * side, ay + dy * (run + 15) - dx * (off - .2) * side, 0);
+      }
+      run -= len;
+    }
+  }
+}
+function knock(p, c) { // a car takes a lantern or a hydrant with it
+  if (Math.hypot(c.vx, c.vy) < 2.5) return;
+  p.down = 1; p.fa = Math.atan2(c.vy, c.vx);
+  c.vx *= .88; c.vy *= .88;
+  damage(c, 8);
+  for (let i = 0; i < 5; i++) puff(p.x, p.y, 'spark');
+  if (p.k === 'hydrant') { S.sprays.push({x: p.x, y: p.y, t: 10}); if (dist(p, S.P) < 90) AUDIO.play('splash'); }
+  if (c === S.P.car) float(p, p.k === 'hydrant' ? 'PLATSCH!' : 'KLONK!', '#ff5a1f');
+}
 
 // Where you pull up for a place: at the edge of the nearest road, on the side the place is on.
 function roadside(x, y) {
@@ -638,7 +749,8 @@ function load() { try { return JSON.parse(localStorage.getItem(SAVE)); } catch (
 function store() { try { localStorage.setItem(SAVE, JSON.stringify({n: S.jobN, money: S.money, stats: S.stats})); } catch (e) { /* private mode */ } }
 
 function reset(mode, save) {
-  S = {mode, t: 0, money: 0, shown: 0, cars: [], peds: [], items: [], parts: [], decals: [], texts: [],
+  for (const p of PROPS) p.down = 0;
+  S = {mode, t: 0, money: 0, shown: 0, cars: [], peds: [], items: [], parts: [], decals: [], texts: [], sprays: [],
     job: null, jobN: 0, nextJob: 5, pager: {q: [], cur: '', n: 0, hold: 0, said: 0, idle: ''}, spawnT: 0, shake: 0, wasted: 0, paused: false,
     crashT: 0, wanted: 0, seen: 0, bust: 0, gps: null, gpsT: 0, copF: null, copT: 0, whereT: 0, finale: 0, map: false,
     stats: {missions: 0, stolen: 0, peds: 0, wrecks: 0, busted: 0, wasted: 0}, cam: {x: 1450, y: 900, z: 4.4}, P: null};
@@ -797,6 +909,7 @@ function stepCar(c, dt) {
       const dx = c.x + fx * off - t.x, dy = c.y + fy * off - t.y, d = Math.hypot(dx, dy);
       if (d && d < T.r + .4) damage(c, bounce(c, [dx / d, dy / d, T.r + .4 - d], off));
     }
+    for (const p of at(PG, px, py)) if (!p.down && Math.hypot(c.x + fx * off - p.x, c.y + fy * off - p.y) < T.r + .2) knock(p, c);
   }
 }
 
@@ -1344,6 +1457,11 @@ function update(dt) {
   const o = P.car || P; // the map has an edge
   if (o.x < 6 || o.x > W - 6) { o.x = clamp(o.x, 6, W - 6); o.vx = 0; }
   if (o.y < 6 || o.y > H - 6) { o.y = clamp(o.y, 6, H - 6); o.vy = 0; }
+  for (const sp of S.sprays) { // broken hydrants are fountains for a while
+    sp.t -= dt;
+    if (dist(sp, P) < 90) for (let i = 0; i < 2; i++) puff(sp.x + rand(-.3, .3), sp.y + rand(-.3, .3), 'water');
+  }
+  S.sprays = S.sprays.filter(sp => sp.t > 0);
   for (const p of S.parts) { p.x += p.vx * dt; p.y += p.vy * dt; p.life += dt; }
   S.parts = S.parts.filter(p => p.life < p.max);
   for (const t of S.texts) { t.y -= 3 * dt; t.life -= dt; }
@@ -1535,7 +1653,7 @@ function drawPitch(a) {
     }
   } else {
     ctx.fillStyle = a.s === 'tennis' ? TEX.clay : TEX.play;
-    ctx.fill(a.lpath || (a.lpath = new Path2D(`M${a.lp.join(' ')}Z`)));
+    ctx.fill(a.lpath);
     const n = Math.max(1, Math.round(Wd / 18)), ch = Wd / n; // courts side by side
     for (let i = 0; i < n; i++) {
       const y = a.v0 + ch * i + ch / 2, cl = Math.min(L - 6, 23.8), cw = Math.min(ch - 5, 11);
@@ -1551,7 +1669,13 @@ function drawGround(x0, y0, x1, y1) {
   ctx.fillStyle = TEX.grass;
   ctx.fillRect(x0 - 1, y0 - 1, x1 - x0 + 2, y1 - y0 + 2);
   const seen = a => a.x1 > x0 && a.x0 < x1 && a.y1 > y0 && a.y0 < y1;
-  for (const a of AREAS) if (seen(a) && a.fill) { ctx.fillStyle = a.fill; ctx.fill(a.path); }
+  TEX.water.setTransform(new DOMMatrix().scaleSelf(1 / PPM).translateSelf(S.t * 5 % 64, S.t * 2 % 64)); // the water drifts
+  for (const a of AREAS) if (seen(a) && a.fill) {
+    ctx.fillStyle = a.fill;
+    if (a.k === 'farm') { ctx.save(); local(a); ctx.fill(a.lpath); ctx.restore(); } // furrows run along the field
+    else ctx.fill(a.path);
+    if (a.bays) { ctx.save(); ctx.clip(a.path); ctx.strokeStyle = 'rgba(236,236,226,.5)'; ctx.lineWidth = .14; ctx.lineCap = 'butt'; ctx.stroke(a.bays); ctx.restore(); }
+  }
   for (const a of AREAS) if (seen(a) && a.k === 'pitch') drawPitch(a);
   strokeLayer(ROADS.stream, '#3a72a2');
   strokeLayer(ROADS.bank, '#3c6829');
@@ -1565,6 +1689,7 @@ function drawGround(x0, y0, x1, y1) {
   strokeLayer(ROADS.foot, '#b9ad8a');
   strokeLayer(ROADS.kerb, '#3a3d36');
   strokeLayer(ROADS.walk, TEX.sidewalk);
+  strokeLayer(ROADS.road, '#2f3135', 0, .5); strokeLayer(ROADS.cobble, '#5d5a53', 0, .5); // kerbstones
   strokeLayer(ROADS.road, TEX.asphalt);
   strokeLayer(ROADS.cobble, TEX.cobble);
   ctx.setLineDash([3, 5]); ctx.lineCap = 'butt';
@@ -1582,6 +1707,11 @@ function drawGround(x0, y0, x1, y1) {
   }
   ctx.strokeStyle = '#2a5a22'; ctx.lineWidth = 1.7; ctx.stroke(HEDGES);
   ctx.strokeStyle = '#3b7d2e'; ctx.lineWidth = .9; ctx.stroke(HEDGES);
+  ctx.lineCap = 'butt'; // garden fences: a rail with pale pickets, and a thin shadow
+  ctx.save(); ctx.translate(.25, .25); ctx.strokeStyle = 'rgba(0,0,0,.22)'; ctx.lineWidth = .3; ctx.stroke(FENCES); ctx.restore();
+  ctx.strokeStyle = '#4a3826'; ctx.lineWidth = .24; ctx.stroke(FENCES);
+  ctx.setLineDash([.2, .5]); ctx.strokeStyle = '#dccfae'; ctx.lineWidth = .44; ctx.stroke(FENCES); ctx.setLineDash([]);
+  ctx.lineCap = 'round';
   const j = S.job, to = j && j.to;
   if (to && to !== j.veh && to !== j.prey) { // where to go: a pulsing ring on the ground
     const pulse = Math.sin(S.t * 5);
@@ -1619,15 +1749,19 @@ function drawBuildings(builds, cx, cy, hc) {
       ctx.beginPath();
       ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.lineTo(bx * s + ox, by * s + oy); ctx.lineTo(ax * s + ox, ay * s + oy);
       ctx.closePath(); ctx.fill(); ctx.stroke();
-      // a row of windows on every floor
+      ctx.strokeStyle = 'rgba(0,0,0,.25)'; ctx.lineWidth = .32; // the plinth
+      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+      // a row of windows on every floor: pale frames, dark glass
       const tall = (s - 1) * Math.hypot((ax + bx) / 2 - cx, (ay + by) / 2 - cy);
       if (tall < .8 || b.h < 5 || b.k === 's') continue;
-      ctx.strokeStyle = b.k === 'i' ? 'rgba(40,50,64,.5)' : 'rgba(30,36,48,.78)';
-      ctx.lineWidth = tall * .34 / b.floors; ctx.lineCap = 'butt';
-      ctx.setLineDash(b.k === 'i' || b.k === 'm' ? [2.6, 1.2] : [1.1, 1.5]);
+      const hall = b.k === 'i' || b.k === 'm', pane = tall * .34 / b.floors;
+      ctx.lineCap = 'butt';
       for (let f = 0; f < b.floors; f++) {
         const sm = 1 + (s - 1) * (f + .58) / b.floors, om = 1 - sm;
-        ctx.beginPath(); ctx.moveTo(ax * sm + cx * om, ay * sm + cy * om); ctx.lineTo(bx * sm + cx * om, by * sm + cy * om); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(ax * sm + cx * om, ay * sm + cy * om); ctx.lineTo(bx * sm + cx * om, by * sm + cy * om);
+        if (!hall) { ctx.setLineDash([1.34, 1.26]); ctx.lineDashOffset = .12; ctx.strokeStyle = 'rgba(250,246,232,.85)'; ctx.lineWidth = pane * 1.5; ctx.stroke(); }
+        ctx.setLineDash(hall ? [2.6, 1.2] : [1.1, 1.5]); ctx.lineDashOffset = 0;
+        ctx.strokeStyle = hall ? 'rgba(40,50,64,.5)' : 'rgba(30,36,48,.85)'; ctx.lineWidth = pane; ctx.stroke();
       }
       ctx.setLineDash([]); ctx.lineCap = 'round';
     }
@@ -1655,6 +1789,8 @@ function drawBuildings(builds, cx, cy, hc) {
         ctx.fillStyle = b.tint[n]; ctx.fill();
         ctx.stroke();
       }
+      ctx.strokeStyle = 'rgba(255,228,200,.4)'; ctx.lineWidth = .32; // ridge tiles
+      ctx.beginPath(); ctx.moveTo(b.rx0 * s2 + lx * k2, b.ry * s2 + ly * k2); ctx.lineTo(b.rx1 * s2 + lx * k2, b.ry * s2 + ly * k2); ctx.stroke();
       const sm = (s + s2) / 2, km = 1 - sm;
       if (b.pv != null) { // solar panels
         const dir = b.pv ? -1 : 1, half = (b.v1 - b.v0) / 2, len = (b.rx1 - b.rx0) * .62, x = (b.rx0 + b.rx1) / 2 - len / 2;
@@ -1695,6 +1831,31 @@ function drawBuildings(builds, cx, cy, hc) {
     }
     ctx.restore();
   }
+}
+
+function drawFurniture(list, cx, cy, hc) {
+  const line = (x0, y0, x1, y1) => { ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke(); };
+  const disc = (x, y, r, f) => { ctx.fillStyle = f; ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill(); };
+  ctx.lineCap = 'butt';
+  for (const p of list) {
+    if (p.k === 'hydrant') {
+      if (p.down) disc(p.x, p.y, 1.5, 'rgba(70,130,190,.4)');
+      disc(p.x + .18, p.y + .18, .36, 'rgba(0,0,0,.3)');
+      disc(p.x, p.y, .36, p.down ? '#7a1512' : '#c8201c');
+      disc(p.x - .08, p.y - .08, .17, p.down ? '#9a2a22' : '#ee6a5a');
+      continue;
+    }
+    const h = 6.5, s = p.down ? 1 : hc / (hc - h), k = 1 - s; // standing lanterns lean like the houses do, fallen ones lie flat
+    const tx = p.down ? p.x + Math.cos(p.fa) * h : p.x * s + cx * k, ty = p.down ? p.y + Math.sin(p.fa) * h : p.y * s + cy * k;
+    const hx = tx + Math.cos(p.down ? p.fa + 1.2 : p.a) * 1.4 * s, hy = ty + Math.sin(p.down ? p.fa + 1.2 : p.a) * 1.4 * s;
+    if (!p.down) { ctx.strokeStyle = 'rgba(0,0,0,.22)'; ctx.lineWidth = .28; line(p.x, p.y, p.x + 2.3, p.y + 2.3); }
+    disc(p.x, p.y, .26, '#26282c');
+    ctx.strokeStyle = '#3d4045'; ctx.lineWidth = .3; line(p.x, p.y, tx, ty);
+    ctx.lineWidth = .24; line(tx, ty, hx, hy);
+    disc(hx, hy, .52 * s, '#24262a');
+    disc(hx, hy, .36 * s, p.down ? '#6a6a62' : '#f6edc0');
+  }
+  ctx.lineCap = 'round';
 }
 
 function drawTrees(trees, cx, cy, hc) {
@@ -1820,6 +1981,7 @@ function render() {
   drawShadows(builds, trees);
   drawSprites(x0, y0, x1, y1);
   drawBuildings(builds, cx, cy, hc);
+  drawFurniture(gridFind(PG, x0 - 9, y0 - 9, x1 + 9, y1 + 9), cx, cy, hc);
   drawParticles();
   drawTrees(trees, cx, cy, hc);
   // the world ends here
@@ -1856,7 +2018,7 @@ function drawOverlay(cx, cy, z) { // labels and pointers, in screen pixels
   for (const v of S.items) if (v.job) pointer(v, '#ffd23e');
   if (j && j.to) {
     const to = j.to, far = dist(P, to);
-    pointer(to, '#ffd23e', (to.name || 'ZIEL').toUpperCase() + ' ' + metres(S.gps && S.gps.far || far));
+    pointer(to, '#ffd23e', (to.name || 'ZIEL').toUpperCase() + ' · ' + metres(S.gps && S.gps.far || far));
     if (to === j.veh || to === j.prey) { // the car you are after
       const bob = Math.sin(S.t * 6) * 3;
       arrow(sx(to.x), sy(to.y) - 3.2 * z - 12 + bob, Math.PI / 2, to === j.prey ? '#ff5a1f' : '#ffd23e', .8);
