@@ -40,9 +40,9 @@ const TALK = {
 
 const MISSIONS = [
   {id: 'dosen', title: 'Dosen zum Saufen', reward: 300,
-    intro: ['Ich hab Durst. Großen Durst.', 'Hol mir Dosen zum Saufen: Jacky Cola! Der Mein Markt 24 in der Reumannswinder Straße hat welche.'],
+    intro: ['Ich hab Durst. Großen Durst.', 'Hol mir Dosen zum Saufen: Jacky Cola! Der Mein Markt 24 in der Reumannswinder Straße hat welche. Nimm das Auto, das ist ein guter Kilometer.'],
     steps: [
-      {do: 'goto', to: 'markt', foot: true, obj: 'Geh zu Fuß in den Mein Markt 24'},
+      {do: 'goto', to: 'markt', foot: true, obj: 'Fahr zum Mein Markt 24 und geh zu Fuß rein'},
       {do: 'collect', n: 5, near: 'markt', r: 300, item: 'dose', obj: 'Sammle 5 Dosen Jacky Cola ein',
         say: 'Die Claudia sagt: Der Lieferant hat die Palette auf der Straße verloren. Sammel die Dosen ein!'},
       {do: 'goto', to: 'hq', time: 90, obj: 'Bring die Dosen zum Flo, Johann-Philipp-Ring 9',
@@ -53,8 +53,8 @@ const MISSIONS = [
   {id: 'brotzeit', title: 'Brotzeit für den SV', reward: 400,
     intro: ['Der SV Wachenroth spielt, und im Sportheim ist die Brotzeit aus. Eine Katastrophe!', 'Hol Essen bei der Claudia im Mein Markt 24.'],
     steps: [
-      {do: 'goto', to: 'markt', foot: true, obj: 'Hol das Essen im Mein Markt 24 (zu Fuß rein)'},
-      {do: 'goto', to: 'metzger', foot: true, obj: 'Hol Leberkäs bei der Metzgerei in der Kellerstraße',
+      {do: 'goto', to: 'markt', foot: true, obj: 'Fahr zum Mein Markt 24 und hol das Essen (zu Fuß rein)'},
+      {do: 'goto', to: 'metzger', foot: true, obj: 'Fahr zur Metzgerei in der Kellerstraße (zu Fuß rein)',
         say: 'Und Leberkäs vom Metzger in der Kellerstraße. Ohne Leberkäs kein Sieg.'},
       {do: 'goto', to: 'sport', time: 80, obj: 'Bring die Brotzeit zum Sportheim vom SV',
         say: 'Gleich ist Halbzeit! Ab zum Sportplatz, aber flott!'},
@@ -93,7 +93,7 @@ const MISSIONS = [
   {id: 'murk', title: 'Feiner Zwirn', reward: 800,
     intro: ['Bald ist Kerwa, und ich hab nix zum Anziehen.', 'Beim Bekleidungshaus Murk hängen die besten Anzüge weit und breit. Hol mir einen. Zahlen tun wir später. Vielleicht.'],
     steps: [
-      {do: 'goto', to: 'murk', foot: true, obj: 'Geh zu Fuß ins Bekleidungshaus Murk'},
+      {do: 'goto', to: 'murk', foot: true, obj: 'Fahr zum Bekleidungshaus Murk und geh zu Fuß rein'},
       {do: 'lose', to: 'wasch', wanted: 2.3, obj: 'Häng die Polizei ab (Tipp: Waschstraße beim Murk)',
         say: 'Der Alarm! Die Polizei aus Höchstadt ist unterwegs. Fahr durch die Waschstraße beim Murk, dann erkennt dich keiner!'},
       {do: 'goto', to: 'hq', obj: 'Bring den Anzug zum Flo', say: 'Sauber abgehängt. Jetzt bring mir den Anzug.'},
@@ -133,7 +133,7 @@ const MISSIONS = [
   {id: 'pizza', title: 'Pizza-Express', reward: 700,
     intro: ['Hunger! Und nicht nur ich.', 'Hol Pizza bei La Vite in der Reumannswinder Straße und fahr sie aus.'],
     steps: [
-      {do: 'goto', to: 'lavite', foot: true, obj: 'Hol die Pizzen bei La Vite (zu Fuß rein)'},
+      {do: 'goto', to: 'lavite', foot: true, obj: 'Fahr zu La Vite und hol die Pizzen (zu Fuß rein)'},
       {do: 'goto', to: 'klaer', time: 80, obj: 'Pizza zur Kläranlage',
         say: 'Erste Pizza: Kläranlage. Der Klärwärter hat sich eine Salami verdient.'},
       {do: 'goto', to: 'deponie', time: 75, obj: 'Pizza zur Bauschuttdeponie', say: 'Nummer zwei: Bauschuttdeponie. Frag nicht.'},

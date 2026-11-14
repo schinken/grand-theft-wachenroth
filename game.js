@@ -635,7 +635,7 @@ function store() { try { localStorage.setItem(SAVE, JSON.stringify({n: S.jobN, m
 function reset(mode, save) {
   S = {mode, t: 0, money: 0, shown: 0, cars: [], peds: [], items: [], parts: [], decals: [], texts: [],
     job: null, jobN: 0, nextJob: 5, pager: {q: [], cur: '', n: 0, hold: 0, said: 0, idle: ''}, spawnT: 0, shake: 0, wasted: 0, paused: false,
-    crashT: 0, wanted: 0, seen: 0, bust: 0, gps: null, gpsT: 0, copF: null, copT: 0, whereT: 0, finale: 0,
+    crashT: 0, wanted: 0, seen: 0, bust: 0, gps: null, gpsT: 0, copF: null, copT: 0, whereT: 0, finale: 0, map: false,
     stats: {missions: 0, stolen: 0, peds: 0, wrecks: 0, busted: 0, wasted: 0}, cam: {x: 1450, y: 900, z: 4.4}, P: null};
   if (save) { S.jobN = save.n; S.money = S.shown = save.money; Object.assign(S.stats, save.stats); }
   const hq = SPOT.hq, car = makeCar(hq.x, hq.y, hq.a, 'car', '#e0b21c');
@@ -1082,7 +1082,7 @@ function nextStep() {
   const j = S.job, st = j.m.steps[++j.i];
   if (!st) return endJob();
   if (j.i) AUDIO.play('step');
-  j.step = st; j.hold = 0; j.to = st.to ? SPOT[st.to] : null;
+  j.step = st; j.hold = 0; j.told = false; j.to = st.to ? SPOT[st.to] : null;
   if (st.time) { j.left = st.time; j.timed = true; } else if (st.time === 0) j.timed = false;
   if (st.fragile != null) { j.fragile = st.fragile; j.cargo = 1; }
   if (st.drop) j.veh = null;
@@ -1124,6 +1124,7 @@ function jobRules(dt) {
       if (P.car === j.veh && near(7) && sp < 8) nextStep();
       break;
     case 'goto':
+      if (st.foot && P.car && near(14) && !j.told) { j.told = true; info('Aussteigen und zu Fuß reingehen'); }
       if (st.foot ? !P.car && near(3.5) : near(st.r || 7) && sp < 9) nextStep();
       break;
     case 'hold':
@@ -1411,7 +1412,7 @@ function start(save) {
   $('menu').hidden = $('end').hidden = true;
   $('hud').hidden = false;
   $('lcd').textContent = '';
-  for (const id of ['flash', 'mission', 'pause', 'info']) $(id).hidden = true;
+  for (const id of ['flash', 'mission', 'pause', 'info', 'map']) $(id).hidden = true;
   replay($('hint'));
   document.activeElement.blur();
   if (document.body.classList.contains('touch') && document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
@@ -1420,7 +1421,7 @@ function start(save) {
 }
 
 function pause(p) {
-  if (S.mode !== 'play') return;
+  if (S.mode !== 'play' || S.map) return;
   S.paused = p;
   $('pause').hidden = !p;
   AUDIO.pause(p);
@@ -1430,7 +1431,9 @@ function pause(p) {
 
 addEventListener('keydown', e => {
   if (S.mode !== 'play') return;
-  if (e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault();
+  if (e.code.startsWith('Arrow') || e.code === 'Space' || e.code === 'Tab') e.preventDefault();
+  if (e.code === 'Tab' && !e.repeat) return showMap(!S.map);
+  if (S.map) { if (e.code === 'Escape') showMap(false); return; }
   keys[e.code] = true;
   if (e.repeat) return;
   if (e.code === 'KeyF' || e.code === 'Enter') toggleCar();
@@ -1441,7 +1444,7 @@ addEventListener('keydown', e => {
 });
 addEventListener('keyup', e => { keys[e.code] = false; });
 addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
-document.addEventListener('visibilitychange', () => { if (document.hidden) pause(true); });
+document.addEventListener('visibilitychange', () => { if (document.hidden) { showMap(false); pause(true); } });
 
 {
   const stick = $('stick'), knob = stick.firstElementChild, R = 52;
@@ -1479,6 +1482,8 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) pause
   $('bP').addEventListener('pointerdown', e => { e.preventDefault(); pause(!S.paused); });
   $('bM').addEventListener('pointerdown', e => { e.preventDefault(); AUDIO.mute(!AUDIO.muted); $('bM').classList.toggle('off', AUDIO.muted); });
   $('pause').addEventListener('pointerdown', () => pause(false));
+  $('bK').addEventListener('pointerdown', e => { e.preventDefault(); showMap(true); });
+  $('map').addEventListener('pointerdown', () => showMap(false));
   $('pager').addEventListener('pointerdown', () => { const pg = S.pager; if (pg.n < pg.cur.length) pg.n = pg.cur.length; else pg.hold = 0; }); // tap: next message
   const touchy = () => document.body.classList.add('touch');
   if (matchMedia('(pointer: coarse)').matches) touchy();
@@ -1861,6 +1866,134 @@ function drawOverlay(cx, cy, z) { // labels and pointers, in screen pixels
   for (const t of S.texts) label(t.s, sx(t.x), sy(t.y), t.col);
 }
 
+// ---------- the fold-out map (Tab): the whole village on paper, true to scale
+
+const mapCv = $('map'), mg = mapCv.getContext('2d');
+const PAPER = {farm: '#efe6c2', meadow: '#d3e2ad', forest: '#9cc58a', scrub: '#b6d39a', orchard: '#c2dc9c', resi: '#f3ecdb',
+  ind: '#d8d2cc', com: '#d8d2cc', school: '#e4d9c0', yard: '#ded2b8', dump: '#cdbfa6', cem: '#c5d9a6', constr: '#d9c9a0',
+  park: '#c9c4bd', play: '#f0de9c', water: '#8fc4e8', pitch: '#a5d48c'};
+const MAPNAMES = ['hq', 'markt', 'murk', 'roeck', 'sport', 'rathaus', 'baeck', 'schwall', 'ffw', 'halle', 'getraenke', 'klaer', 'deponie',
+  'weiher', 'lavite', 'lagerhaus', 'kirche', 'baum', 'friedhof', 'schule', 'metzger', 'festplatz', 'bahnhof', 'beach', 'wasch', 'baustelle'];
+let mapBase = null, mapK = 0, mapDpr = 1;
+
+function mapPaint(k, dpr) { // the paper layer, k device pixels per metre
+  const c = canvas(Math.ceil(W * k), Math.ceil(H * k)), g = c.getContext('2d'), px = 1 / k;
+  const stroke = (l, style, grow, min) => { g.strokeStyle = style; for (const [rw, path] of l) { g.lineWidth = Math.max(rw + grow, min * px * dpr); g.stroke(path); } };
+  g.scale(k, k);
+  g.lineJoin = g.lineCap = 'round';
+  g.fillStyle = '#e6dfc4'; g.fillRect(0, 0, W, H);
+  for (const a of AREAS) { g.fillStyle = PAPER[a.k] || '#e6dfc4'; g.fill(a.path); }
+  stroke(ROADS.stream, '#8fc4e8', 0, 1); stroke(ROADS.river, '#6fb0de', 0, 2.5);
+  g.setLineDash([4 * px * dpr, 3 * px * dpr]);
+  stroke(ROADS.dirt, '#a08a60', -1.5, 1); stroke(ROADS.foot, '#b0a080', 0, .8);
+  g.setLineDash([]);
+  stroke(ROADS.rail, '#4a4a4a', 0, 1.8);
+  g.setLineDash([5 * px * dpr, 5 * px * dpr]); stroke(ROADS.rail, '#fff', -.8, .9); g.setLineDash([]);
+  const streets = [...ROADS.road, ...ROADS.cobble];
+  stroke(streets, '#7d7566', 2.2, 3.2);
+  stroke(streets, '#fffdf6', 0, 1.8);
+  stroke(ROADS.line, '#ffc21a', 0, 2.2); // the main roads in gold
+  for (const b of BUILD) if (b.k !== 'x' && b.k !== 'o') { g.fillStyle = b.label ? '#6e2518' : 'imts'.includes(b.k) ? '#948a84' : '#c0563d'; g.fill(b.path); }
+  // names, in screen pixels so they stay crisp
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.textBaseline = 'middle'; g.lineJoin = 'round';
+  const taken = [], free = (x, y, w, h) => !taken.some(t => x < t[0] + t[2] && x + w > t[0] && y < t[1] + t[3] && y + h > t[1]) && x > 2 && y > 2 && x + w < c.width - 2 && y + h < c.height - 2;
+  const halo = (text, x, y, col) => { g.lineWidth = 3 * dpr; g.strokeStyle = 'rgba(255,253,246,.9)'; g.strokeText(text, x, y); g.fillStyle = col; g.fillText(text, x, y); };
+  g.font = `bold ${11 * dpr}px "Arial Narrow", "Roboto Condensed", Arial, sans-serif`;
+  for (const key of MAPNAMES) {
+    const text = PLACES[key], w = g.measureText(text).width, h = 13 * dpr, x = MAP.pois[key][0] * k, y = MAP.pois[key][1] * k, gap = 6 * dpr;
+    const at = [[x + gap, y - h / 2], [x - gap - w, y - h / 2], [x - w / 2, y - gap - h], [x - w / 2, y + gap]].find(q => free(q[0], q[1], w, h));
+    if (!at) continue;
+    taken.push([at[0], at[1], w, h]);
+    g.fillStyle = '#0c0e11'; g.beginPath(); g.arc(x, y, 2.6 * dpr, 0, TAU); g.fill();
+    g.textAlign = 'left';
+    halo(text, at[0], at[1] + h / 2, '#0c0e11');
+  }
+  g.font = `italic ${9.5 * dpr}px Arial, sans-serif`; g.textAlign = 'center';
+  const longest = new Map(); // street names along the longest stretch of each street
+  for (const sg of SEGS) if (sg[6].n && DRIVE.includes(sg[6].t) && (!longest.has(sg[6].n) || longest.get(sg[6].n)[5] < sg[5])) longest.set(sg[6].n, sg);
+  for (const [name, sg] of longest) {
+    const w = g.measureText(name).width, x = (sg[0] + sg[2]) / 2 * k, y = (sg[1] + sg[3]) / 2 * k;
+    let a = Math.atan2(sg[3] - sg[1], sg[2] - sg[0]);
+    if (Math.abs(a) > Math.PI / 2) a -= Math.sign(a) * Math.PI;
+    const bw = Math.abs(Math.cos(a)) * w + 12 * dpr, bh = Math.abs(Math.sin(a)) * w + 12 * dpr;
+    if (sg[5] * k < w * .8 || !free(x - bw / 2, y - bh / 2, bw, bh)) continue;
+    taken.push([x - bw / 2, y - bh / 2, bw, bh]);
+    g.save(); g.translate(x, y); g.rotate(a);
+    halo(name, 0, -7 * dpr, '#5d5648');
+    g.restore();
+  }
+  return c;
+}
+
+function showMap(on) {
+  if (S.mode !== 'play' || (on && S.paused)) return;
+  S.map = on;
+  mapCv.hidden = !on;
+  AUDIO.pause(on || S.paused);
+  if (!on) return;
+  const dpr = Math.min(2, devicePixelRatio || 1), cw = Math.round(innerWidth * dpr), ch = Math.round(innerHeight * dpr);
+  const fitH = (ch - 24 * dpr) / H, k = Math.max(Math.min((cw - 24 * dpr) / W, fitH), Math.min(fitH, .45 * dpr)); // whole village if it fits, else a readable cut-out
+  if (mapCv.width === cw && mapCv.height === ch && k === mapK) return;
+  mapCv.width = cw; mapCv.height = ch; mapK = k; mapDpr = dpr;
+  mapBase = mapPaint(k, dpr);
+}
+
+function routeLine(f, o, to) { // the way from `o` to `to` along the roads, as a flat list of points
+  const [link, qx, qy] = nearLink(o), [goal, tx, ty] = nearLink(to), cost = n => f[n] + Math.hypot(NODES[n].x - qx, NODES[n].y - qy), pts = [o.x, o.y];
+  let n = cost(link[0]) < cost(link[1]) ? link[0] : link[1];
+  if (f[n] > 1e8) return [o.x, o.y, to.x, to.y];
+  if (link !== goal) for (pts.push(qx, qy); n >= 0; n = goal.includes(n) ? -1 : downhill(f, n)) pts.push(NODES[n].x, NODES[n].y);
+  pts.push(tx, ty, to.x, to.y);
+  return pts;
+}
+
+function drawMap() {
+  const P = S.P, j = S.job, to = j && j.to, k = mapK, d = mapDpr, cw = mapCv.width, ch = mapCv.height, g = mg;
+  const fx = to ? (P.x + to.x) / 2 : P.x, fy = to ? (P.y + to.y) / 2 : P.y; // keep you and the target in view
+  const ox = W * k <= cw ? (cw - W * k) / 2 : clamp(cw / 2 - fx * k, cw - W * k, 0), oy = H * k <= ch ? (ch - H * k) / 2 : clamp(ch / 2 - fy * k, ch - H * k, 0);
+  const X = x => ox + x * k, Y = y => oy + y * k, pulse = .5 + .5 * Math.sin(performance.now() / 160);
+  const chip = (text, x, y, align, col = '#f3ecdb') => { // a label on a dark plate
+    g.font = `bold ${12 * d}px "Courier New", monospace`; g.textBaseline = 'middle'; g.textAlign = 'left';
+    const w = g.measureText(text).width + 12 * d, h = 20 * d, left = clamp(align === 'right' ? x - w : align === 'center' ? x - w / 2 : x, 4 * d, cw - w - 4 * d), top = clamp(y - h / 2, 4 * d, ch - h - 4 * d);
+    g.fillStyle = 'rgba(12,14,17,.88)'; g.fillRect(left, top, w, h);
+    g.fillStyle = col; g.fillText(text, left + 6 * d, top + h / 2 + d);
+  };
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.fillStyle = '#0c0e11'; g.fillRect(0, 0, cw, ch);
+  g.drawImage(mapBase, ox, oy);
+  g.lineJoin = g.lineCap = 'round';
+  if (to) { // the route in gold, like the yellow arrow would lead you
+    const pts = routeLine(S.gps ? S.gps.f : field(to), P, to);
+    for (const [w, col] of [[6 * d, '#0c0e11'], [3.4 * d, '#ffd23e']]) {
+      g.strokeStyle = col; g.lineWidth = w;
+      g.beginPath();
+      for (let i = 0; i < pts.length; i += 2) if (i) g.lineTo(X(pts[i]), Y(pts[i + 1])); else g.moveTo(X(pts[i]), Y(pts[i + 1]));
+      g.stroke();
+    }
+  }
+  for (const v of S.items) if (v.job) { g.fillStyle = '#ffd23e'; g.strokeStyle = '#0c0e11'; g.lineWidth = 2 * d; g.beginPath(); g.arc(X(v.x), Y(v.y), 5 * d, 0, TAU); g.fill(); g.stroke(); }
+  if (S.wanted >= 1) for (const c of S.cars) if (c.ai && c.ai.cop) { g.fillStyle = pulse > .5 ? '#4aa3ff' : '#12327a'; g.beginPath(); g.arc(X(c.x), Y(c.y), 5 * d, 0, TAU); g.fill(); }
+  if (to) {
+    g.strokeStyle = '#0c0e11'; g.lineWidth = 6 * d; g.beginPath(); g.arc(X(to.x), Y(to.y), (8 + pulse * 4) * d, 0, TAU); g.stroke();
+    g.strokeStyle = '#ffd23e'; g.lineWidth = 3 * d; g.stroke();
+    chip(`${to.name || 'Ziel'} · ${Math.round(dist(P, to))} m`, X(to.x), Y(to.y) - 24 * d, 'center', '#ffd23e');
+  }
+  g.save(); // you: an arrow pointing the way you face
+  g.translate(X(P.x), Y(P.y)); g.rotate(P.a);
+  g.fillStyle = '#19c2bd'; g.strokeStyle = '#0c0e11'; g.lineWidth = 2.5 * d;
+  g.beginPath(); g.moveTo(11 * d, 0); g.lineTo(-7 * d, -7 * d); g.lineTo(-3 * d, 0); g.lineTo(-7 * d, 7 * d); g.closePath(); g.fill(); g.stroke();
+  g.restore();
+  g.strokeStyle = `rgba(25,194,189,${1 - pulse})`; g.lineWidth = 2 * d; g.beginPath(); g.arc(X(P.x), Y(P.y), (10 + pulse * 12) * d, 0, TAU); g.stroke();
+  chip('DU', X(P.x), Y(P.y) + 24 * d, 'center', '#19c2bd');
+  chip('KARTE · MARKT WACHENROTH', 10 * d, 16 * d, 'left');
+  chip(document.body.classList.contains('touch') ? 'TIPPEN: ZURÜCK' : 'TAB: ZURÜCK', cw - 10 * d, 16 * d, 'right');
+  const bar = 200 * k, bx = 16 * d, by = ch - 18 * d; // scale bar
+  chip('200 m', bx + bar + 8 * d, by, 'left');
+  g.fillStyle = '#f3ecdb'; g.fillRect(bx - 2 * d, by - 5 * d, bar + 4 * d, 10 * d);
+  for (let i = 0; i < 4; i += 2) { g.fillStyle = '#0c0e11'; g.fillRect(bx + bar / 4 * i, by - 3 * d, bar / 4, 6 * d); }
+}
+
 // ---------- main loop
 
 function resize() {
@@ -1870,19 +2003,22 @@ function resize() {
   cv.width = VW; cv.height = VH;
   ctx.imageSmoothingEnabled = false;
 }
-addEventListener('resize', resize);
+addEventListener('resize', () => { resize(); if (S.map) showMap(true); });
 resize();
 
 let last = 0;
 function frame(now) {
   const dt = Math.min(.05, (now - last) / 1000 || 0);
   last = now;
-  if (!S.paused) {
-    for (let n = dt > .02 ? 2 : 1, i = 0; i < n; i++) update(dt / n);
-    if (S.mode === 'play') guide(dt);
+  if (S.map) drawMap(); // the game holds its breath while you read the map
+  else {
+    if (!S.paused) {
+      for (let n = dt > .02 ? 2 : 1, i = 0; i < n; i++) update(dt / n);
+      if (S.mode === 'play') guide(dt);
+    }
+    render();
+    if (!S.paused) hud(dt);
   }
-  render();
-  if (!S.paused) hud(dt);
   requestAnimationFrame(frame);
 }
 reset('menu');

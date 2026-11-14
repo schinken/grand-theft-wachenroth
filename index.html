@@ -16,6 +16,7 @@
     touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; overscroll-behavior: none; }
   [hidden] { display: none !important; }
   canvas { position: fixed; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; }
+  #map { image-rendering: auto; z-index: 5; cursor: pointer; }
   .out { text-shadow: 3px 3px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000; }
 
   /* title + end screens */
@@ -116,6 +117,7 @@
     <div id="heat" class="out" aria-label="Fahndungsstufe"></div>
     <div id="mission" class="out" hidden><span></span><div><i></i></div></div>
     <div id="tools">
+      <button id="bK" aria-label="Karte">🗺️</button>
       <button id="bR" aria-label="Radiosender wechseln">♪</button>
       <button id="bM" aria-label="Ton an oder aus">♫</button>
       <button id="bP" aria-label="Pause">II</button>
@@ -127,7 +129,7 @@
     <div id="where" class="out"></div>
     <div id="dmg" class="out">KAROSSE<div><i></i></div></div>
   </div>
-  <div id="hint" class="out">PFEILE / WASD fahren &nbsp;·&nbsp; LEERTASTE Handbremse &nbsp;·&nbsp; F ein-/aussteigen &nbsp;·&nbsp; H Hupe &nbsp;·&nbsp; R Radio &nbsp;·&nbsp; P Pause</div>
+  <div id="hint" class="out">PFEILE / WASD fahren &nbsp;·&nbsp; LEERTASTE Handbremse &nbsp;·&nbsp; F ein-/aussteigen &nbsp;·&nbsp; H Hupe &nbsp;·&nbsp; R Radio &nbsp;·&nbsp; TAB Karte &nbsp;·&nbsp; P Pause</div>
   <div id="zone"></div>
   <div id="stick"><i></i></div>
   <div id="btns">
@@ -137,6 +139,8 @@
   </div>
   <div id="pause" class="out" hidden>PAUSE<small>Tippen oder P drücken</small></div>
 </div>
+
+<canvas id="map" hidden aria-label="Karte von Wachenroth"></canvas>
 
 <section id="menu" class="screen">
   <h1><small>Grand Theft</small>Wachenroth</h1>
@@ -149,8 +153,8 @@
   <ul id="help" hidden>
     <li><kbd>↑</kbd> <kbd>↓</kbd> <kbd>←</kbd> <kbd>→</kbd> oder <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> fahren und laufen</li>
     <li><kbd>Leertaste</kbd> Handbremse &nbsp; <kbd>F</kbd> ein- und aussteigen (auch in fremde Autos)</li>
-    <li><kbd>H</kbd> Hupe / Blaulicht &nbsp; <kbd>R</kbd> Radiosender &nbsp; <kbd>P</kbd> Pause &nbsp; <kbd>M</kbd> Ton</li>
-    <li>Am Handy: links der Daumen-Stick, rechts EIN/AUS, BREMSE und HUPE.</li>
+    <li><kbd>Tab</kbd> Karte &nbsp; <kbd>H</kbd> Hupe / Blaulicht &nbsp; <kbd>R</kbd> Radiosender &nbsp; <kbd>P</kbd> Pause &nbsp; <kbd>M</kbd> Ton</li>
+    <li>Am Handy: links der Daumen-Stick, rechts EIN/AUS, BREMSE und HUPE, oben die Karte.</li>
     <li>Der Pager piept: Flo Ganzmann hat Aufträge. Der gelbe Pfeil zeigt den Weg.</li>
     <li>Sterne oben rechts = Polizei. Die Waschstraße beim Murk macht dich wieder sauber.</li>
   </ul>
