@@ -1,5 +1,6 @@
-// Performance probe: start-up time, frame times and the hottest functions,
-// with the CPU slowed down to roughly a mid-range phone.
+// Performance probe: start-up time, frame times, the hottest functions and the
+// load on the GPU thread, with the CPU slowed down to roughly a mid-range
+// phone.
 //
 // Run it with Playwright against a local server, like tools/playtest.js. The
 // function takes a Playwright `page` and returns the numbers. Options come
@@ -22,8 +23,12 @@ async page => {
     return Math.round(nav.domContentLoadedEventStart - nav.responseEnd);
   });
 
-  // Frame times over some seconds, with the hottest functions.
+  // Frame times over some seconds, with the hottest functions, and how long
+  // the browser's GPU thread works for every second of play: that thread
+  // turns the canvas commands into pixels and is not slowed by the throttle.
+  const browser = page.context().browser();
   const measure = async () => {
+    await browser.startTracing(page, {categories: ['toplevel']});
     await cdp.send('Profiler.start');
     const frames = await page.evaluate(secs => {
       return new Promise(resolve => {
@@ -49,6 +54,23 @@ async page => {
       });
     }, opt.secs);
     const {profile} = await cdp.send('Profiler.stop');
+    const trace = JSON.parse((await browser.stopTracing()).toString());
+    const threads = new Map();
+    const work = new Map();
+    for (const event of trace.traceEvents) {
+      const key = `${event.pid}:${event.tid}`;
+      if (event.ph === 'M' && event.name === 'thread_name') {
+        threads.set(key, event.args.name);
+      } else if (event.ph === 'X' && event.dur && /RunTask/.test(event.name)) {
+        work.set(key, (work.get(key) || 0) + event.dur / 1000);
+      }
+    }
+    let gpuMsPerSec = 0;
+    for (const [key, ms] of work) {
+      if (threads.get(key) === 'CrGpuMain') {
+        gpuMsPerSec = Math.round(ms / opt.secs);
+      }
+    }
     const self = new Map();
     const byId = new Map(profile.nodes.map(node => [node.id, node]));
     const step = profile.timeDeltas;
@@ -68,7 +90,7 @@ async page => {
     // `busy` is everything but idle; `native` is browser work outside scripts.
     const busy = share(total - idle);
     const native = share(self.get('(program)') || 0);
-    return {...frames, busy, native, hot};
+    return {...frames, busy, native, gpuMsPerSec, hot};
   };
 
   // 1. The title screen: the camera circles over the village, zoomed out.

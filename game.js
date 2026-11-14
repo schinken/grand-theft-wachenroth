@@ -418,17 +418,12 @@ const textures = {
   dump: tex('#8d867a', (g, r) =>
     dots(g, r, 700, ['#6f6a60', '#a59e90', '#b56a4a', '#c9c5b9', '#5a564e'], 2)
   ),
-  cem: tex('#467a34', (g, r) => {
-    dots(g, r, 400, ['#3e7029', '#52913a']);
-    for (let y = 6; y < 64; y += 16) {
-      for (let x = 4 + (y % 32 ? 8 : 0); x < 60; x += 16) {
-        g.fillStyle = '#5b4a3a';
-        g.fillRect(x, y + 4, 6, 8);
-        g.fillStyle = r() < 0.5 ? '#b9b9b4' : '#8f8f8a';
-        g.fillRect(x + 1, y, 4, 3);
-      }
-    }
-  }),
+  cem: lawn(
+    '#4f8a3a',
+    ['#467e33', '#5a9642', '#4b8436'],
+    ['#467c32', '#5a9440', '#417630'],
+    ['#356a27', '#68a24a']
+  ),
   constr: tex('#9a8662', (g, r) =>
     dots(g, r, 500, ['#8a7654', '#a8946e', '#7c6a4a'], 2)
   ),
@@ -627,11 +622,50 @@ const local = o => ctx.transform(o.ca, o.sa, -o.sa, o.ca, o.mx, o.my);
 
 const AREAS = MAP.areas;
 const FARM = [textures.farmA, textures.farmB, textures.farmC, textures.farmD];
+/**
+ * Lays out a cemetery: gravel walks along the long side, rows of graves
+ * between them, and one broad walk across the middle.
+ * @param {!Object} a The cemetery, already prepared by prepPoly().
+ */
+function layOutCemetery(a) {
+  const r = rng(77);
+  const world = (u, v) => [
+    a.mx + u * a.ca - v * a.sa,
+    a.my + u * a.sa + v * a.ca,
+  ];
+  a.walks = new Path2D();
+  a.mainWalk = new Path2D();
+  a.mainWalk.moveTo(...world(0, a.v0));
+  a.mainWalk.lineTo(...world(0, a.v1));
+  a.graves = [];
+  for (let v = a.v0 + 2.4; v < a.v1 - 2; v += 4.6) {
+    a.walks.moveTo(...world(a.u0, v + 2.3));
+    a.walks.lineTo(...world(a.u1, v + 2.3));
+    for (let u = a.u0 + 1.6; u < a.u1 - 1.2; u += 1.55) {
+      const [x, y] = world(u, v);
+      const corners = [
+        world(u - 0.7, v - 1.3),
+        world(u + 0.7, v - 1.3),
+        world(u + 0.7, v + 1.3),
+        world(u - 0.7, v + 1.3),
+      ];
+      const fits = corners.every(c => pip(c[0], c[1], a.p));
+      if (Math.abs(u) < 2 || !fits || r() < 0.12) {
+        continue; // the broad walk, the wall, or a plot nobody has taken yet
+      }
+      a.graves.push([x, y, (r() * 4) | 0, (r() * 5) | 0, (r() * 4) | 0]);
+    }
+  }
+}
+
 AREAS.forEach((a, i) => {
   prepPoly(a);
   a.fill =
     a.k === 'farm' ? FARM[i % 4] : a.k === 'pitch' ? null : textures[a.k];
   a.lpath = new Path2D(`M${a.lp.join(' ')}Z`);
+  if (a.k === 'cem') {
+    layOutCemetery(a);
+  }
   if (a.k !== 'park') {
     return;
   }
@@ -1264,7 +1298,7 @@ const treeGrid = grid();
       plant(a, 8, 1, 1.4, 0.2);
     }
     if (a.k === 'cem') {
-      plant(a, 18, 0.5, 1.8);
+      plant(a, 26, 0.3, 1.6);
     }
   }
   for (let i = 0; i < MAP.trees.length; i += 2) {
@@ -4326,6 +4360,53 @@ function drawPitch(g, a) {
   g.lineCap = 'round';
 }
 
+const GRAVE_BEDS = ['#4a3a2a', '#8f897d', '#2f6a2a', '#5a4632', '#3c7a30'];
+const GRAVE_STONES = ['#2b2b2e', '#8f8f8a', '#d9d6cc', '#6a5a4a'];
+const GRAVE_FLOWERS = ['#d83a3a', '#f2d23e', '#f4f4ef', '#c85aa8'];
+
+/**
+ * Paints the walks, graves and hedge of a cemetery.
+ * @param {!CanvasRenderingContext2D} g
+ * @param {!Object} a
+ */
+function paintCemetery(g, a) {
+  g.save();
+  g.clip(a.path); // the walks end at the hedge
+  g.lineCap = 'butt';
+  g.strokeStyle = textures.gravel;
+  g.lineWidth = 1.1;
+  g.stroke(a.walks);
+  g.lineWidth = 2.2;
+  g.stroke(a.mainWalk);
+  g.restore();
+  g.save();
+  g.transform(a.ca, a.sa, -a.sa, a.ca, 0, 0);
+  for (const [x, y, stone, bed, flower] of a.graves) {
+    // The same rotation for every grave, so only the position changes.
+    const u = x * a.ca + y * a.sa;
+    const v = y * a.ca - x * a.sa;
+    g.fillStyle = 'rgba(0,0,0,.25)';
+    g.fillRect(u - 0.38, v - 0.88, 1, 2.1);
+    g.fillStyle = '#b5b1a6';
+    g.fillRect(u - 0.5, v - 1, 1, 2.1);
+    g.fillStyle = GRAVE_BEDS[bed];
+    g.fillRect(u - 0.38, v - 0.62, 0.76, 1.6);
+    g.fillStyle = GRAVE_STONES[stone];
+    g.fillRect(u - 0.42, v - 1.08, 0.84, 0.36);
+    g.fillStyle = GRAVE_FLOWERS[flower];
+    g.fillRect(u - 0.22, v - 0.3, 0.24, 0.24);
+    g.fillRect(u + 0.06, v + 0.3, 0.24, 0.24);
+  }
+  g.restore();
+  g.lineJoin = 'round';
+  g.strokeStyle = '#2a5a22';
+  g.lineWidth = 1.5;
+  g.stroke(a.path);
+  g.strokeStyle = '#3b7d2e';
+  g.lineWidth = 0.8;
+  g.stroke(a.path);
+}
+
 /**
  * Paints land, roads, hedges and fences: everything on the ground that never
  * changes. Water is left as a hole, so the drifting water shows through.
@@ -4354,6 +4435,9 @@ function paintGround(g, x0, y0, x1, y1) {
       } // furrows run along the field
       else {
         g.fill(a.path);
+      }
+      if (a.k === 'cem') {
+        paintCemetery(g, a);
       }
       if (a.bays) {
         g.save();
