@@ -618,7 +618,6 @@ function prepPoly(o) {
     o.v1 = Math.max(o.v1, v);
   }
 }
-const local = o => ctx.transform(o.ca, o.sa, -o.sa, o.ca, o.mx, o.my);
 
 const AREAS = MAP.areas;
 const FARM = [textures.farmA, textures.farmB, textures.farmC, textures.farmD];
@@ -918,15 +917,71 @@ const WALLS = {
   o: ['#8a8d92'],
   t: ['#ece2c6'],
   x: ['#b9b9b2', '#a9a9a2'],
+  w: ['#e6dfcf'],
   d: ['#8a6a48', '#a07a50', '#6f7f5a', '#7a5a3c', '#9a8f7a'],
 };
+// Johann-Philipp-Ring is a new estate: the gardens are still bare earth, there
+// are no fences yet, every house has a paved drive down to the street, and
+// the roofs are dark hips with solar panels.
+const NEW_ESTATE = 'Johann-Philipp-Ring';
+const NEW_WALLS = ['#f2f1ec', '#e9e8e2', '#f4efe2'];
+
+// How the landmarks differ from ordinary houses: wall colour, roof texture,
+// roof shape, the plate behind the roof sign [background, letters], and the
+// colour of big gates on the street side.
+const LANDMARKS = {
+  firestation: {
+    wall: '#efe9da',
+    roof: 'tile4',
+    plate: ['#c8201c', '#ffffff'],
+    gates: '#c8201c',
+  },
+  townhall: {
+    wall: '#ecd9a0',
+    roof: 'tile4',
+    hip: true,
+    plate: ['#7a1f1f', '#f3e2a0'],
+  },
+  shop: {
+    wall: '#f4f4ef',
+    roof: 'flatLight',
+    flat: true,
+    plate: ['#f2d23e', '#1f4fa8'],
+  },
+  hq: {wall: '#f2f1ec', roof: 'slate', hip: true, pv: true},
+  murk: {plate: ['#60bfcc', '#ffffff']},
+  bakery: {wall: '#f0e2c0', plate: ['#b5622f', '#ffffff']},
+  works: {plate: ['#284d98', '#ffffff']},
+  clubhouse: {plate: ['#c8201c', '#ffffff']},
+  club: {wall: '#d9c9a4', roof: 'tile3'},
+  lavite: {wall: '#f1ead8', roof: 'tile2'},
+};
+
+/**
+ * The veil over a roof face: dark where it is turned away from the sun.
+ * @param {number} shadow How much the face is turned south-east, -1 to 1.
+ * @return {string}
+ */
+function roofTint(shadow) {
+  return shadow > 0
+    ? `rgba(0,0,0,${(0.3 * shadow).toFixed(2)})`
+    : `rgba(255,240,210,${(-0.18 * shadow).toFixed(2)})`;
+}
+
 /**
  * Splits a roof outline along its long axis into the two slopes of a gable.
+ * A hip roof slopes at the ends too, so its ridge stops short of the walls.
  * @param {!Building} b
  * @param {number} rise How far the ridge stands above the eaves, in metres.
+ * @param {boolean=} hip
  */
-function ridge(b, rise) {
+function ridge(b, rise, hip = false) {
   const mid = (b.v0 + b.v1) / 2;
+  const centre = (b.u0 + b.u1) / 2;
+  const inset = hip ? Math.min((b.u1 - b.u0) * 0.3, (b.v1 - b.v0) / 2) : 0;
+  // How much the end and the side of the building face the dark side
+  const along = b.ca * LIGHT[0] + b.sa * LIGHT[1];
+  const across = -b.sa * LIGHT[0] + b.ca * LIGHT[1];
   const lp = b.lp;
   const n = lp.length;
   b.halves = [[], []];
@@ -941,23 +996,155 @@ function ridge(b, rise) {
     }
     const t = da / (da - db);
     const x = lp[i] + (lp[j] - lp[i]) * t;
-    b.halves[0].push(x, mid, 1);
-    b.halves[1].push(x, mid, 1);
-    b.gables.push([k, lp[i], lp[i + 1], x, mid, lp[j], lp[j + 1]]);
+    const low = x < centre;
+    const rx = x + (low ? inset : -inset);
+    b.halves[0].push(rx, mid, 1);
+    b.halves[1].push(rx, mid, 1);
+    const tint = roofTint(low ? -along : along);
+    b.gables.push([k, lp[i], lp[i + 1], rx, mid, lp[j], lp[j + 1], tint]);
   }
   b.rh = rise;
-  // How much the first slope faces the dark side
-  const lit = -b.sa * LIGHT[0] + b.ca * LIGHT[1];
-  b.tint = [lit, -lit].map(v =>
-    v > 0
-      ? `rgba(0,0,0,${(0.3 * v).toFixed(2)})`
-      : `rgba(255,240,210,${(-0.18 * v).toFixed(2)})`
-  );
+  b.hip = hip;
+  b.tint = [roofTint(across), roofTint(-across)];
   const xs = b.gables.map(g => g[3]);
   b.rx0 = Math.min(...xs);
   b.rx1 = Math.max(...xs);
   b.ry = mid;
 }
+
+/**
+ * Paints a roof sign once; drawing text in every frame is slow.
+ * @param {string} text
+ * @param {?Array<string>} plate Background and letter colour, or null for
+ *     plain white letters.
+ * @return {!HTMLCanvasElement}
+ */
+function makeSign(text, plate) {
+  const size = 56;
+  const font = `${size}px Impact, Haettenschweiler, "Arial Narrow Bold", sans-serif`;
+  const probe = canvas(1, 1).getContext('2d');
+  probe.font = font;
+  const w = Math.ceil(
+    probe.measureText(text).width + size * (plate ? 0.9 : 0.4)
+  );
+  const h = Math.ceil(size * (plate ? 1.5 : 1.3));
+  const sign = canvas(w, h);
+  const g = sign.getContext('2d');
+  g.font = font;
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.lineJoin = 'round';
+  if (plate) {
+    g.fillStyle = '#0c0e11';
+    g.fillRect(0, 0, w, h);
+    g.fillStyle = plate[0];
+    g.fillRect(4, 4, w - 8, h - 8);
+    g.fillStyle = plate[1];
+    g.fillText(text, w / 2, h / 2 + 3);
+  } else {
+    g.lineWidth = size * 0.14;
+    g.strokeStyle = 'rgba(0,0,0,.75)';
+    g.strokeText(text, w / 2, h / 2 + 3);
+    g.fillStyle = '#fff';
+    g.fillText(text, w / 2, h / 2 + 3);
+  }
+  return sign;
+}
+
+/**
+ * Places windows on the walls, and a door or gates on the street side.
+ * @param {!Building} b
+ * @param {!Object} look The landmark's look, empty for ordinary houses.
+ */
+function addWindows(b, look) {
+  const k = b.k;
+  const hall = k === 'i' || k === 'm';
+  const lived = k === 'h' || k === 'c' || (k === 'y' && b.a < 250);
+  if (!(hall || lived) || b.h < 5) {
+    return;
+  }
+  // Rows of windows as shares of the wall height: [bottom, top].
+  if (hall) {
+    b.rows =
+      b.h > 8
+        ? [
+            [0.12, 0.4],
+            [0.62, 0.84],
+          ]
+        : [[0.5, 0.8]];
+  } else if (k === 'c') {
+    b.rows = [[0.28, 0.74]];
+  } else if (b.a < 70 || b.floors < 2) {
+    b.rows = [[0.3, 0.72]];
+  } else if (b.floors === 2) {
+    b.rows = [
+      [0.14, 0.4],
+      [0.58, 0.84],
+    ];
+  } else {
+    b.rows = [
+      [0.1, 0.27],
+      [0.4, 0.57],
+      [0.7, 0.87],
+    ];
+  }
+  const gap = hall ? 4.4 : k === 'c' ? 4.6 : 3;
+  const half = hall ? 1.5 : 0.55;
+  b.glass = hall ? 'rgba(40,50,64,.6)' : '#2b3b4d';
+  b.frame = !hall;
+  b.wins = [];
+  const p = b.p;
+  let front = -1;
+  let frontLen = 0;
+  let best = 1e9;
+  for (let i = 0, w = 0; i < p.length; i += 2, w++) {
+    const j = (i + 2) % p.length;
+    const len = Math.hypot(p[j] - p[i], p[j + 1] - p[i + 1]);
+    const count = Math.min(8, Math.floor((len - 0.8) / gap));
+    const list = [];
+    for (let c = 0; c < count; c++) {
+      list.push((c + 0.5) / count, half / len);
+    }
+    b.wins.push(list);
+    if (!b.rd || len < 2.6) {
+      continue;
+    }
+    const d = Math.hypot(
+      (p[i] + p[j]) / 2 - b.rd[0],
+      (p[i + 1] + p[j + 1]) / 2 - b.rd[1]
+    );
+    if (d < best) {
+      best = d;
+      front = w;
+      frontLen = len;
+    }
+  }
+  if (front < 0) {
+    return;
+  }
+  if (look.gates) {
+    // Big gates along the whole street side; they take the ground floor.
+    const count = Math.max(1, Math.floor(frontLen / 4.6));
+    b.doors = {
+      wall: front,
+      at: Array.from({length: count}, (v, c) => (c + 0.5) / count),
+      half: 1.75 / frontLen,
+      top: Math.min(0.62, 3.9 / b.h),
+      col: look.gates,
+      wide: true,
+    };
+  } else if (k === 'h') {
+    b.doors = {
+      wall: front,
+      at: [0.5],
+      half: 0.5 / frontLen,
+      top: Math.min(0.45, 2.15 / b.h),
+      col: '#5a3a22',
+      wide: false,
+    };
+  }
+}
+
 /**
  * Picks walls and a roof for a building and files it in the grid.
  * @param {!Building} b
@@ -965,7 +1152,15 @@ function ridge(b, rise) {
  */
 function prepBuilding(b, r) {
   prepPoly(b);
-  const base = pick2(WALLS[b.k] || WALLS.h, r);
+  const k = b.k;
+  const fresh = k === 'h' && !!b.rd && b.rd[2][6].n === NEW_ESTATE;
+  const look = b.look || LANDMARKS[b.poi] || {};
+  let base = pick2(WALLS[k] || WALLS.h, r);
+  if (look.wall) {
+    base = look.wall;
+  } else if (fresh) {
+    base = pick2(NEW_WALLS, r);
+  }
   const wide = b.v1 - b.v0;
   b.nx = [];
   b.ny = [];
@@ -981,22 +1176,15 @@ function prepBuilding(b, r) {
       shade(base, 0.78 - 0.22 * ((ey / l) * LIGHT[0] - (ex / l) * LIGHT[1]))
     );
   }
-  b.lpath = new Path2D();
-  for (let i = 0; i < b.lp.length; i += 2) {
-    if (i) {
-      b.lpath.lineTo(b.lp[i], b.lp[i + 1]);
-    } else {
-      b.lpath.moveTo(b.lp[i], b.lp[i + 1]);
-    }
-  }
-  b.lpath.closePath();
-  const k = b.k;
+  b.lpath = new Path2D(`M${b.lp.join(' ')}Z`);
   const big = b.a > 900;
   const v = r();
   let gable = b.p.length <= 28 && wide > 2.5;
   if (k === 's' || k === 't') {
-    b.roof = k === 's' ? textures.concrete : textures.slate;
-    b.apex = k === 's' ? 2 : 9;
+    b.apex = k === 's' ? 2 : b.a < 20 ? 2.6 : 9;
+    gable = false;
+  } else if (k === 'w') {
+    b.roof = textures.metalRed;
     gable = false;
   } else if (k === 'x') {
     b.roof = textures.slab;
@@ -1045,37 +1233,73 @@ function prepBuilding(b, r) {
             textures.slate,
           ][(v * 6) | 0];
   }
+  if (fresh) {
+    b.roof = textures.slate;
+  }
+  if (look.roof) {
+    b.roof = textures[look.roof];
+  }
+  if (look.flat) {
+    gable = false;
+  }
   const metal = b.roof === textures.metal || b.roof === textures.metalRed;
   if (gable) {
-    ridge(
-      b,
+    const rise =
       k === 'c'
         ? clamp(wide * 0.45, 2, 6)
-        : clamp(wide * (metal ? 0.14 : 0.27), 0.7, 3.4)
-    );
+        : clamp(wide * (metal ? 0.14 : 0.27), 0.7, 3.4);
+    ridge(b, rise, fresh || !!look.hip);
   }
   if (b.halves && b.gables.length < 2) {
     b.halves = null;
   }
-  if (b.halves && k === 'h' && b.a > 60) {
+  if (b.halves && k === 'h' && b.a > 60 && !fresh) {
     b.chim = [
       lerp(b.rx0, b.rx1, 0.25 + r() * 0.5),
       b.ry + (r() < 0.5 ? -1 : 1),
     ];
   }
-  if (b.halves && k === 'h' && b.a > 80 && r() < 0.22) {
+  // Solar panels on one slope: on most new houses, on some old ones.
+  const sunny = look.pv || r() < (fresh ? 0.8 : 0.22);
+  if (b.halves && k === 'h' && b.a > 80 && sunny) {
     b.pv = r() < 0.5 ? 0 : 1;
-  } // solar panels on one slope
-  if (!b.halves && !b.apex && b.a > 400 && k !== 'o')
-  // vents and air conditioning on flat roofs
-  {
-    b.units = Array.from({length: Math.min(6, (b.a / 500) | 0) + 1}, () => [
-      lerp(b.u0, b.u1, 0.15 + r() * 0.7),
-      lerp(b.v0, b.v1, 0.2 + r() * 0.6),
-      1.5 + r() * 2,
-    ]);
+  }
+  if (b.apex) {
+    // Spires and silo lids are plain: one colour per face, by how the sun
+    // falls on it.
+    const lid = k === 's' ? '#b4b4ae' : '#4a4e57';
+    b.faces = b.nx.map((nx, i) =>
+      shade(lid, 0.9 - 0.3 * (nx * LIGHT[0] + b.ny[i] * LIGHT[1]))
+    );
+  } else if (!b.halves) {
+    // A flat roof has a rim, and bigger ones vents and air conditioning.
+    const rim = [];
+    for (let i = 0; i < b.lp.length; i += 2) {
+      const d = Math.hypot(b.lp[i], b.lp[i + 1]) || 1;
+      const pull = Math.min(0.7, d * 0.3) / d;
+      rim.push(b.lp[i] * (1 - pull), b.lp[i + 1] * (1 - pull));
+    }
+    b.rim = new Path2D(`M${rim.join(' ')}Z`);
+    if (b.a > 400 && k !== 'o') {
+      b.units = Array.from({length: Math.min(6, (b.a / 500) | 0) + 1}, () => [
+        lerp(b.u0, b.u1, 0.15 + r() * 0.7),
+        lerp(b.v0, b.v1, 0.2 + r() * 0.6),
+        1.5 + r() * 2,
+      ]);
+    }
   }
   b.floors = clamp(Math.round(b.h / 3), 1, 3);
+  addWindows(b, look);
+  if (b.label) {
+    b.sign = makeSign(b.label, look.plate || null);
+    const aspect = b.sign.width / b.sign.height;
+    b.signH = clamp(
+      Math.min((b.u1 - b.u0) / (aspect * 1.15), (b.v1 - b.v0) * 0.42),
+      2,
+      9
+    );
+    b.signW = b.signH * aspect;
+  }
   if (k !== 'o') {
     gridAdd(buildingGrid, b, b.x0 - 3, b.y0 - 3, b.x1 + 3, b.y1 + 3);
   }
@@ -1143,9 +1367,9 @@ const pick2 = (a, r) => a[(r() * a.length) | 0];
   }
   // The street a house stands on: [x, y of the closest point, the stretch of
   // road, the distance], or null when no village street is within 32 m.
-  const streetOf = (cx, cy) => {
+  const streetOf = (cx, cy, reach = 32) => {
     let found = null;
-    let far = 32;
+    let far = reach;
     for (const sg of SEGS) {
       if (
         Math.abs(sg[0] - cx) > 160 ||
@@ -1187,6 +1411,7 @@ const pick2 = (a, r) => a[(r() * a.length) | 0];
       h: 7,
       a: 130,
       k: 'h',
+      look: {flat: true, roof: 'solar', wall: '#e9e8e2'},
     });
     boxes.push([cx - 9, cy - 9, cx + 9, cy + 9]);
   }
@@ -1236,6 +1461,34 @@ const pick2 = (a, r) => a[(r() * a.length) | 0];
       'd'
     );
   }
+  // Which building is which landmark: the one the place stands in, or the
+  // nearest one.
+  const named = new Set([...Object.keys(SIGNS), ...Object.keys(LANDMARKS)]);
+  for (const key of named) {
+    const [x, y] = MAP.pois[key];
+    let best = null;
+    let bestAt = null;
+    let bd = 60;
+    for (const b of BUILD) {
+      if (!'himyc'.includes(b.k)) {
+        continue;
+      }
+      const n = b.p.length / 2;
+      const cx = b.p.reduce((sum, v, i) => (i % 2 ? sum : sum + v), 0) / n;
+      const cy = b.p.reduce((sum, v, i) => (i % 2 ? sum + v : sum), 0) / n;
+      const d = pip(x, y, b.p) ? 0 : Math.hypot(cx - x, cy - y);
+      if (d < bd) {
+        bd = d;
+        best = b;
+        bestAt = [cx, cy];
+      }
+    }
+    if (best) {
+      best.poi = key;
+      best.label = SIGNS[key];
+      best.rd = best.rd || streetOf(bestAt[0], bestAt[1], 70);
+    }
+  }
 }
 {
   const r = rng(42);
@@ -1261,8 +1514,36 @@ const pick2 = (a, r) => a[(r() * a.length) | 0];
     BUILD.push(t);
     prepBuilding(t, r);
   }
+  // A square tower on a building, given in the building's own frame.
+  const tower = (b, u, v, half, h, k) => {
+    const x = b.mx + u * b.ca - v * b.sa;
+    const y = b.my + u * b.sa + v * b.ca;
+    const q = [];
+    for (const [du, dv] of [
+      [-half, -half],
+      [half, -half],
+      [half, half],
+      [-half, half],
+    ]) {
+      q.push(x + du * b.ca - dv * b.sa, y + du * b.sa + dv * b.ca);
+    }
+    const t = {p: q, h, a: 4 * half * half, k};
+    BUILD.push(t);
+    prepBuilding(t, r);
+  };
+  for (const b of [...BUILD]) {
+    if (b.poi === 'firestation' && b.rd) {
+      // The hose tower stands at the back, away from the street.
+      const street = (b.rd[1] - b.my) * b.ca - (b.rd[0] - b.mx) * b.sa;
+      tower(b, b.u1 - 2.2, street > 0 ? b.v0 + 2.2 : b.v1 - 2.2, 1.8, 14, 'w');
+    }
+    if (b.poi === 'townhall' && b.halves) {
+      // The little bell turret on the ridge
+      tower(b, (b.rx0 + b.rx1) / 2, b.ry, 1.2, b.h + b.rh + 0.3, 't');
+    }
+  }
 }
-const SOLID = BUILD.filter(b => b.k !== 'o');
+const OPEN_ROOFS = BUILD.filter(b => b.k === 'o');
 
 const TREES = [];
 const treeGrid = grid();
@@ -1349,10 +1630,6 @@ for (const h of MAP.hedges) {
 
 const blocked = (x, y, r) =>
   at(buildingGrid, x, y).some(b => pushOut(x, y, r, b.p));
-
-// Johann-Philipp-Ring is a new estate: the gardens are still bare earth, there
-// are no fences yet, and every house has a paved drive down to the street.
-const NEW_ESTATE = 'Johann-Philipp-Ring';
 
 // Street furniture. Fences are painted on; lanterns and hydrants give way when
 // a car hits them.
@@ -1525,24 +1802,6 @@ for (const k of Object.keys(MAP.pois)) {
     key: k,
     name: PLACES[k] || k,
   });
-}
-
-// Signs on the roofs of the big landmarks.
-for (const [key, text] of Object.entries(SIGNS)) {
-  const [x, y] = MAP.pois[key];
-  let best = null;
-  let bd = 60;
-  for (const b of SOLID) {
-    const d = pip(x, y, b.p) ? 0 : Math.hypot(b.mx - x, b.my - y);
-    if (d < bd && b.k !== 't') {
-      bd = d;
-      best = b;
-    }
-  }
-  if (best) {
-    best.label = text;
-    best.poi = key;
-  }
 }
 
 const NEW_HOUSES = BUILD.filter(b => b.rd && b.rd[2][6].n === NEW_ESTATE);
@@ -4894,14 +5153,21 @@ function drawGround(x0, y0, x1, y1) {
 /**
  * @param {!Array<!Building>} builds
  * @param {!Array<!Object>} trees
+ * @param {number} x0 The view, in metres.
+ * @param {number} y0
+ * @param {number} x1
+ * @param {number} y1
  */
-function drawShadows(builds, trees) {
+function drawShadows(builds, trees, x0, y0, x1, y1) {
   ctx.fillStyle = 'rgba(0,0,0,.28)';
   for (const b of builds) {
-    ctx.save();
-    ctx.translate(b.h * 0.35, b.h * 0.35);
+    const o = b.h * 0.35;
+    if (b.x1 + o < x0 || b.x0 > x1 || b.y1 + o < y0 || b.y0 > y1) {
+      continue;
+    }
+    ctx.translate(o, o);
     ctx.fill(b.path);
-    ctx.restore();
+    ctx.translate(-o, -o);
   }
   ctx.beginPath();
   for (const t of trees) {
@@ -4911,6 +5177,385 @@ function drawShadows(builds, trees) {
   ctx.fill();
 }
 
+const FRAME = '#f1ecde';
+const byDistance = (a, b) => b.d - a.d;
+// Scratch space for one building, so drawing allocates nothing per frame.
+const visibleWalls = [];
+const rowLo = [];
+const rowHi = [];
+const PATTERN_HOME = new DOMMatrix().scaleSelf(1 / PX_PER_M);
+const pinned = new DOMMatrix();
+// Three points of a roof face and where they appear: x, y, then seen x, y.
+const face = new Float64Array(12);
+
+/**
+ * Pins a roof texture to the sloping face described in `face`, so the tiles
+ * lean with the roof instead of sliding across it when the camera moves.
+ * @param {!CanvasPattern} pattern
+ * @param {boolean} turned Whether the rows of tiles run across the building,
+ *     as on the end faces of a hip roof.
+ */
+function pinPattern(pattern, turned) {
+  const ux = face[4] - face[0];
+  const uy = face[5] - face[1];
+  const vx = face[8] - face[0];
+  const vy = face[9] - face[1];
+  const det = ux * vy - uy * vx;
+  if (Math.abs(det) < 1e-6) {
+    pattern.setTransform(PATTERN_HOME);
+    return;
+  }
+  const sx = face[6] - face[2];
+  const sy = face[7] - face[3];
+  const tx = face[10] - face[2];
+  const ty = face[11] - face[3];
+  // The map from the roof face to the screen: x' = a x + c y + e, and so on.
+  const a = (sx * vy - tx * uy) / det;
+  const c = (tx * ux - sx * vx) / det;
+  const b = (sy * vy - ty * uy) / det;
+  const d = (ty * ux - sy * vx) / det;
+  pinned.a = (turned ? c : a) / PX_PER_M;
+  pinned.b = (turned ? d : b) / PX_PER_M;
+  pinned.c = (turned ? -a : c) / PX_PER_M;
+  pinned.d = (turned ? -b : d) / PX_PER_M;
+  pinned.e = face[2] - (a * face[0] + c * face[1]);
+  pinned.f = face[3] - (b * face[0] + d * face[1]);
+  pattern.setTransform(pinned);
+}
+
+/**
+ * Notes one corner of a roof face for pinPattern().
+ * @param {number} i Which of the three corners.
+ * @param {number} x The corner, in the building's frame.
+ * @param {number} y
+ * @param {number} s How far the perspective pushes it out.
+ * @param {number} lx The camera, in the building's frame.
+ * @param {number} ly
+ */
+function corner(i, x, y, s, lx, ly) {
+  face[i * 4] = x;
+  face[i * 4 + 1] = y;
+  face[i * 4 + 2] = x * s + lx * (1 - s);
+  face[i * 4 + 3] = y * s + ly * (1 - s);
+}
+
+/**
+ * The walls that face the camera, with plinth, windows and doors.
+ * @param {!Building} b
+ * @param {number} cx Camera centre, in metres.
+ * @param {number} cy
+ * @param {number} hc Camera height, in metres.
+ * @param {number} h Wall height.
+ * @param {number} s How far the perspective pushes the eaves out.
+ */
+function drawWalls(b, cx, cy, hc, h, s) {
+  const p = b.p;
+  const n = p.length;
+  const ox = cx * (1 - s);
+  const oy = cy * (1 - s);
+  if (b.k === 'o') {
+    // An open roof stands on posts.
+    ctx.strokeStyle = '#6c6f76';
+    ctx.lineWidth = 0.3;
+    ctx.beginPath();
+    for (let i = 0; i < n; i += 2) {
+      ctx.moveTo(p[i], p[i + 1]);
+      ctx.lineTo(p[i] * s + ox, p[i + 1] * s + oy);
+    }
+    ctx.stroke();
+    return;
+  }
+  visibleWalls.length = 0;
+  ctx.lineWidth = 0.15;
+  for (let i = 0, k = 0; i < n; i += 2, k++) {
+    const ax = p[i];
+    const ay = p[i + 1];
+    if ((cx - ax) * b.nx[k] + (cy - ay) * b.ny[k] <= 0) {
+      continue; // faces away
+    }
+    const j = (i + 2) % n;
+    const bx = p[j];
+    const by = p[j + 1];
+    ctx.fillStyle = ctx.strokeStyle = b.wall[k];
+    ctx.beginPath();
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(bx, by);
+    ctx.lineTo(bx * s + ox, by * s + oy);
+    ctx.lineTo(ax * s + ox, ay * s + oy);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    visibleWalls.push(i);
+  }
+  if (!visibleWalls.length) {
+    return;
+  }
+  // The plinth of all walls in one stroke
+  ctx.lineCap = 'butt';
+  ctx.strokeStyle = 'rgba(0,0,0,.25)';
+  ctx.lineWidth = 0.32;
+  ctx.beginPath();
+  for (const i of visibleWalls) {
+    const j = (i + 2) % n;
+    ctx.moveTo(p[i], p[i + 1]);
+    ctx.lineTo(p[j], p[j + 1]);
+  }
+  ctx.stroke();
+  const doors = b.doors;
+  if (b.rows) {
+    // Every window is a little quad on the wall; all of them go into one path.
+    const rows = b.rows;
+    for (let f = 0; f < rows.length; f++) {
+      rowLo[f] = hc / (hc - h * rows[f][0]);
+      rowHi[f] = hc / (hc - h * rows[f][1]);
+    }
+    let any = false;
+    ctx.beginPath();
+    for (const i of visibleWalls) {
+      const list = b.wins[i >> 1];
+      const j = (i + 2) % n;
+      const ax = p[i];
+      const ay = p[i + 1];
+      const ex = p[j] - ax;
+      const ey = p[j + 1] - ay;
+      const away = Math.hypot(ax + ex / 2 - cx, ay + ey / 2 - cy);
+      if (!list.length || (s - 1) * away < 0.8) {
+        continue; // seen too steeply to show windows
+      }
+      const portal = doors && doors.wall === i >> 1 ? doors : null;
+      for (let f = 0; f < rows.length; f++) {
+        if (f === 0 && portal && portal.wide) {
+          continue;
+        }
+        const lo = rowLo[f];
+        const hi = rowHi[f];
+        const lox = cx * (1 - lo);
+        const loy = cy * (1 - lo);
+        const hix = cx * (1 - hi);
+        const hiy = cy * (1 - hi);
+        for (let w = 0; w < list.length; w += 2) {
+          const t = list[w];
+          const half = list[w + 1];
+          if (f === 0 && portal && Math.abs(t - 0.5) < half + portal.half) {
+            continue; // the door is here
+          }
+          const x0 = ax + ex * (t - half);
+          const y0 = ay + ey * (t - half);
+          const x1 = ax + ex * (t + half);
+          const y1 = ay + ey * (t + half);
+          ctx.moveTo(x0 * lo + lox, y0 * lo + loy);
+          ctx.lineTo(x1 * lo + lox, y1 * lo + loy);
+          ctx.lineTo(x1 * hi + hix, y1 * hi + hiy);
+          ctx.lineTo(x0 * hi + hix, y0 * hi + hiy);
+          ctx.closePath();
+          any = true;
+        }
+      }
+    }
+    if (any) {
+      ctx.fillStyle = b.glass;
+      ctx.fill();
+      if (b.frame) {
+        ctx.strokeStyle = FRAME;
+        ctx.lineWidth = 0.14;
+        ctx.stroke();
+      }
+    }
+  }
+  if (doors && visibleWalls.includes(doors.wall * 2)) {
+    const i = doors.wall * 2;
+    const j = (i + 2) % n;
+    const ax = p[i];
+    const ay = p[i + 1];
+    const ex = p[j] - ax;
+    const ey = p[j + 1] - ay;
+    const hi = hc / (hc - h * doors.top);
+    const hix = cx * (1 - hi);
+    const hiy = cy * (1 - hi);
+    ctx.beginPath();
+    for (const t of doors.at) {
+      const x0 = ax + ex * (t - doors.half);
+      const y0 = ay + ey * (t - doors.half);
+      const x1 = ax + ex * (t + doors.half);
+      const y1 = ay + ey * (t + doors.half);
+      ctx.moveTo(x0, y0);
+      ctx.lineTo(x1, y1);
+      ctx.lineTo(x1 * hi + hix, y1 * hi + hiy);
+      ctx.lineTo(x0 * hi + hix, y0 * hi + hiy);
+      ctx.closePath();
+    }
+    ctx.fillStyle = doors.col;
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,.45)';
+    ctx.lineWidth = 0.12;
+    ctx.stroke();
+  }
+  ctx.lineCap = 'round';
+}
+
+/**
+ * The roof, in the building's own frame: x runs along the long side.
+ * @param {!Building} b
+ * @param {number} lx The camera, in the building's frame.
+ * @param {number} ly
+ * @param {number} s How far the perspective pushes the eaves out.
+ * @param {number} s2 The same for the ridge or the tip.
+ */
+function drawRoof(b, lx, ly, s, s2) {
+  const k1 = 1 - s;
+  const k2 = 1 - s2;
+  ctx.strokeStyle = 'rgba(0,0,0,.5)';
+  ctx.lineWidth = 0.3;
+  if (b.halves) {
+    for (const g of b.gables) {
+      // The triangle under each end of the ridge: wall on a gable, roof on a
+      // hip.
+      ctx.beginPath();
+      ctx.moveTo(g[1] * s + lx * k1, g[2] * s + ly * k1);
+      ctx.lineTo(g[3] * s2 + lx * k2, g[4] * s2 + ly * k2);
+      ctx.lineTo(g[5] * s + lx * k1, g[6] * s + ly * k1);
+      ctx.closePath();
+      if (b.hip) {
+        corner(0, g[1], g[2], s, lx, ly);
+        corner(1, g[5], g[6], s, lx, ly);
+        corner(2, g[3], g[4], s2, lx, ly);
+        pinPattern(b.roof, true);
+        ctx.fillStyle = b.roof;
+        ctx.fill();
+        ctx.fillStyle = g[7];
+        ctx.fill();
+        ctx.stroke();
+      } else {
+        ctx.fillStyle = b.wall[g[0]];
+        ctx.fill();
+      }
+    }
+    const span = (b.rx0 + b.rx1) / 2;
+    for (let n = 0; n < 2; n++) {
+      const hp = b.halves[n];
+      ctx.beginPath();
+      for (let i = 0; i < hp.length; i += 3) {
+        const ss = hp[i + 2] ? s2 : s;
+        const x = hp[i] * ss + lx * (1 - ss);
+        const y = hp[i + 1] * ss + ly * (1 - ss);
+        if (i) {
+          ctx.lineTo(x, y);
+        } else {
+          ctx.moveTo(x, y);
+        }
+      }
+      ctx.closePath();
+      const eaves = n ? b.v0 : b.v1;
+      corner(0, b.u0, b.ry, s2, lx, ly);
+      corner(1, b.u1, b.ry, s2, lx, ly);
+      corner(2, span, eaves, s, lx, ly);
+      pinPattern(b.roof, false);
+      ctx.fillStyle = b.roof;
+      ctx.fill();
+      ctx.fillStyle = b.tint[n];
+      ctx.fill();
+      ctx.stroke();
+      if (b.pv === n) {
+        // Solar panels lie on the slope, so they use the same map as its
+        // tiles.
+        const m = pinned;
+        const u0 = lerp(b.rx0, b.rx1, 0.12);
+        const u1 = lerp(b.rx0, b.rx1, 0.88);
+        const v0 = lerp(b.ry, eaves, 0.2);
+        const v1 = lerp(b.ry, eaves, 0.82);
+        const q = PX_PER_M;
+        ctx.beginPath();
+        ctx.moveTo(
+          (m.a * u0 + m.c * v0) * q + m.e,
+          (m.b * u0 + m.d * v0) * q + m.f
+        );
+        ctx.lineTo(
+          (m.a * u1 + m.c * v0) * q + m.e,
+          (m.b * u1 + m.d * v0) * q + m.f
+        );
+        ctx.lineTo(
+          (m.a * u1 + m.c * v1) * q + m.e,
+          (m.b * u1 + m.d * v1) * q + m.f
+        );
+        ctx.lineTo(
+          (m.a * u0 + m.c * v1) * q + m.e,
+          (m.b * u0 + m.d * v1) * q + m.f
+        );
+        ctx.closePath();
+        ctx.fillStyle = '#1b2a47';
+        ctx.fill();
+        ctx.strokeStyle = '#4a6a9c';
+        ctx.lineWidth = 0.14;
+        ctx.stroke();
+        ctx.strokeStyle = 'rgba(0,0,0,.5)';
+        ctx.lineWidth = 0.3;
+      }
+    }
+    b.roof.setTransform(PATTERN_HOME);
+    ctx.strokeStyle = 'rgba(255,228,200,.4)';
+    ctx.lineWidth = 0.32; // ridge tiles
+    ctx.beginPath();
+    ctx.moveTo(b.rx0 * s2 + lx * k2, b.ry * s2 + ly * k2);
+    ctx.lineTo(b.rx1 * s2 + lx * k2, b.ry * s2 + ly * k2);
+    ctx.stroke();
+    if (b.chim) {
+      const x = b.chim[0] * s2 + lx * k2;
+      const y = b.chim[1] * s2 + ly * k2;
+      ctx.fillStyle = '#5a2c22';
+      ctx.fillRect(x - 0.45, y - 0.45, 0.9, 0.9);
+      ctx.fillStyle = '#1c1c1c';
+      ctx.fillRect(x - 0.2, y - 0.2, 0.4, 0.4);
+    }
+    if (b.sign) {
+      ctx.transform(s2, 0, 0, s2, lx * k2, ly * k2);
+    }
+  } else if (b.apex) {
+    // Spires and silo lids: every wall gets a triangle up to the tip.
+    const lp = b.lp;
+    for (let i = 0, k = 0; i < lp.length; i += 2, k++) {
+      const j = (i + 2) % lp.length;
+      ctx.beginPath();
+      ctx.moveTo(lp[i] * s + lx * k1, lp[i + 1] * s + ly * k1);
+      ctx.lineTo(lp[j] * s + lx * k1, lp[j + 1] * s + ly * k1);
+      ctx.lineTo(lx * k2, ly * k2);
+      ctx.closePath();
+      ctx.fillStyle = b.faces[k];
+      ctx.fill();
+    }
+    if (b.k === 't') {
+      ctx.fillStyle = '#e0b21c';
+      ctx.fillRect(lx * k2 - 0.35, ly * k2 - 0.35, 0.7, 0.7);
+    }
+  } else {
+    // A flat roof only grows with the perspective, so the canvas can do it.
+    ctx.transform(s, 0, 0, s, lx * k1, ly * k1);
+    ctx.fillStyle = b.roof;
+    ctx.fill(b.lpath);
+    ctx.lineWidth = 0.4;
+    ctx.stroke(b.lpath);
+    if (b.k !== 'o' && b.a > 30) {
+      ctx.strokeStyle = 'rgba(255,255,255,.2)';
+      ctx.lineWidth = 0.3;
+      ctx.stroke(b.rim);
+    }
+    if (b.units) {
+      for (const [ux, uy, us] of b.units) {
+        ctx.fillStyle = 'rgba(0,0,0,.3)';
+        ctx.fillRect(ux + 0.4, uy + 0.4, us, us * 0.7);
+        ctx.fillStyle = '#c9cdd3';
+        ctx.fillRect(ux, uy, us, us * 0.7);
+        ctx.fillStyle = '#7d828a';
+        ctx.fillRect(ux + us * 0.15, uy + us * 0.12, us * 0.7, us * 0.12);
+      }
+    }
+  }
+  if (b.sign) {
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(b.sign, -b.signW / 2, -b.signH / 2, b.signW, b.signH);
+    ctx.imageSmoothingEnabled = false;
+  }
+}
+
 /**
  * Buildings lean away from the screen centre, like looking straight down from a
  * helicopter.
@@ -4918,228 +5563,47 @@ function drawShadows(builds, trees) {
  * @param {number} cx Camera centre, in metres.
  * @param {number} cy
  * @param {number} hc Camera height, in metres.
+ * @param {number} x0 The view, in metres.
+ * @param {number} y0
+ * @param {number} x1
+ * @param {number} y1
  */
-function drawBuildings(builds, cx, cy, hc) {
+function drawBuildings(builds, cx, cy, hc, x0, y0, x1, y1) {
+  const base = ctx.getTransform();
+  const z = base.a;
   for (const b of builds) {
     b.d = (b.mx - cx) ** 2 + (b.my - cy) ** 2;
   }
-  builds.sort((a, b) => b.d - a.d);
+  builds.sort(byDistance);
   for (const b of builds) {
     const h = Math.min(b.h, hc * 0.5);
-    const s = hc / (hc - h);
-    const ox = cx * (1 - s);
-    const oy = cy * (1 - s);
-    const p = b.p;
-    for (let i = 0, k = 0; i < p.length; i += 2, k++) {
-      const ax = p[i];
-      const ay = p[i + 1];
-      if (b.k === 'o') {
-        // an open roof stands on posts
-        ctx.strokeStyle = '#6c6f76';
-        ctx.lineWidth = 0.3;
-        ctx.beginPath();
-        ctx.moveTo(ax, ay);
-        ctx.lineTo(ax * s + ox, ay * s + oy);
-        ctx.stroke();
-        continue;
-      }
-      if ((cx - ax) * b.nx[k] + (cy - ay) * b.ny[k] <= 0) {
-        continue;
-      } // faces away
-      const j = (i + 2) % p.length;
-      const bx = p[j];
-      const by = p[j + 1];
-      ctx.fillStyle = ctx.strokeStyle = b.wall[k];
-      ctx.lineWidth = 0.15;
-      ctx.beginPath();
-      ctx.moveTo(ax, ay);
-      ctx.lineTo(bx, by);
-      ctx.lineTo(bx * s + ox, by * s + oy);
-      ctx.lineTo(ax * s + ox, ay * s + oy);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-      ctx.strokeStyle = 'rgba(0,0,0,.25)';
-      ctx.lineWidth = 0.32; // the plinth
-      ctx.beginPath();
-      ctx.moveTo(ax, ay);
-      ctx.lineTo(bx, by);
-      ctx.stroke();
-      // a row of windows on every floor: pale frames, dark glass
-      const tall = (s - 1) * Math.hypot((ax + bx) / 2 - cx, (ay + by) / 2 - cy);
-      if (tall < 0.8 || b.h < 5 || b.k === 's') {
-        continue;
-      }
-      const hall = b.k === 'i' || b.k === 'm';
-      const pane = (tall * 0.34) / b.floors;
-      ctx.lineCap = 'butt';
-      for (let f = 0; f < b.floors; f++) {
-        const sm = 1 + ((s - 1) * (f + 0.58)) / b.floors;
-        const om = 1 - sm;
-        ctx.beginPath();
-        ctx.moveTo(ax * sm + cx * om, ay * sm + cy * om);
-        ctx.lineTo(bx * sm + cx * om, by * sm + cy * om);
-        if (!hall) {
-          ctx.setLineDash([1.34, 1.26]);
-          ctx.lineDashOffset = 0.12;
-          ctx.strokeStyle = 'rgba(250,246,232,.85)';
-          ctx.lineWidth = pane * 1.5;
-          ctx.stroke();
-        }
-        ctx.setLineDash(hall ? [2.6, 1.2] : [1.1, 1.5]);
-        ctx.lineDashOffset = 0;
-        ctx.strokeStyle = hall ? 'rgba(40,50,64,.5)' : 'rgba(30,36,48,.85)';
-        ctx.lineWidth = pane;
-        ctx.stroke();
-      }
-      ctx.setLineDash([]);
-      ctx.lineCap = 'round';
-    }
-    ctx.save();
-    local(b);
-    const lx = (cx - b.mx) * b.ca + (cy - b.my) * b.sa;
-    // The camera in the roof's own frame
-    const ly = (cy - b.my) * b.ca - (cx - b.mx) * b.sa;
-    ctx.strokeStyle = 'rgba(0,0,0,.5)';
-    ctx.lineWidth = 0.3;
     const top = Math.min(h + (b.rh || b.apex || 0), hc * 0.62);
+    const s = hc / (hc - h);
     const s2 = hc / (hc - top);
-    const k1 = 1 - s;
-    const k2 = 1 - s2;
-    if (b.halves) {
-      for (const g of b.gables) {
-        // the triangles under the ridge
-        ctx.fillStyle = b.wall[g[0]];
-        ctx.beginPath();
-        ctx.moveTo(g[1] * s + lx * k1, g[2] * s + ly * k1);
-        ctx.lineTo(g[3] * s2 + lx * k2, g[4] * s2 + ly * k2);
-        ctx.lineTo(g[5] * s + lx * k1, g[6] * s + ly * k1);
-        ctx.fill();
-      }
-      for (let n = 0; n < 2; n++) {
-        const hp = b.halves[n];
-        ctx.beginPath();
-        for (let i = 0; i < hp.length; i += 3) {
-          const ss = hp[i + 2] ? s2 : s;
-          const x = hp[i] * ss + lx * (1 - ss);
-          const y = hp[i + 1] * ss + ly * (1 - ss);
-          if (i) {
-            ctx.lineTo(x, y);
-          } else {
-            ctx.moveTo(x, y);
-          }
-        }
-        ctx.closePath();
-        ctx.fillStyle = b.roof;
-        ctx.fill();
-        ctx.fillStyle = b.tint[n];
-        ctx.fill();
-        ctx.stroke();
-      }
-      ctx.strokeStyle = 'rgba(255,228,200,.4)';
-      ctx.lineWidth = 0.32; // ridge tiles
-      ctx.beginPath();
-      ctx.moveTo(b.rx0 * s2 + lx * k2, b.ry * s2 + ly * k2);
-      ctx.lineTo(b.rx1 * s2 + lx * k2, b.ry * s2 + ly * k2);
-      ctx.stroke();
-      const sm = (s + s2) / 2;
-      const km = 1 - sm;
-      if (b.pv != null) {
-        // solar panels
-        const dir = b.pv ? -1 : 1;
-        const half = (b.v1 - b.v0) / 2;
-        const len = (b.rx1 - b.rx0) * 0.62;
-        const x = (b.rx0 + b.rx1) / 2 - len / 2;
-        ctx.fillStyle = '#1d2c4d';
-        ctx.fillRect(
-          x * sm + lx * km,
-          (b.ry + dir * half * (dir > 0 ? 0.22 : 0.78)) * sm + ly * km,
-          len * sm,
-          half * 0.56 * sm
-        );
-      }
-      if (b.chim) {
-        ctx.fillStyle = '#5a2c22';
-        ctx.fillRect(
-          b.chim[0] * s2 + lx * k2 - 0.45,
-          b.chim[1] * s2 + ly * k2 - 0.45,
-          0.9,
-          0.9
-        );
-        ctx.fillStyle = '#1c1c1c';
-        ctx.fillRect(
-          b.chim[0] * s2 + lx * k2 - 0.2,
-          b.chim[1] * s2 + ly * k2 - 0.2,
-          0.4,
-          0.4
-        );
-      }
-    } else if (b.apex) {
-      // spires and silo lids: every wall gets a triangle up to the tip
-      const lp = b.lp;
-      for (let i = 0, k = 0; i < lp.length; i += 2, k++) {
-        const j = (i + 2) % lp.length;
-        ctx.beginPath();
-        ctx.moveTo(lp[i] * s + lx * k1, lp[i + 1] * s + ly * k1);
-        ctx.lineTo(lp[j] * s + lx * k1, lp[j + 1] * s + ly * k1);
-        ctx.lineTo(lx * k2, ly * k2);
-        ctx.closePath();
-        ctx.fillStyle = b.roof;
-        ctx.fill();
-        ctx.fillStyle = `rgba(0,0,0,${(0.25 + 0.25 * (b.nx[k] * LIGHT[0] + b.ny[k] * LIGHT[1])).toFixed(2)})`;
-        ctx.fill();
-      }
-      if (b.k === 't') {
-        ctx.fillStyle = '#e0b21c';
-        ctx.fillRect(lx * k2 - 0.35, ly * k2 - 0.35, 0.7, 0.7);
-      }
-    } else {
-      ctx.transform(s, 0, 0, s, lx * k1, ly * k1);
-      ctx.fillStyle = b.roof;
-      ctx.fill(b.lpath);
-      ctx.lineWidth = 0.4;
-      ctx.stroke(b.lpath);
-      if (b.k !== 'o' && b.a > 30) {
-        ctx.strokeStyle = 'rgba(255,255,255,.16)';
-        ctx.lineWidth = 0.25;
-        ctx.save();
-        ctx.clip(b.lpath);
-        ctx.lineWidth = 1.6;
-        ctx.stroke(b.lpath);
-        ctx.restore();
-      } // parapet
-      if (b.units) {
-        for (const [ux, uy, us] of b.units) {
-          ctx.fillStyle = 'rgba(0,0,0,.3)';
-          ctx.fillRect(ux + 0.4, uy + 0.4, us, us * 0.7);
-          ctx.fillStyle = '#c9cdd3';
-          ctx.fillRect(ux, uy, us, us * 0.7);
-          ctx.fillStyle = '#7d828a';
-          ctx.fillRect(ux + us * 0.15, uy + us * 0.12, us * 0.7, us * 0.12);
-        }
-      }
+    // Off the screen, even with the roof leaning outwards?
+    const lean = cx * (1 - s2);
+    const leanY = cy * (1 - s2);
+    if (
+      Math.max(b.x1, b.x1 * s2 + lean) < x0 ||
+      Math.min(b.x0, b.x0 * s2 + lean) > x1 ||
+      Math.max(b.y1, b.y1 * s2 + leanY) < y0 ||
+      Math.min(b.y0, b.y0 * s2 + leanY) > y1
+    ) {
+      continue;
     }
-    if (b.label) {
-      const sl = b.halves ? s2 : 1;
-      const size = clamp(
-        Math.min((b.u1 - b.u0) / (b.label.length * 0.7), (b.v1 - b.v0) * 0.4),
-        2.2,
-        11
-      );
-      if (b.halves) {
-        ctx.transform(s2, 0, 0, s2, lx * k2, ly * k2);
-      }
-      ctx.font = `${size}px Impact, Haettenschweiler, "Arial Narrow Bold", sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.lineWidth = (size * 0.14) / sl;
-      ctx.strokeStyle = 'rgba(0,0,0,.75)';
-      ctx.lineJoin = 'round';
-      ctx.strokeText(b.label, 0, 0);
-      ctx.fillStyle = '#fff';
-      ctx.fillText(b.label, 0, 0);
-    }
-    ctx.restore();
+    drawWalls(b, cx, cy, hc, h, s);
+    ctx.setTransform(
+      z * b.ca,
+      z * b.sa,
+      -z * b.sa,
+      z * b.ca,
+      base.e + z * b.mx,
+      base.f + z * b.my
+    );
+    const lx = (cx - b.mx) * b.ca + (cy - b.my) * b.sa;
+    const ly = (cy - b.my) * b.ca - (cx - b.mx) * b.sa;
+    drawRoof(b, lx, ly, s, s2);
+    ctx.setTransform(base);
   }
 }
 
@@ -5482,27 +5946,17 @@ function render() {
     Math.round(viewH / 2 - cy * z)
   );
   ctx.lineJoin = ctx.lineCap = 'round';
-  const builds = gridFind(
-    buildingGrid,
-    x0 - 30,
-    y0 - 30,
-    x1 + 30,
-    y1 + 30
-  ).concat(
-    BUILD.filter(
-      b =>
-        b.k === 'o' &&
-        b.x1 > x0 - 30 &&
-        b.x0 < x1 + 30 &&
-        b.y1 > y0 - 30 &&
-        b.y0 < y1 + 30
-    )
-  );
+  const builds = gridFind(buildingGrid, x0 - 30, y0 - 30, x1 + 30, y1 + 30);
+  for (const b of OPEN_ROOFS) {
+    if (b.x1 > x0 - 30 && b.x0 < x1 + 30 && b.y1 > y0 - 30 && b.y0 < y1 + 30) {
+      builds.push(b);
+    }
+  }
   const trees = gridFind(treeGrid, x0 - 12, y0 - 12, x1 + 12, y1 + 12);
   drawGround(x0, y0, x1, y1);
-  drawShadows(builds, trees);
+  drawShadows(builds, trees, x0, y0, x1, y1);
   drawSprites(x0, y0, x1, y1);
-  drawBuildings(builds, cx, cy, hc);
+  drawBuildings(builds, cx, cy, hc, x0, y0, x1, y1);
   drawFurniture(gridFind(propGrid, x0 - 9, y0 - 9, x1 + 9, y1 + 9), cx, cy, hc);
   drawParticles();
   drawTrees(trees, cx, cy, hc);
