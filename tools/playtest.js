@@ -71,7 +71,13 @@ async (page) => {
     B.run = secs => { // simulate without drawing, as fast as the CPU allows
       for (let i = 0; i < secs * 60 && S.mode === 'play'; i++) {
         const j = S.job, key = j ? `${j.m.id}/${j.i} ${j.step.do}` : S.jobN >= MISSIONS.length ? 'all done' : 'idle';
-        if (key !== B.last) { say(key + (j && j.timed ? ` (${j.left.toFixed(0)}s left)` : '')); B.last = key; }
+        if (key !== B.last) { say(key + (j && j.timed ? ` (${j.left.toFixed(0)}s left)` : '')); B.last = key; B.since = S.t; }
+        if (j && S.t - B.since > 300) { // nothing happened for five minutes: say where we are, then cheat past it
+          const P = S.P, to = j.to || S.items.filter(v => v.job).sort((a, b) => dist(a, P) - dist(b, P))[0];
+          say(`  STALL in ${P.car ? P.car.kind : 'on foot'} at ${P.x | 0},${P.y | 0}, target ${to ? `${to.x | 0},${to.y | 0}` : 'none'}, speed ${P.car ? P.car.vf.toFixed(1) : 0}, ground ${surfAt(P.x, P.y)}`);
+          if (to) Object.assign(P.car || P, {x: to.x, y: to.y, vx: 0, vy: 0});
+          B.since = S.t; B.helps++;
+        }
         B.tick(1 / 60);
         update(1 / 60);
         if (i % 15 === 0) guide(1);

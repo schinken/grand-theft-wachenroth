@@ -402,6 +402,7 @@ const MISSIONS = [
       {
         do: 'goto',
         to: 'fairground',
+        time: 0,
         obj: 'Bring die Fässer zum Festzelt an der Kirchstraße',
         say: 'Du hast sie! Bring die Fässer zum Festzelt hinter dem Pfarrhaus.',
       },
