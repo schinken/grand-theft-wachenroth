@@ -1292,7 +1292,7 @@ const LANDMARKS = {
   bakery: {wall: '#f0e2c0', plate: ['#b5622f', '#ffffff']},
   works: {roof: 'metal', plate: ['#284d98', '#ffffff']},
   clubhouse: {plate: ['#c8201c', '#ffffff']},
-  club: {wall: '#d9c9a4', roof: 'tile3'},
+  club: {wall: '#d9c9a4', roof: 'tile2'},
   lavite: {wall: '#f1ead8', roof: 'tile2'},
   garage: {plate: ['#15151a', '#f2a01c'], gates: '#5a5d63'},
   no14: {wall: '#f4f2ea', roof: 'slate'},
@@ -1803,6 +1803,108 @@ function paintShop(g) {
 }
 
 /**
+ * Undoes the frame of a modelled building in its ground painter, so that it
+ * can paint on the map in x and y.
+ * @param {!CanvasRenderingContext2D} g
+ * @param {!Building} b
+ */
+function onMap(g, b) {
+  g.translate(-b.at[0], -b.at[1]);
+  g.transform(b.ca, -b.sa, b.sa, b.ca, 0, 0);
+  g.translate(-b.mx, -b.my);
+}
+
+/**
+ * A box on the ground, turned by a: tents, trailers, beer tables.
+ * @param {!CanvasRenderingContext2D} g
+ * @param {number} x The middle.
+ * @param {number} y
+ * @param {number} w Across.
+ * @param {number} h Along.
+ * @param {number} a
+ * @param {string} col
+ */
+function box(g, x, y, w, h, a, col) {
+  g.save();
+  g.translate(x, y);
+  g.rotate(a);
+  g.fillStyle = col;
+  g.fillRect(-w / 2, -h / 2, w, h);
+  g.restore();
+}
+
+/**
+ * The beer garden of the Schwallclub, as the aerial photos show it: the
+ * white marquee by Hauptstraße with a dark container behind it, eight beer
+ * tables in two rows, and two white trailers by the house. Drawn on the map.
+ * @param {!CanvasRenderingContext2D} g
+ * @param {!Building} b
+ */
+function paintClub(g, b) {
+  onMap(g, b);
+  const turn = 0.35; // the tables and trailers stand square to the house
+  fillPoly(
+    g,
+    '#2a2c30',
+    [1265, 891.1, 1272.5, 892.5, 1271.8, 895.1, 1264.6, 893.9]
+  );
+  const tent = [1263.6, 894.3, 1270.4, 895.4, 1268.6, 902.9, 1260.7, 900.4];
+  fillPoly(
+    g,
+    'rgba(0,0,0,.22)',
+    tent.map(v => v + 0.6)
+  );
+  fillPoly(g, '#f4f4ef', tent);
+  g.strokeStyle = '#c9c6bc';
+  g.lineWidth = 0.1;
+  g.beginPath();
+  for (let k = 0.25; k < 1; k += 0.25) {
+    // the seams of the canvas, across the tent
+    g.moveTo(1263.6 + (1260.7 - 1263.6) * k, 894.3 + (900.4 - 894.3) * k);
+    g.lineTo(1270.4 + (1268.6 - 1270.4) * k, 895.4 + (902.9 - 895.4) * k);
+  }
+  g.stroke();
+  for (const [x, y] of [
+    [1256.4, 900.7],
+    [1258.7, 901.2],
+    [1261.1, 901.8],
+    [1263.2, 902.3],
+    [1257.1, 903.2],
+    [1259.3, 903.8],
+    [1261.6, 904.3],
+    [1263.9, 904.9],
+  ]) {
+    box(g, x, y, 0.75, 2.2, turn, '#8a5a2a'); // the table
+    box(
+      g,
+      x - 0.55 * Math.cos(turn),
+      y - 0.55 * Math.sin(turn),
+      0.25,
+      2.2,
+      turn,
+      '#6b4a2a'
+    );
+    box(
+      g,
+      x + 0.55 * Math.cos(turn),
+      y + 0.55 * Math.sin(turn),
+      0.25,
+      2.2,
+      turn,
+      '#6b4a2a'
+    );
+  }
+  for (const [x, y, w, h] of [
+    [1264.3, 908.4, 2.4, 6.4],
+    [1267.1, 909.6, 2.2, 5],
+  ]) {
+    box(g, x + 0.5, y + 0.5, w, h, turn, 'rgba(0,0,0,.25)');
+    box(g, x, y, w, h, turn, '#b9bcbf');
+    box(g, x, y, w - 0.3, h - 0.3, turn, '#eeeee8');
+  }
+}
+
+/**
  * The plot of Pizzeria La Vite, as the aerial photos show it: the terrace
  * with tables and parasols to the street, the paved forecourt where the
  * guests park, the white awning on the garden side, a gravel path along the
@@ -1978,6 +2080,8 @@ const ROOFS = {
     plot: [-3.2, 21.4, 22.6, 21.3, 25.1, -5, -2.3, -4.7, -2.1, 2.4, -2.5, 12.5],
     ground: paintShop,
   },
+  // The Schwallclub keeps the roof of the survey; its beer garden is painted.
+  club: {ground: paintClub},
   // Pizzeria La Vite keeps the five parts of the survey; the plot is painted.
   lavite: {
     trees: [
@@ -6947,22 +7051,6 @@ const DECOR = {
     }
   },
   // Beer benches on the gravel by the clubhouse.
-  club(g) {
-    g.fillStyle = textures.gravel;
-    g.fillRect(-9, 0.5, 18, 8);
-    for (let i = 0; i < 4; i++) {
-      const x = -7.5 + i * 4.1;
-      g.fillStyle = '#b97a2c';
-      g.fillRect(x, 3.2, 2.4, 0.7);
-      g.fillStyle = '#8a5a22';
-      g.fillRect(x, 2.4, 2.4, 0.35);
-      g.fillRect(x, 4.35, 2.4, 0.35);
-    }
-    g.fillStyle = '#d99a1a'; // a stack of crates for later
-    g.fillRect(6.6, 6.4, 1.6, 1.6);
-    g.fillStyle = '#8a5a22';
-    g.fillRect(6.9, 6.7, 1, 1);
-  },
   // Stacks of crates in the yard.
   drinks(g) {
     const crates = ['#d99a1a', '#2f8f4a', '#c8322b', '#2b62c8', '#d99a1a'];
@@ -9603,8 +9691,8 @@ if (location.search.includes('selftest')) {
       ROADS.lane.length === 1 &&
       HOME.planes.every(f => f.p.every(v => v > -40 && v < 40)) &&
       HOME.planes.filter(f => f.pv && f.pv.length).length === 2,
-    "the garage's neighbours have the surveyed roofs, closed by gable walls":
-      BUILD.filter(b => b.f).length === 5 &&
+    'the surveyed roofs are there, closed by gable walls':
+      BUILD.filter(b => b.f).length >= 5 &&
       BUILD.filter(b => b.f).every(
         b =>
           b.planes.filter(f => !f.wall).length === b.f.length &&

@@ -172,6 +172,11 @@ NEIGHBOURS = [
     (49.745407, 10.719491, {'look': {'roof': 'solar'}}),  # and the sheds behind it
     (49.745394, 10.719331, {'look': {'roof': 'tile1'}}),
     (49.745340, 10.719338, {'look': {'roof': 'tile1'}}),
+    # The long hall at Toxicity: dark roofs with solar panels on the slopes to the south-west, the high back part brown
+    (49.750799, 10.712199, {'faces': 1, 'look': {'roof': 'slate'},
+                            'panels': [(49.750776, 10.712192, 13, 4, False)]}),
+    (49.750745, 10.712407, {'faces': 1, 'look': {'roof': 'slate'}, 'slopes': {296: 'tile3', 116: 'tile3'},
+                            'panels': [(49.750717, 10.712396, 16, 4.5, False)]}),
 ]
 LOOKS = [
     (49.753529, 10.714888, {'look': {'roof': 'solar', 'flat': True}}),
