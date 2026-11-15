@@ -6976,6 +6976,12 @@ function guide(dt) {
     return;
   }
   state.gpsT = 0.25;
+  if (player.car && player.car.kind === 'heli') {
+    // a helicopter flies straight there, roads or not
+    state.gps.wp = to;
+    state.gps.far = dist(player, to);
+    return;
+  }
   state.gps.wp =
     dist(player, to) < 50 ? to : waypoint(state.gps.f, player, 40) || to;
   // How far it is by road
