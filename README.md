@@ -2,7 +2,7 @@
 
 A top-down crime caper set in Wachenroth, a market village of about 2,000
 people in the Steigerwald in Upper Franconia. You drive, steal and deliver your
-way through twenty-three jobs, and a man called Flo tells you what to do over a
+way through twenty-four jobs, and a man called Flo tells you what to do over a
 pager.
 
 **Play it in the browser:** https://schinken.github.io/grand-theft-wachenroth/
@@ -45,7 +45,8 @@ starts small and gets bigger:
 | 20  | [Dünger für die Obstwiese](https://schinken.github.io/grand-theft-wachenroth/?job=duenger)        | Fertiliser from Lagerhaus Grönert to the orchard meadow above the sports ground, spread before the sacks fall off.                                                  |
 | 21  | [Frühlingsfest der Heimwerker](https://schinken.github.io/grand-theft-wachenroth/?job=heimwerker) | Gumbrecht's mini-excavator digs Flo's garden, two loads up to the rubble dump, a beating from the workers, then the dentist.                                        |
 | 22  | [Zimmerlautstärke](https://schinken.github.io/grand-theft-wachenroth/?job=toxicity)               | The rockers at Toxicity ignore the evening quiet. Bernhard's Zerstampfer brings them down to 70 dB, one bonk each.                                                  |
-| 23  | [Kerwa-Samstag](https://schinken.github.io/grand-theft-wachenroth/?job=finale)                    | Flo, the brass band and the police, all on the way to the tent.                                                                                                     |
+| 23  | [Fly High](https://schinken.github.io/grand-theft-wachenroth/?job=flyhigh)                        | Borrow the helicopter from Josef's carpentry, fly over the church, the silos, Murk and the Koppel, and put it back before anybody notices.                          |
+| 24  | [Kerwa-Samstag](https://schinken.github.io/grand-theft-wachenroth/?job=finale)                    | Flo, the brass band and the police, all on the way to the tent.                                                                                                     |
 
 Each job name links to the game with that job up next: the start button names
 it, and it begins as soon as you press it. In the address, `?job=` takes the
