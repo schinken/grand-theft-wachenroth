@@ -6583,12 +6583,10 @@ function hud(dt) {
 function start(save) {
   audio.init();
   reset('play', save);
-  byId('menu').hidden = byId('end').hidden = true;
   byId('hud').hidden = false;
   byId('lcd').textContent = '';
   onShow.clear(); // the page was just reset by hand: write everything afresh
-  byId('shop').hidden = true;
-  for (const id of ['flash', 'mission', 'pause', 'info', 'map']) {
+  for (const id of 'menu end shop flash mission pause info map'.split(' ')) {
     byId(id).hidden = true;
   }
   replay(byId('hint'));
@@ -6691,9 +6689,15 @@ addEventListener('blur', () => {
   }
 });
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) {
-    showMap(false);
-    pause(true);
+  if (!document.hidden) {
+    return;
+  }
+  showMap(false);
+  pause(true);
+  // Free play has no jobs left that save the game: it is saved when the page
+  // goes out of sight.
+  if (state.mode === 'play' && state.jobN >= MISSIONS.length) {
+    store();
   }
 });
 
@@ -6799,20 +6803,8 @@ document.addEventListener('visibilitychange', () => {
   document.addEventListener('contextmenu', e => e.preventDefault());
 }
 
-byId('start').onclick = () => start();
-byId('again').onclick = () => start();
+byId('start').onclick = byId('again').onclick = () => start();
 byId('free').onclick = freePlay;
-// Free play has no jobs left that save the game: it is saved when the page
-// goes out of sight.
-document.addEventListener('visibilitychange', () => {
-  if (
-    document.hidden &&
-    state.mode === 'play' &&
-    state.jobN >= MISSIONS.length
-  ) {
-    store();
-  }
-});
 byId('resume').onclick = () => start(load());
 byId('how').onclick = () => {
   byId('help').hidden = !byId('help').hidden;
