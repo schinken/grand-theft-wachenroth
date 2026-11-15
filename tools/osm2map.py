@@ -11,10 +11,11 @@ More files add what OSM does not know. All of them are open data of the Bayerisc
           622_5510, 624_5510, 622_5512 and 624_5512 of https://download1.bayernwolke.de/a/lod2/citygml/<tile>.gml
   *.gpkg  single trees with their height: https://geodaten.bayern.de/odd/m/8/baeume3d/data/125021_baeume.gpkg
   *.png   two pictures of the map, one pixel per metre, told apart by whether one can see through them: the aerial
-          photo for roof colours and paved yards, and the outlines of the parcels for garden fences. They start at the
-          north edge and may end above the south edge: what lies below gets no roof colours, yards or fences.
+          photo for roof colours, paved yards and what grows on the fields, and the outlines of the parcels for
+          garden fences and the borders of the fields. They start at the north edge and may end above the south
+          edge: what lies below gets none of this.
           https://geoservices.bayern.de/od/wms/dop/v1/dop20?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&LAYERS=by_dop20c
-          &STYLES=&SRS=EPSG:4326&BBOX=10.6950,49.7440,10.7300,49.7590&WIDTH=2517&HEIGHT=1668&FORMAT=image/png
+          &STYLES=&SRS=EPSG:4326&BBOX=10.6950,49.7430,10.7300,49.7590&WIDTH=2517&HEIGHT=1779&FORMAT=image/png
           and the same from .../od/wms/alkis/v1/parzellarkarte? with LAYERS=by_alkis_parzellarkarte_umr_schwarz
           and &TRANSPARENT=TRUE
 """
@@ -58,7 +59,7 @@ ZONE = {'ind': 'i', 'com': 'm', 'yard': 'y'}  # land use -> kind of the building
 ROOF = {'1000': 'f', '2100': 'f', '2200': 'f', '3100': 'g', '3200': 'p', '3300': 'p', '3400': 'p', '3500': 'p'}
 GARAGE = ('31001_2463', '31001_2523')  # garages and transformer houses
 UTM = (621900, 624800, 5511300, 5513500)  # the map with a margin, in UTM32: west, east, south, north
-PAVED = ('resi', 'yard')  # where the photo decides between lawn and paved ground
+PAVED = ('resi', 'yard', 'school')  # where the photo decides between lawn and paved ground
 
 # Places the missions use, as lat/lon read off OpenStreetMap (name tags, house numbers).
 POIS = {
@@ -117,6 +118,10 @@ BARE = [
     [(49.755312, 10.701187), (49.755223, 10.701412), (49.755029, 10.701187), (49.754899, 10.701162),
      (49.754794, 10.701099), (49.754907, 10.700724), (49.755142, 10.700937)],
 ]
+
+# Garden pools, turquoise on the same photo: lat, lon, and how many metres they measure east-west and north-south.
+POOLS = [(49.75277, 10.714879, 4.0, 7.0), (49.752167, 10.719626, 7.0, 4.0),
+         (49.753636, 10.721236, 5.5, 3.5), (49.755039, 10.7105, 6.0, 4.5)]
 
 # Areas OSM lacks, read off the same photo: their kind and their corners as lat/lon. The meadow of the Koppel of Rock
 # is mapped as a part of one big field.
@@ -393,6 +398,63 @@ def roofs(buildings, photo):
             else 'l' if light >= 165 else 'd' if light < 125 or warm < -8 else 'g'
 
 
+def stencil(rows, w):
+    """A see-through PNG from rows of bits, each row a str of '0' and '1': black where a bit is set."""
+    def chunk(kind, body):
+        return struct.pack('>I', len(body)) + kind + body + struct.pack('>I', zlib.crc32(kind + body))
+    wide = -(-w // 8)
+    lines = [b'\0' + int(row.ljust(wide * 8, '0'), 2).to_bytes(wide, 'big') for row in rows]
+    png = (b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', w, len(rows), 1, 3, 0, 0, 0))
+           + chunk(b'PLTE', bytes(6)) + chunk(b'tRNS', b'\0\xff') + chunk(b'IDAT', zlib.compress(b''.join(lines), 9))
+           + chunk(b'IEND', b''))
+    return 'data:image/png;base64,' + base64.b64encode(png).decode()
+
+
+def fields(plan, photo, areas):
+    """What grows on the fields, read off the photo parcel by parcel: a see-through PNG for each kind of field.
+
+    OSM maps the farmland as a few huge areas; in truth it is a patchwork of some hundred fields. A parcel of the
+    cadastre is nearly always one field, so every parcel gets the kind its mean colour shows: pale stubble, olive,
+    fresh, middle or dark green. The pictures have a pixel every 2 m, which is plenty for fields.
+    """
+    w, h, n, px = plan
+    pw, ph, pn, ppx = photo
+    # 1 = field, of no parcel yet. The topmost area decides, as in the game, and the lines between parcels wait.
+    grid = bytearray(w * h)
+    for a in areas:
+        pts = list(zip(a['p'][::2], a['p'][1::2]))
+        for y in range(max(0, int(min(p[1] for p in pts))), min(h, ph, int(max(p[1] for p in pts)) + 1)):
+            for x0, x1 in spans(pts, y):
+                grid[y * w + x0:y * w + x1] = bytes([a['k'] == 'farm']) * (x1 - x0)
+    lines = [i for i in range(w * h) if grid[i] and px[i * n + 3] > 128]
+    for i in lines:
+        grid[i] = 0
+    kind = bytearray(w * h)
+    for start in range(w * h):
+        if grid[start] != 1:
+            continue
+        grid[start] = 2
+        todo, parcel = [start], []
+        while todo:
+            i = todo.pop()
+            parcel.append(i)
+            for j in (i - w, i + w, i - 1 if i % w else -1, i + 1 if (i + 1) % w else -1):
+                if 0 <= j < w * h and grid[j] == 1:
+                    grid[j] = 2
+                    todo.append(j)
+        some = parcel[::7]  # a seventh of the pixels is plenty for a mean
+        r, g, b = (sum(ppx[i * pn + c] for i in some) / len(some) for c in range(3))
+        light, green = (r + g + b) / 3, g - (r + b) / 2
+        k = 1 if green < 6 and light >= 140 else (2 if green < 14 else 3) if light >= 125 else 4 if light >= 98 else 5
+        for i in parcel:
+            kind[i] = k
+    for _ in range(2):  # the lines between the parcels go to a neighbour
+        for i in lines:
+            kind[i] = kind[i] or max(kind[i - 1], kind[(i + 1) % (w * h)], kind[i - w], kind[(i + w) % (w * h)])
+    return [stencil([kind[y * w:(y + 1) * w:2].translate(bytes(48 + (v == k) for v in range(256))).decode()
+                     for y in range(0, h, 2)], -(-w // 2)) for k in range(1, 6)]
+
+
 def yards(areas, photo):
     """Paved, gravelled and bare ground inside the village, read off the photo: a see-through PNG, 1 px per metre.
 
@@ -416,17 +478,7 @@ def yards(areas, photo):
         acc = [0, 0, 0] + list(itertools.accumulate(row)) + [sum(row)] * 2
         wide.append([b - a for a, b in zip(acc, acc[5:])])
     wide = [[0] * w] * 2 + wide + [[0] * w] * 2
-    lines = []
-    for y in range(h):
-        bits = ''.join('1' if sum(v) > 12 else '0' for v in zip(*wide[y:y + 5]))
-        lines.append(b'\0' + int(bits.ljust(-(-w // 8) * 8, '0'), 2).to_bytes(-(-w // 8), 'big'))
-
-    def chunk(kind, body):
-        return struct.pack('>I', len(body)) + kind + body + struct.pack('>I', zlib.crc32(kind + body))
-    png = (b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', w, h, 1, 3, 0, 0, 0))
-           + chunk(b'PLTE', bytes(6)) + chunk(b'tRNS', b'\0\xff') + chunk(b'IDAT', zlib.compress(b''.join(lines), 9))
-           + chunk(b'IEND', b''))
-    return 'data:image/png;base64,' + base64.b64encode(png).decode()
+    return stencil([''.join('1' if sum(v) > 12 else '0' for v in zip(*wide[y:y + 5])) for y in range(h)], w)
 
 
 def paved(photo, x, y):
@@ -555,12 +607,12 @@ def borders(plan, photo, buildings, areas, roads):
             return None
         return q[0] + ux * verge, q[1] + uy * verge
 
-    dice, fences, hedges = random.Random(9), [], []
+    fences, hedges = [], []
     for line in chains(thin(ink)):
         if len(line) < 5:
             continue  # a dot, or the rest of a letter
         line = straighten([(x + .5, y + .5) for x, y in line], 1.5)  # generous: letters leave lines ragged
-        roll, run = dice.random(), []
+        roll, run = random.Random(repr(line[0])).random(), []  # the same border, the same roll, whatever else changes
         into = None if roll < .3 else hedges if roll < .5 else fences
         # A post every metre; where none may stand, the fence so far is done.
         posts = [post(a[0] + (c[0] - a[0]) * i / steps, a[1] + (c[1] - a[1]) * i / steps)
@@ -763,8 +815,11 @@ for k, p in pois.items():
 
 out = {'w': WW, 'h': WH, 'roads': roads, 'nodes': flat(nodes), 'edges': flat(edges), 'areas': areas,
        'buildings': buildings, 'trees': flat(trees), 'hedges': hedges, 'fences': fences, 'pois': pois}
+out['pools'] = [v for lat, lon, across, down in POOLS for v in (*xy({'lat': lat, 'lon': lon}), across, down)]
 if photo:
     out['yards'] = yards(areas, photo)
+if photo and plan:
+    out['fields'] = fields(plan, photo, areas)
 print('// Generated by tools/osm2map.py. Map data (c) OpenStreetMap contributors, ODbL.'
       + (' Buildings, trees, roof colours, yards and parcel borders: Bayerische Vermessungsverwaltung,'
          ' www.geodaten.bayern.de, CC BY 4.0, simplified.' if len(sys.argv) > 2 else ''))
