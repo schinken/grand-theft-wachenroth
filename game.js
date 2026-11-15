@@ -5163,13 +5163,8 @@ function grab(v) {
     state.shake = 0.35;
   }
   const left = state.items.filter(o => o.job).length;
-  const gift =
-    v.kind === 'xmas'
-      ? ' · Spende +20 €'
-      : v.kind === 'rocker'
-        ? ' · BONK! -10 dB'
-        : '';
-  float(v, `${left ? `noch ${left}` : 'Alles da!'}${gift}`);
+  const gift = {xmas: ' · Spende +20 €', rocker: ' · BONK! -10 dB'}[v.kind];
+  float(v, `${left ? `noch ${left}` : 'Alles da!'}${gift || ''}`);
   if (j) {
     j.got++;
   }
@@ -5690,13 +5685,11 @@ function endJob() {
   flash('Mission erfüllt!', `+${fmt(m.reward)}`);
   audio.play('win');
   store();
+  page(...m.outro);
   if (state.jobN >= MISSIONS.length) {
-    page(...m.outro);
     state.nextJob = 1e9;
     state.finale = 9;
-    return;
   }
-  page(...m.outro);
 }
 
 /**
