@@ -6042,6 +6042,9 @@ function shove(o, r) {
     return;
   }
   for (const b of at(buildingGrid, o.x, o.y)) {
+    if (o.x < b.x0 - r || o.x > b.x1 + r || o.y < b.y0 - r || o.y > b.y1 + r) {
+      continue; // too far to touch
+    }
     const h = pushOut(o.x, o.y, r, b.p);
     if (h) {
       o.x += h[0] * h[2];
