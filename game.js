@@ -8567,6 +8567,9 @@ function drawSprites(x0, y0, x1, y1) {
   const seen = o =>
     o.x > x0 - 14 && o.x < x1 + 14 && o.y > y0 - 14 && o.y < y1 + 14;
   for (const d of state.decals) {
+    if (!seen(d)) {
+      continue;
+    }
     ctx.fillStyle =
       d.kind === 'blood'
         ? 'rgba(140,10,16,.8)'
