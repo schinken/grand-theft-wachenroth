@@ -16,8 +16,10 @@
 // ram you), logs (rams by the thieves the wood on the cart takes), doris (Mama
 // Doris guards her hens), loose (things to collect lie anywhere, not on the
 // road), kerb (they stand at the kerb in front of houses), db (the noise the
-// rockers make: 10 dB less for each one met).
-// A mission with sober: true ends the drunkenness.
+// rockers make: 10 dB less for each one met), got (what you call out once the
+// step is done).
+// A mission with sober: true ends the drunkenness; one with drunk: n leaves you
+// drunk for n seconds.
 
 export const PLACES = {
   hq: 'Flos Hauptquartier',
@@ -807,6 +809,54 @@ export const MISSIONS = [
     outro: [
       '70 dB. Die Hauptstraße schläft, und die Rocker spielen ab jetzt unplugged.',
       'Den Zerstampfer bringst du dem Bernhard morgen zurück.',
+    ],
+  },
+
+  {
+    id: 'k1',
+    title: 'K1',
+    reward: 900,
+    drunk: 90,
+    props: [{k: 'person', at: 'club', col: '#1f4fa8'}],
+    intro: [
+      'Unser Finne, der Pasi, macht heut seinen berühmten K1. Was da drin ist, ist streng geheim.',
+      'Er braucht Zutaten: "etwas Alkohol" von der Claudia, Lakupiippu vom Grönert und was von der Metzgerei Braun. Frag net, hol einfach.',
+    ],
+    steps: [
+      {
+        do: 'goto',
+        to: 'shop',
+        foot: true,
+        got: 'Alkoholia! Kiitos!',
+        obj: 'Hol "etwas Alkohol" bei der Claudia im Edeka (zu Fuß rein)',
+      },
+      {
+        do: 'goto',
+        to: 'warehouse',
+        foot: true,
+        got: 'Lakupiippu! Hyvä hyvä!',
+        obj: 'Hol Lakupiippu beim Grönert (zu Fuß rein)',
+        say: 'Kiitos! Die Claudia hat net gefragt, wofür. Hyvä! Jetzt Lakupiippu beim Grönert.',
+      },
+      {
+        do: 'goto',
+        to: 'butcher',
+        foot: true,
+        got: 'Salaisuus! Perkele!',
+        obj: 'Hol die geheime Zutat bei der Metzgerei Braun (zu Fuß rein)',
+        say: 'Lakupiippu! Mahtavaa! Fehlt nur noch was von der Metzgerei Braun. Was genau, sagt der Pasi net. Salaisuus, Geheimnis.',
+      },
+      {
+        do: 'goto',
+        to: 'club',
+        time: 120,
+        obj: 'Bring alles zum Pasi in den Schwallclub',
+        say: 'Perkele, des riecht scho jetzt gefährlich! Ab zum Schwallclub, der Pasi wartet. Nopeasti, schnell!',
+      },
+    ],
+    outro: [
+      'Kippis! Der Pasi mischt den K1 und schenkt dir gleich einen ein. Auf ex, perkele!',
+      'Was drin war, bleibt geheim. Und warum sich die Hauptstraße dreht, auch.',
     ],
   },
 

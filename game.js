@@ -5450,6 +5450,9 @@ function nextStep() {
   const j = state.job;
   const done = j.step;
   const st = j.m.steps[++j.i];
+  if (done && done.got) {
+    float(state.player, done.got, '#ffe9a0');
+  }
   if (done && done.tip && j.timed) {
     // quick delivery, generous customer
     const tip = Math.round(j.left) * 2;
@@ -5679,6 +5682,10 @@ function endJob() {
   calmThieves(j);
   if (m.sober) {
     state.drunk = 0; // slept it off
+  }
+  if (m.drunk) {
+    state.drunk = Math.max(state.drunk, m.drunk); // a parting drink
+    state.hicT = 1;
   }
   flash('Mission erfüllt!', `+${fmt(m.reward)}`);
   audio.play('win');

@@ -2,7 +2,7 @@
 
 A top-down crime caper set in Wachenroth, a market village of about 2,000
 people in the Steigerwald in Upper Franconia. You drive, steal and deliver your
-way through nineteen jobs, and a man called Flo tells you what to do over a
+way through twenty jobs, and a man called Flo tells you what to do over a
 pager.
 
 **Play it in the browser:** https://schinken.github.io/grand-theft-wachenroth/
@@ -21,27 +21,28 @@ somebody who can fix that. That somebody is you.
 His pager, the FLO-FUNK 3000, beeps, mumbles and spells out the next job. It
 starts small and gets bigger:
 
-| #   | Job                                                                                         | What Flo wants                                                                                                                           |
-| --- | ------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | [Dosen zum Saufen](https://schinken.github.io/grand-theft-wachenroth/?job=cans)             | Five cans of Jacky Cola from Edeka Claudia. He is thirsty.                                                                               |
-| 2   | [Brotzeit für den SV](https://schinken.github.io/grand-theft-wachenroth/?job=snack)         | Food from Edeka Claudia and the butcher to the sports club.                                                                              |
-| 3   | [Pizza-Express](https://schinken.github.io/grand-theft-wachenroth/?job=pizza)               | The pizza driver of La Vite is ill. Four deliveries, tips for speed.                                                                     |
-| 4   | [Stillstand ist Rückstand](https://schinken.github.io/grand-theft-wachenroth/?job=concrete) | A concrete mixer from Röckelein for the roadworks in Schulstraße.                                                                        |
-| 5   | [Weizen für den Bäck](https://schinken.github.io/grand-theft-wachenroth/?job=wheat)         | No flour, no rolls: the wheat tractor from the Lagerhaus to the Bäck.                                                                    |
-| 6   | [Bier für den Schwallclub](https://schinken.github.io/grand-theft-wachenroth/?job=beer)     | The beer has run out. Every bump costs a bottle.                                                                                         |
-| 7   | [Feiner Zwirn](https://schinken.github.io/grand-theft-wachenroth/?job=suit)                 | A suit for the Kerwa, from Murk. The police want it back.                                                                                |
-| 8   | [Johannifeuer](https://schinken.github.io/grand-theft-wachenroth/?job=fire)                 | The midsummer bonfire is out of control: borrow the fire engine.                                                                         |
-| 9   | [Aischgründer Gold](https://schinken.github.io/grand-theft-wachenroth/?job=carp)            | The Grüner Baum has run out of carp. Go fishing.                                                                                         |
-| 10  | [Der Baam](https://schinken.github.io/grand-theft-wachenroth/?job=maypole)                  | Lads from Höchstadt stole the maypole. Ram their tractor.                                                                                |
-| 11  | [Kerwa ausgraben](https://schinken.github.io/grand-theft-wachenroth/?job=barrels)           | Three barrels hidden in the village, and the clock is ticking.                                                                           |
-| 12  | [Koppel of Rock](https://schinken.github.io/grand-theft-wachenroth/?job=koppel)             | Drive the bands from their hotels to the festival meadow.                                                                                |
-| 13  | [Endlich Wochenende](https://schinken.github.io/grand-theft-wachenroth/?job=wochenende)     | Fässlafreitag at the butcher's, one Seidla too many, four stars. Off to Bernhard's garage.                                               |
-| 14  | [Hühnerjagd](https://schinken.github.io/grand-theft-wachenroth/?job=huehner)                | Michi's hens are loose in Schulstraße 22. Catch them, and mind Mama Doris.                                                               |
-| 15  | [Der Winter kommt](https://schinken.github.io/grand-theft-wachenroth/?job=winter)           | Ten trees with the chainsaw, then the wood home on a tractor. Every ram by the wood thieves knocks some off: ten, and the cart is empty. |
-| 16  | [O Tannenbaum](https://schinken.github.io/grand-theft-wachenroth/?job=christbaum)           | The Schwallclub's tractor: Christmas trees from the doorsteps to the collection point, the donations to the kindergarten.                |
-| 17  | [Dünger für die Obstwiese](https://schinken.github.io/grand-theft-wachenroth/?job=duenger)  | Fertiliser from Lagerhaus Grönert to the orchard meadow above the sports ground, spread before the sacks fall off.                       |
-| 18  | [Zimmerlautstärke](https://schinken.github.io/grand-theft-wachenroth/?job=toxicity)         | The rockers at Toxicity ignore the evening quiet. Bernhard's Zerstampfer brings them down to 70 dB, one bonk each.                       |
-| 19  | [Kerwa-Samstag](https://schinken.github.io/grand-theft-wachenroth/?job=finale)              | Flo, the brass band and the police, all on the way to the tent.                                                                          |
+| #   | Job                                                                                         | What Flo wants                                                                                                                                                      |
+| --- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | [Dosen zum Saufen](https://schinken.github.io/grand-theft-wachenroth/?job=cans)             | Five cans of Jacky Cola from Edeka Claudia. He is thirsty.                                                                                                          |
+| 2   | [Brotzeit für den SV](https://schinken.github.io/grand-theft-wachenroth/?job=snack)         | Food from Edeka Claudia and the butcher to the sports club.                                                                                                         |
+| 3   | [Pizza-Express](https://schinken.github.io/grand-theft-wachenroth/?job=pizza)               | The pizza driver of La Vite is ill. Four deliveries, tips for speed.                                                                                                |
+| 4   | [Stillstand ist Rückstand](https://schinken.github.io/grand-theft-wachenroth/?job=concrete) | A concrete mixer from Röckelein for the roadworks in Schulstraße.                                                                                                   |
+| 5   | [Weizen für den Bäck](https://schinken.github.io/grand-theft-wachenroth/?job=wheat)         | No flour, no rolls: the wheat tractor from the Lagerhaus to the Bäck.                                                                                               |
+| 6   | [Bier für den Schwallclub](https://schinken.github.io/grand-theft-wachenroth/?job=beer)     | The beer has run out. Every bump costs a bottle.                                                                                                                    |
+| 7   | [Feiner Zwirn](https://schinken.github.io/grand-theft-wachenroth/?job=suit)                 | A suit for the Kerwa, from Murk. The police want it back.                                                                                                           |
+| 8   | [Johannifeuer](https://schinken.github.io/grand-theft-wachenroth/?job=fire)                 | The midsummer bonfire is out of control: borrow the fire engine.                                                                                                    |
+| 9   | [Aischgründer Gold](https://schinken.github.io/grand-theft-wachenroth/?job=carp)            | The Grüner Baum has run out of carp. Go fishing.                                                                                                                    |
+| 10  | [Der Baam](https://schinken.github.io/grand-theft-wachenroth/?job=maypole)                  | Lads from Höchstadt stole the maypole. Ram their tractor.                                                                                                           |
+| 11  | [Kerwa ausgraben](https://schinken.github.io/grand-theft-wachenroth/?job=barrels)           | Three barrels hidden in the village, and the clock is ticking.                                                                                                      |
+| 12  | [Koppel of Rock](https://schinken.github.io/grand-theft-wachenroth/?job=koppel)             | Drive the bands from their hotels to the festival meadow.                                                                                                           |
+| 13  | [Endlich Wochenende](https://schinken.github.io/grand-theft-wachenroth/?job=wochenende)     | Fässlafreitag at the butcher's, one Seidla too many, four stars. Off to Bernhard's garage.                                                                          |
+| 14  | [Hühnerjagd](https://schinken.github.io/grand-theft-wachenroth/?job=huehner)                | Michi's hens are loose in Schulstraße 22. Catch them, and mind Mama Doris.                                                                                          |
+| 15  | [Der Winter kommt](https://schinken.github.io/grand-theft-wachenroth/?job=winter)           | Ten trees with the chainsaw, then the wood home on a tractor. Every ram by the wood thieves knocks some off: ten, and the cart is empty.                            |
+| 16  | [O Tannenbaum](https://schinken.github.io/grand-theft-wachenroth/?job=christbaum)           | The Schwallclub's tractor: Christmas trees from the doorsteps to the collection point, the donations to the kindergarten.                                           |
+| 17  | [Dünger für die Obstwiese](https://schinken.github.io/grand-theft-wachenroth/?job=duenger)  | Fertiliser from Lagerhaus Grönert to the orchard meadow above the sports ground, spread before the sacks fall off.                                                  |
+| 18  | [Zimmerlautstärke](https://schinken.github.io/grand-theft-wachenroth/?job=toxicity)         | The rockers at Toxicity ignore the evening quiet. Bernhard's Zerstampfer brings them down to 70 dB, one bonk each.                                                  |
+| 19  | [K1](https://schinken.github.io/grand-theft-wachenroth/?job=k1)                             | Pasi, our Finn, makes his famous K1. Secret ingredients from Claudia, Grönert and the butcher's to the Schwallclub, and a glass of K1 that gets you drunk. Perkele! |
+| 20  | [Kerwa-Samstag](https://schinken.github.io/grand-theft-wachenroth/?job=finale)              | Flo, the brass band and the police, all on the way to the tent.                                                                                                     |
 
 Each job name links to the game with that job up next: the start button names
 it, and it begins as soon as you press it. In the address, `?job=` takes the
