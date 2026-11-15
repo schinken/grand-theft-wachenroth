@@ -744,6 +744,9 @@ const is =
   (...types) =>
   r =>
     types.includes(r.t);
+// A service road with a street name is a lane across a paved square: it has
+// no kerb and no pavement of its own. The only one runs past the town hall.
+const lane = r => r.t === 'service' && town(r);
 const ROADS = {
   river: layer(is('river')),
   bank: layer(is('river'), 2.5),
@@ -752,9 +755,10 @@ const ROADS = {
   dirt: layer(is('track')),
   foot: layer(r => FOOT.includes(r.t)),
   kerb: layer(r => DRIVE.includes(r.t) && !town(r), 0.8),
-  walk: layer(r => DRIVE.includes(r.t) && town(r), 3.4),
-  road: layer(r => DRIVE.includes(r.t) && r.t !== 'living_street'),
+  walk: layer(r => DRIVE.includes(r.t) && town(r) && !lane(r), 3.4),
+  road: layer(r => DRIVE.includes(r.t) && r.t !== 'living_street' && !lane(r)),
   cobble: layer(is('living_street')),
+  lane: layer(lane),
   line: layer(is('secondary', 'tertiary')),
 };
 
@@ -1211,10 +1215,115 @@ function paintGarden(g) {
   }
 }
 
+/**
+ * The village square around the town hall, as the aerial photo shows it: pale
+ * paving from the house fronts to the main road, the steps and flower tubs
+ * at the door, the raised bed in front of the Schwarzer Adler, and the car
+ * park behind the town hall. It is painted before the roads, so those lie on
+ * top of it. Drawn in metres east and south of the town hall's south-west
+ * corner.
+ * @param {!CanvasRenderingContext2D} g
+ * @param {!Building} b The town hall.
+ */
+function paintSquare(g, b) {
+  const r = rng(23);
+  g.rotate(-Math.atan2(b.sa, b.ca)); // the photo is read north up
+  g.fillStyle = textures.school;
+  g.beginPath();
+  for (const [x, y] of [
+    [-6, 12.9],
+    [-6, -2.1],
+    [21, -2.1],
+    [21, -21.6],
+    [26.5, -21.6],
+    [26.5, -3.8],
+    [38.6, -3.8],
+    [38.6, -6.5],
+    [60, -6.5],
+    [60, 12.9],
+  ]) {
+    g.lineTo(x, y);
+  }
+  g.fill();
+  // The car park behind the town hall, bays along its back wall
+  g.fillStyle = textures.park;
+  g.fillRect(-5.5, -21.5, 26.5, 12.3);
+  g.strokeStyle = 'rgba(236,236,226,.6)';
+  g.lineWidth = 0.14;
+  g.beginPath();
+  for (let x = 3; x < 20; x += 2.7) {
+    g.moveTo(x, -15);
+    g.lineTo(x, -10.4);
+  }
+  g.stroke();
+  g.fillStyle = textures.resi; // the tree at its entrance stands in a bed
+  g.beginPath();
+  g.arc(-0.7, -12.1, 1.6, 0, TAU);
+  g.fill();
+  // Steps to the door, and tubs of flowers left and right of it
+  g.fillStyle = '#d9d2c0';
+  g.fillRect(8.5, 0, 4, 1.8);
+  g.fillStyle = 'rgba(0,0,0,.18)';
+  g.fillRect(8.5, 0.85, 4, 0.1);
+  g.fillRect(8.5, 1.7, 4, 0.1);
+  for (const [x, y] of [
+    [4.2, 0.9],
+    [6.3, 1.9],
+    [14.3, 1.5],
+  ]) {
+    g.fillStyle = '#6b4a2a';
+    g.fillRect(x - 0.5, y - 0.5, 1, 1);
+    g.fillStyle = '#3c7a30';
+    g.fillRect(x - 0.35, y - 0.35, 0.7, 0.7);
+    g.fillStyle = pick2(['#d83a3a', '#f2d23e', '#c85aa8'], r);
+    g.fillRect(x - 0.15, y - 0.15, 0.3, 0.3);
+  }
+  g.fillStyle = '#c8201c'; // the old phone box, full of books now
+  g.fillRect(19.9, 0.6, 1, 1);
+  g.fillStyle = '#f2d23e';
+  g.fillRect(20.1, 0.8, 0.6, 0.6);
+  // The raised bed in front of the Schwarzer Adler: a stone rim, shrubs
+  g.fillStyle = '#b9b4a6';
+  g.fillRect(26.8, -3.5, 10.4, 4);
+  g.fillStyle = textures.resi;
+  g.fillRect(27.2, -3.1, 9.6, 3.2);
+  for (let i = 0; i < 9; i++) {
+    g.fillStyle = pick2(['#2a5a22', '#356a27', '#2f6a2a'], r);
+    g.beginPath();
+    g.arc(28 + i * 1.02 + r() * 0.4, -2.3 + r() * 1.7, 0.6 + r() * 0.3, 0, TAU);
+    g.fill();
+  }
+  g.fillStyle = '#2f6a2a'; // and the round bush next to it
+  g.beginPath();
+  g.arc(39.2, -2.5, 1.3, 0, TAU);
+  g.fill();
+  g.fillStyle = '#3c7a30';
+  g.beginPath();
+  g.arc(38.9, -2.8, 0.7, 0, TAU);
+  g.fill();
+  // The fountain and two benches: these were in the game before, the photo
+  // does not show them.
+  g.fillStyle = '#8f897d';
+  g.beginPath();
+  g.arc(44, -1.6, 2.3, 0, TAU);
+  g.fill();
+  g.fillStyle = '#4a8fc4';
+  g.beginPath();
+  g.arc(44, -1.6, 1.7, 0, TAU);
+  g.fill();
+  g.fillStyle = '#d9e9f4';
+  g.fillRect(43.75, -1.85, 0.5, 0.5);
+  g.fillStyle = '#6b4a2a';
+  g.fillRect(41.3, -5.2, 2.2, 0.6);
+  g.fillRect(44.6, -5.2, 2.2, 0.6);
+}
+
 // What the three have: eaves and ridge height, roof slopes, walls above the
 // eaves, where the name goes on the roof [u, v, height of the letters], where
 // the car stands [u, v], and for the garden trees [u, v, size, height], fences
-// and hedges as lines u, v, u, v and so on, and what is painted on the ground.
+// and hedges as lines u, v, u, v and so on, what is painted on the ground, and
+// the plot as corners u, v: the fences diced along the parcel borders inside
+// it go.
 const ROOFS = {
   hq: {
     eaves: 5.1,
@@ -1237,6 +1346,9 @@ const ROOFS = {
     slopes: HALL_SLOPES,
     gables: [],
     sign: [10.75, 2.9, 2],
+    trees: [[-0.2, 12.1, 1.6, 5]], // at the entrance of the car park
+    plot: [-7.4, -8.6, 60.6, -11.4, 61.9, 19.5, -6.1, 22.4],
+    ground: paintSquare,
   },
   // Johann-Philipp-Ring 14: a plain gable roof, the garage on its west side,
   // and the garden around it up to the pavement of the bend.
@@ -1262,6 +1374,7 @@ const ROOFS = {
       [0.4, 11.4, 4.1, 11.4],
     ],
     hedges: [[-8.1, -24.2, -8.1, -2.7]],
+    plot: [-9.5, -26.5, -9.5, 13, 7, 13, 23, 9.5, 20.5, 2.5, -6.5, -26.5],
     ground: paintGarden,
   },
 };
@@ -5272,29 +5385,6 @@ const DECOR = {
     g.fillStyle = '#2b62c8';
     g.fillRect(-12.5, 0.75, 0.8, 0.8);
   },
-  // The village square: paving, the fountain, benches and the bookcase.
-  townhall(g) {
-    g.fillStyle = textures.cobble;
-    g.fillRect(-12, 0.5, 24, 8.5);
-    g.fillStyle = '#8f897d';
-    g.beginPath();
-    g.arc(6, 4.6, 2.3, 0, TAU);
-    g.fill();
-    g.fillStyle = '#4a8fc4';
-    g.beginPath();
-    g.arc(6, 4.6, 1.7, 0, TAU);
-    g.fill();
-    g.fillStyle = '#d9e9f4';
-    g.fillRect(5.75, 4.35, 0.5, 0.5);
-    g.fillStyle = '#6b4a2a';
-    for (const x of [-2, 1.2]) {
-      g.fillRect(x, 7.4, 2.2, 0.6);
-    }
-    g.fillStyle = '#c8201c'; // the old phone box, full of books now
-    g.fillRect(-10.6, 6.2, 1.1, 1.1);
-    g.fillStyle = '#f2d23e';
-    g.fillRect(-10.4, 6.4, 0.7, 0.7);
-  },
   // Beer benches on the gravel by the clubhouse.
   club(g) {
     g.fillStyle = textures.gravel;
@@ -5483,7 +5573,7 @@ function paintGround(g, x0, y0, x1, y1) {
     g.save();
     g.transform(b.ca, b.sa, -b.sa, b.ca, b.mx, b.my);
     g.translate(b.at[0], b.at[1]);
-    ROOFS[b.poi].ground(g);
+    ROOFS[b.poi].ground(g, b);
     g.restore();
   }
   g.lineCap = 'butt';
@@ -5518,6 +5608,7 @@ function paintGround(g, x0, y0, x1, y1) {
   strokeLayer(g, ROADS.walk, textures.sidewalk);
   strokeLayer(g, ROADS.road, '#2f3135', 0, 0.5);
   strokeLayer(g, ROADS.cobble, '#5d5a53', 0, 0.5); // kerbstones
+  strokeLayer(g, ROADS.lane, textures.cobble);
   strokeLayer(g, ROADS.road, textures.asphalt);
   strokeLayer(g, ROADS.cobble, textures.cobble);
   g.setLineDash([3, 5]);
@@ -5635,35 +5726,28 @@ function byTile(lines) {
 }
 /**
  * Hedges or fences for the ground tiles: those of the map, without the ones
- * in a modelled garden, which brings its own.
+ * on the plot of a modelled building, which brings its own.
  * @param {string} kind 'hedges' or 'fences'.
  * @return {!Map<number, !Path2D>}
  */
 function borderTiles(kind) {
   let lines = MAP[kind];
   for (const b of BUILD) {
-    const own = (b.planes && ROOFS[b.poi][kind]) || [];
-    if (!own.length) {
+    const spec = b.planes && ROOFS[b.poi];
+    if (!spec || !spec.plot) {
       continue;
     }
-    // All the garden's own lines, on the map, and the box around them
-    const mine = ROOFS[b.poi].fences.concat(ROOFS[b.poi].hedges).map(l => {
+    const onMap = l => {
       const out = [];
       for (let i = 0; i < l.length; i += 2) {
         out.push(...fromFrame(b, l[i], l[i + 1]));
       }
       return out;
-    });
-    const xs = mine.flatMap(l => l.filter((v, i) => i % 2 === 0));
-    const ys = mine.flatMap(l => l.filter((v, i) => i % 2));
-    const outside = (x, y) =>
-      x < Math.min(...xs) - 1 ||
-      x > Math.max(...xs) + 1 ||
-      y < Math.min(...ys) - 1 ||
-      y > Math.max(...ys) + 1;
+    };
+    const plot = onMap(spec.plot);
     lines = lines
-      .filter(l => l.every((v, i) => i % 2 || outside(v, l[i + 1])))
-      .concat(kind === 'fences' ? mine.slice(0, own.length) : mine.slice(-1));
+      .filter(l => !l.some((v, i) => i % 2 === 0 && pip(v, l[i + 1], plot)))
+      .concat((spec[kind] || []).map(onMap));
   }
   return byTile(lines);
 }
@@ -7116,7 +7200,7 @@ function mapPaint(k, dpr) {
   g.setLineDash([5 * px * dpr, 5 * px * dpr]);
   stroke(ROADS.rail, '#fff', -0.8, 0.9);
   g.setLineDash([]);
-  const streets = [...ROADS.road, ...ROADS.cobble];
+  const streets = [...ROADS.road, ...ROADS.cobble, ...ROADS.lane];
   stroke(streets, '#7d7566', 2.2, 3.2);
   stroke(streets, '#fffdf6', 0, 1.8);
   stroke(ROADS.line, '#ffc21a', 0, 2.2); // the main roads in gold
@@ -7605,6 +7689,7 @@ if (location.search.includes('selftest')) {
       HOME.planes.filter(f => f.wall).length === HOME_GABLES.length &&
       HOME.planes.filter(f => !f.wall).length === HOME_SLOPES.length &&
       BUILD.filter(b => b.planes).length === Object.keys(ROOFS).length &&
+      ROADS.lane.length === 1 &&
       HOME.planes.every(f => f.p.every(v => v > -40 && v < 40)) &&
       HOME.planes.filter(f => f.pv && f.pv.length).length === 2,
     'the church has its surveyed tower, standing on the church': BUILD.some(
