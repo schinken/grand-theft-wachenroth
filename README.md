@@ -126,6 +126,11 @@ town hall with its square, and Johann-Philipp-Ring 14 with its garden. The
 neighbours of Bernhard's garage get their roofs face by face as the survey
 measured them, with the colours, dormers, roof windows and solar panels the
 photos show, and the garage its drive with the cars waiting by the hedge.
+The places the jobs send you to were checked against the aerial photo: the
+Schwallclub's beer garden, Metzgerei Braun, the hall at Toxicity, the
+playgrounds, the Koppel of Rock at its crossroads, the Christmas tree
+plantation on the Weißer Berg, and the roofs of St. Gertrud, Gasthof Linsner,
+Lagerhaus Grönert and the barn at the Mühle.
 
 Map data © OpenStreetMap contributors, ODbL. Buildings, trees, aerial photo and
 parcels: Bayerische Vermessungsverwaltung – www.geodaten.bayern.de, CC BY 4.0,
