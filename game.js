@@ -8315,8 +8315,12 @@ function drawFurniture(list, cx, cy, hc) {
  * @param {number} cx Camera centre, in metres.
  * @param {number} cy
  * @param {number} hc Camera height, in metres.
+ * @param {number} x0 The view, in metres.
+ * @param {number} y0
+ * @param {number} x1
+ * @param {number} y1
  */
-function drawTrees(trees, cx, cy, hc) {
+function drawTrees(trees, cx, cy, hc, x0, y0, x1, y1) {
   ctx.strokeStyle = '#4a3420';
   ctx.lineWidth = 0.5;
   for (const t of trees) {
@@ -8326,6 +8330,14 @@ function drawTrees(trees, cx, cy, hc) {
     const s = hc / (hc - t.h);
     const x = t.x * s + cx * (1 - s);
     const y = t.y * s + cy * (1 - s);
+    if (
+      Math.max(x + t.r, t.x) + 2 < x0 ||
+      Math.min(x - t.r, t.x) - 2 > x1 ||
+      Math.max(y + t.r, t.y) + 2 < y0 ||
+      Math.min(y - t.r, t.y) - 2 > y1
+    ) {
+      continue; // the grid hands out whole cells, mostly off the screen
+    }
     ctx.beginPath();
     ctx.moveTo(t.x, t.y);
     ctx.lineTo(x, y);
@@ -8811,7 +8823,7 @@ function render() {
   drawBuildings(builds, ex, ey, hc, x0, y0, x1, y1);
   drawFurniture(gridFind(propGrid, x0 - 9, y0 - 9, x1 + 9, y1 + 9), ex, ey, hc);
   drawParticles();
-  drawTrees(trees, ex, ey, hc);
+  drawTrees(trees, ex, ey, hc, x0, y0, x1, y1);
   // the world ends here
   ctx.fillStyle = 'rgba(8,10,14,.7)';
   const m = v => Math.max(0, v);
