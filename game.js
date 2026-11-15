@@ -5295,11 +5295,13 @@ function hud(dt) {
     pg.cur = pg.q.shift();
     pg.n = 0;
     pg.said = 0;
-    pg.hold = 1 + pg.cur.length * 0.014;
+    // Time to read it once it is typed: about 15 letters a second, and never
+    // less than three seconds. A tap on the pager skips ahead.
+    pg.hold = Math.max(3, pg.cur.length / 15);
   }
   if (pg.cur) {
     if (pg.n < pg.cur.length) {
-      pg.n += dt * 46;
+      pg.n += dt * 28; // letters a second
       const n = Math.min(pg.cur.length, pg.n | 0);
       const typed = `FLO: ${pg.cur.slice(0, n)}`;
       if (changed('lcd', typed)) {
@@ -5445,10 +5447,13 @@ function start(save) {
     document.documentElement.requestFullscreen().catch(() => {});
   }
   audio.radio(-1);
-  // Index.html?job=3 jumps straight to a job
-  const pickN = +new URLSearchParams(location.search).get('job');
-  if (pickN) {
-    state.jobN = clamp(Math.round(pickN) - 1, 0, MISSIONS.length - 1);
+  // index.html?job=koppel, or ?job=12, jumps straight to a job: by its name
+  // in missions.js, or by its number counted from 1
+  const pick = new URLSearchParams(location.search).get('job');
+  const named = MISSIONS.findIndex(m => m.id === pick);
+  const n = named >= 0 ? named : Math.round(Number(pick)) - 1;
+  if (pick && n >= 0) {
+    state.jobN = clamp(n, 0, MISSIONS.length - 1);
   }
   page(...(save ? TALK.back : TALK.hello));
 }
