@@ -175,10 +175,6 @@ const SFX = {
   },
   crash: imp =>
     crack(0.15 + imp / 60, Math.min(0.5, Math.max(0.08, imp / 35)), 1400),
-  splat: () => {
-    crack(0.12, 0.3, 700);
-    beep(170, 0.16, 0, 0.12, 'sawtooth', 60);
-  },
   scream: () => beep(rnd(700, 950), 0.28, 0, 0.05, 'sawtooth', rnd(380, 480)),
   pager: () => {
     for (let k = 0; k < 2; k++) {
