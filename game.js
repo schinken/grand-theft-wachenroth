@@ -3508,6 +3508,7 @@ const TRAILERS = {
   log: {length: 13, width: 1.8},
   cart: {length: 5.2, width: 2.3},
   wood: {length: 5.2, width: 2.3},
+  xmas: {length: 5.2, width: 2.3},
 };
 for (const [kind, type] of Object.entries(TRAILERS)) {
   const w = (type.length * PX_PER_M) | 0;
@@ -3518,8 +3519,9 @@ for (const [kind, type] of Object.entries(TRAILERS)) {
     g.fillStyle = f;
     g.fillRect(x, y, ww, hh);
   };
-  if (kind === 'cart' || kind === 'wood') {
-    // a farm cart, empty or with logs stacked crosswise
+  if (kind === 'cart' || kind === 'wood' || kind === 'xmas') {
+    // a farm cart, empty, with logs stacked crosswise, or with Christmas trees
+    // lying lengthwise
     rect(4, 0, 8, h, '#101012');
     rect(w - 14, 0, 8, h, '#101012');
     rect(0, 1, w - 3, h - 2, '#0b0b0d');
@@ -3528,6 +3530,11 @@ for (const [kind, type] of Object.entries(TRAILERS)) {
     for (let x = 4; kind === 'wood' && x < w - 8; x += 4) {
       rect(x, 3, 3, h - 6, x % 8 ? '#a0703c' : '#8a5a2a');
       rect(x + 1, h / 2 - 1, 1, 2, '#e0c08a');
+    }
+    for (let y = 3; kind === 'xmas' && y < h - 5; y += 4) {
+      rect(4, y, w - 14, 4, y % 8 > 3 ? '#2a7a3a' : '#1f5e2d');
+      rect(w - 10, y + 1, 3, 2, '#6b4a2a');
+      rect(8 + (y % 5) * 4, y + 1, 1, 1, '#d9dde2'); // tinsel left on
     }
     rect(w - 3, h / 2 - 1, 3, 2, '#333');
   } else if (kind === 'grain') {
@@ -3606,6 +3613,16 @@ function icon(kind) {
     rect(7, 5, 5, 3, '#b9bec4');
     rect(7, 6, 5, 1, '#6f757c');
     rect(1, 3, 3, 1, '#15151a');
+  } else if (kind === 'xmas') {
+    // a Christmas tree put out, a strand of tinsel still on it
+    rect(5, 0, 2, 2, '#2f8f4a');
+    rect(4, 2, 4, 3, '#2a7a3a');
+    rect(3, 5, 6, 3, '#246b33');
+    rect(2, 8, 8, 2, '#1f5e2d');
+    rect(5, 10, 2, 2, '#6b4a2a');
+    rect(4, 4, 1, 1, '#d9dde2');
+    rect(7, 7, 1, 1, '#d9dde2');
+    rect(3, 9, 1, 1, '#d9dde2');
   } else if (kind === 'barrel') {
     rect(2, 1, 8, 10, '#6b4a2a');
     rect(1, 3, 10, 6, '#8a6238');
@@ -5090,7 +5107,8 @@ function grab(v) {
     audio.play('cluck');
   }
   const left = state.items.filter(o => o.job).length;
-  float(v, left ? `noch ${left}` : 'Alles da!');
+  const gift = v.kind === 'xmas' ? ' · Spende +20 €' : '';
+  float(v, `${left ? `noch ${left}` : 'Alles da!'}${gift}`);
   if (j) {
     j.got++;
   }
@@ -5212,6 +5230,31 @@ function looseSpot(c, r, ok) {
     const x = c.x + rand(-r, r);
     const y = c.y + rand(-r, r);
     if (ok(x, y) && !blocked(x, y, 0.8) && !(surfAt(x, y) & 12)) {
+      return {x, y};
+    }
+  }
+  return null;
+}
+
+/**
+ * A spot at the kerb in front of a house near a place, where people put out
+ * what is to be fetched.
+ * @param {!Point} c
+ * @param {number} r
+ * @param {function(number, number): boolean} ok
+ * @return {?Point}
+ */
+function kerbSpot(c, r, ok) {
+  const homes = BUILD.filter(
+    b => b.rd && Math.hypot(b.mx - c.x, b.my - c.y) < r
+  );
+  while (homes.length) {
+    const b = homes.splice((Math.random() * homes.length) | 0, 1)[0];
+    const [qx, qy, seg, far] = b.rd;
+    const kerb = seg[4] / 2 + 0.8;
+    const x = qx + ((b.mx - qx) * kerb) / far;
+    const y = qy + ((b.my - qy) * kerb) / far;
+    if (far > kerb + 2 && ok(x, y) && !blocked(x, y, 0.8)) {
       return {x, y};
     }
   }
@@ -5436,13 +5479,15 @@ function nextStep() {
       );
     for (let i = 0; i < st.n; i++) {
       // Trees to cut stand where they stand; loose things lie anywhere off
-      // the road; the rest lie on roads.
+      // the road, kerb things in front of houses; the rest lie on roads.
       const spot =
         (st.item === 'tree'
           ? treeSpot(c, st.r)
           : st.loose
             ? looseSpot(c, st.r, free)
-            : roadPoint(free)) || c;
+            : st.kerb
+              ? kerbSpot(c, st.r, free)
+              : roadPoint(free)) || c;
       state.items.push({
         x: spot.x,
         y: spot.y,
@@ -5620,11 +5665,14 @@ function playRules(dt) {
   if (state.wasted) {
     return;
   }
-  // Hens are caught by hand, trees cut with the saw: on foot only
+  // Hens are caught by hand, trees cut with the saw: on foot only. Christmas
+  // trees go on the cart of the job's tractor.
+  const job = state.job;
   const got = state.items.filter(
     v =>
       Math.hypot(v.x - player.x, v.y - player.y) < reach &&
-      !(player.car && (v.kind === 'hen' || v.kind === 'tree'))
+      !(player.car && (v.kind === 'hen' || v.kind === 'tree')) &&
+      !(v.kind === 'xmas' && !(job && player.car === job.veh))
   );
   if (got.length) {
     state.items = state.items.filter(v => !got.includes(v));
