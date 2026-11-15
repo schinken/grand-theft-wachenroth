@@ -21,21 +21,25 @@ somebody who can fix that. That somebody is you.
 His pager, the FLO-FUNK 3000, beeps, mumbles and spells out the next job. It
 starts small and gets bigger:
 
-| #   | Job                      | What Flo wants                                                        |
-| --- | ------------------------ | --------------------------------------------------------------------- |
-| 1   | Dosen zum Saufen         | Five cans of Jacky Cola from Edeka Claudia. He is thirsty.            |
-| 2   | Brotzeit für den SV      | Food from Edeka Claudia and the butcher to the sports club.           |
-| 3   | Pizza-Express            | The pizza driver of La Vite is ill. Four deliveries, tips for speed.  |
-| 4   | Stillstand ist Rückstand | A concrete mixer from Röckelein for the roadworks in Schulstraße.     |
-| 5   | Weizen für den Bäck      | No flour, no rolls: the wheat tractor from the Lagerhaus to the Bäck. |
-| 6   | Bier für den Schwallclub | The beer has run out. Every bump costs a bottle.                      |
-| 7   | Feiner Zwirn             | A suit for the Kerwa, from Murk. The police want it back.             |
-| 8   | Johannifeuer             | The midsummer bonfire is out of control: borrow the fire engine.      |
-| 9   | Aischgründer Gold        | The Grüner Baum has run out of carp. Go fishing.                      |
-| 10  | Der Baam                 | Lads from Höchstadt stole the maypole. Ram their tractor.             |
-| 11  | Kerwa ausgraben          | Three barrels hidden in the village, and the clock is ticking.        |
-| 12  | Koppel of Rock           | Drive the bands from their hotels to the festival meadow.             |
-| 13  | Kerwa-Samstag            | Flo, the brass band and the police, all on the way to the tent.       |
+| #   | Job                                                                                         | What Flo wants                                                        |
+| --- | ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| 1   | [Dosen zum Saufen](https://schinken.github.io/grand-theft-wachenroth/?job=cans)             | Five cans of Jacky Cola from Edeka Claudia. He is thirsty.            |
+| 2   | [Brotzeit für den SV](https://schinken.github.io/grand-theft-wachenroth/?job=snack)         | Food from Edeka Claudia and the butcher to the sports club.           |
+| 3   | [Pizza-Express](https://schinken.github.io/grand-theft-wachenroth/?job=pizza)               | The pizza driver of La Vite is ill. Four deliveries, tips for speed.  |
+| 4   | [Stillstand ist Rückstand](https://schinken.github.io/grand-theft-wachenroth/?job=concrete) | A concrete mixer from Röckelein for the roadworks in Schulstraße.     |
+| 5   | [Weizen für den Bäck](https://schinken.github.io/grand-theft-wachenroth/?job=wheat)         | No flour, no rolls: the wheat tractor from the Lagerhaus to the Bäck. |
+| 6   | [Bier für den Schwallclub](https://schinken.github.io/grand-theft-wachenroth/?job=beer)     | The beer has run out. Every bump costs a bottle.                      |
+| 7   | [Feiner Zwirn](https://schinken.github.io/grand-theft-wachenroth/?job=suit)                 | A suit for the Kerwa, from Murk. The police want it back.             |
+| 8   | [Johannifeuer](https://schinken.github.io/grand-theft-wachenroth/?job=fire)                 | The midsummer bonfire is out of control: borrow the fire engine.      |
+| 9   | [Aischgründer Gold](https://schinken.github.io/grand-theft-wachenroth/?job=carp)            | The Grüner Baum has run out of carp. Go fishing.                      |
+| 10  | [Der Baam](https://schinken.github.io/grand-theft-wachenroth/?job=maypole)                  | Lads from Höchstadt stole the maypole. Ram their tractor.             |
+| 11  | [Kerwa ausgraben](https://schinken.github.io/grand-theft-wachenroth/?job=barrels)           | Three barrels hidden in the village, and the clock is ticking.        |
+| 12  | [Koppel of Rock](https://schinken.github.io/grand-theft-wachenroth/?job=koppel)             | Drive the bands from their hotels to the festival meadow.             |
+| 13  | [Kerwa-Samstag](https://schinken.github.io/grand-theft-wachenroth/?job=finale)              | Flo, the brass band and the police, all on the way to the tent.       |
+
+Each job name links to the game with that job up next: click _Neues Spiel_ and
+Flo pages you with it. In the address, `?job=` takes the job's name from
+`missions.js` or its number.
 
 The Kerwa is the village fair, the biggest weekend of the year.
 
