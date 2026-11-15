@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
 """Bake OpenStreetMap data for Wachenroth into map.js.
 
-Usage: python3 tools/osm2map.py [cached-overpass.json] > map.js
+Usage: python3 tools/osm2map.py [cached-overpass.json [lod2-tile.gml ...]] > map.js
+
+The buildings come from the state's 3D building model when its tiles are given: more buildings than OSM has, each
+with a measured height and roof shape. The four tiles for Wachenroth are 622_5510, 624_5510, 622_5512 and 624_5512
+from https://download1.bayernwolke.de/a/lod2/citygml/<tile>.gml (Bayerische Vermessungsverwaltung, CC BY 4.0).
 """
 import json
 import math
 import sys
 import urllib.parse
 import urllib.request
+import xml.etree.ElementTree as ET
 
 S, W, N, E = 49.7440, 10.6950, 49.7590, 10.7300
 MARGIN = 80  # metres of road kept outside the playable world
@@ -27,6 +32,11 @@ AREA = {'forest': 'forest', 'wood': 'forest', 'scrub': 'scrub', 'wetland': 'scru
         'playground': 'play', 'farmyard': 'yard', 'cemetery': 'cem', 'grave_yard': 'cem', 'landfill': 'dump',
         'orchard': 'orchard', 'plant_nursery': 'orchard', 'pitch': 'pitch', 'school': 'school',
         'kindergarten': 'school', 'wastewater_plant': 'ind'}
+
+ZONE = {'ind': 'i', 'com': 'm', 'yard': 'y'}  # land use -> kind of the buildings standing on it
+# ALKIS roof codes -> flat, gable or hip. A lean-to roof reads as flat from above; mixed forms are left to the game.
+ROOF = {'1000': 'f', '2100': 'f', '2200': 'f', '3100': 'g', '3200': 'p', '3300': 'p', '3400': 'p', '3500': 'p'}
+GARAGE = ('31001_2463', '31001_2523')  # garages and transformer houses
 
 # Places the missions use, as lat/lon read off OpenStreetMap (name tags, house numbers).
 POIS = {
@@ -121,6 +131,79 @@ def clip(pts, m=150):
     return pts
 
 
+def corners(b):
+    return list(zip(b['p'][::2], b['p'][1::2]))
+
+
+def centre(b):
+    pts = corners(b)
+    return (sum(p[0] for p in pts) / len(pts), sum(p[1] for p in pts) / len(pts))
+
+
+def latlon(east, north):
+    """ETRS89 / UTM zone 32N -> a point in degrees, as xy() takes it (Krueger series, exact to a millimetre)."""
+    f = 1 / 298.257222101
+    n = f / (2 - f)
+    a = 6378137 / (1 + n) * (1 + n**2 / 4 + n**4 / 64) * 0.9996
+    xi, eta = north / a, (east - 500000) / a
+    beta = (n / 2 - 2 * n**2 / 3 + 37 * n**3 / 96, n**2 / 48 + n**3 / 15, 17 * n**3 / 480)
+    delta = (2 * n - 2 * n**2 / 3 - 2 * n**3, 7 * n**2 / 3 - 8 * n**3 / 5, 56 * n**3 / 15)
+    xi2 = xi - sum(b * math.sin(2 * j * xi) * math.cosh(2 * j * eta) for j, b in enumerate(beta, 1))
+    eta2 = eta - sum(b * math.cos(2 * j * xi) * math.sinh(2 * j * eta) for j, b in enumerate(beta, 1))
+    chi = math.asin(math.sin(xi2) / math.cosh(eta2))
+    lat = chi + sum(d * math.sin(2 * j * chi) for j, d in enumerate(delta, 1))
+    return {'lat': math.degrees(lat), 'lon': 9 + math.degrees(math.atan2(math.sinh(eta2), math.cos(xi2)))}
+
+
+def tidy(pts, tol=0.3):
+    """Drop corners that barely leave the line between their neighbours: the cadastre draws every 10 cm notch."""
+    i = 0
+    while i < len(pts) and len(pts) > 4:
+        a, p, b = pts[i - 1], pts[i], pts[(i + 1) % len(pts)]
+        off = abs((b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0])) / (math.dist(a, b) or 1)
+        if off < tol:
+            pts.pop(i)
+            i = max(i - 1, 0)
+        else:
+            i += 1
+    return pts
+
+
+def lod2(paths):
+    """The state's 3D buildings (CityGML LoD2) as building entries: outline, wall height, roof shape, kind."""
+    ns = {'b': 'http://www.opengis.net/citygml/building/1.0', 'g': 'http://www.opengis.net/gml',
+          'n': 'http://www.opengis.net/citygml/generics/1.0', 'x': 'urn:oasis:names:tc:ciq:xsdschema:xAL:2.0'}
+    out = []
+    for path in paths:
+        for el in ET.parse(path).getroot().iterfind('.//b:Building', ns):
+            use = el.findtext('b:function', '', ns)
+            pos = el.find('.//b:GroundSurface//g:posList', ns)
+            if pos is None or not use.startswith(('31001', '51009_1610')):
+                continue  # bridges, walls and the like
+            v = pos.text.split()
+            pts = tidy(ring([latlon(float(x), float(y)) for x, y in zip(v[::3], v[1::3])]))
+            a = shoelace(pts)
+            if a < 6 or not any(inside(p, 20) for p in pts):
+                continue
+            # Walls end at the eaves: the low edge of the roof faces above the ground, big faces counting most.
+            faces = [{at.get('name'): float(at.findtext('n:value', '0', ns))
+                      for at in f.iterfind('n:stringAttribute', ns)} for f in el.iterfind('.//b:RoofSurface', ns)]
+            size = sum(f.get('Flaeche', 0) for f in faces)
+            eaves = sum(f.get('Flaeche', 0) * f.get('Z_MIN', 0) for f in faces) / size if size \
+                else float(el.findtext('b:measuredHeight', '3', ns))
+            # A house is what people live in, what has an address, or what serves the public; the rest are barns
+            # and sheds.
+            main = use[6:7] in '13' or el.find('.//x:ThoroughfareName', ns) is not None
+            k = 'o' if use[0] == '5' else 'c' if use == '31001_3041' else 'g' if use in GARAGE \
+                else 'h' if main else 'd' if a < 30 else 'y'
+            b = {'p': flat(pts), 'h': round(max(eaves, 2.2), 1), 'a': round(a), 'k': k}
+            roof = ROOF.get(el.findtext('b:roofType', '', ns))
+            if roof and k != 'o':
+                b['r'] = roof
+            out.append(b)
+    return out
+
+
 def outers(rel):
     """Stitch a multipolygon's outer member ways into closed rings."""
     parts = [m['geometry'] for m in rel['members'] if m['type'] == 'way' and m['role'] == 'outer' and m.get('geometry')]
@@ -148,7 +231,7 @@ else:
 
 roads, areas, buildings, trees, hedges, fences = [], [], [], [], [], []
 node_ix, nodes, edges = {}, [], []
-zones = {'ind': [], 'com': [], 'yard': []}
+zones = {z: [] for z in ZONE}
 
 for e in els:
     t = e.get('tags', {})
@@ -223,11 +306,28 @@ for e in els:
             if k in zones:
                 zones[k].append(pts)
 
+if len(sys.argv) > 2:
+    # Build on the state's buildings. OSM adds what it knows better: that something is a church, a garage or an
+    # open roof, the round silos, and the few buildings the state does not have.
+    drawn, buildings = buildings, lod2(sys.argv[2:])
+    for b in drawn:
+        pts, c = corners(b), centre(b)
+        hits = [o for o in buildings if math.dist(c, centre(o)) < 150 and pip(centre(o), pts)]
+        if b['k'] == 's':
+            buildings = [o for o in buildings if o not in hits] + [b]
+        elif not hits and not any(math.dist(c, centre(o)) < 150 and pip(c, corners(o)) for o in buildings):
+            buildings.append(b)
+            b['osm'] = 1
+        for o in hits if b['k'] in 'cgo' else []:
+            o['k'] = b['k']
+            o.pop('r', None) if b['k'] == 'o' else None
+    lone = sum(b.pop('osm', 0) for b in buildings)
+    assert lone < len(drawn) / 5, f'{lone} OSM buildings have no state building: do the tiles line up?'
+    print(f'{len(buildings)} buildings: {lone} only in OSM, {len(drawn)} drawn in OSM', file=sys.stderr)
 for b in buildings:
-    pts = list(zip(b['p'][::2], b['p'][1::2]))
-    c = (sum(p[0] for p in pts) / len(pts), sum(p[1] for p in pts) / len(pts))
-    if b['k'] == 'h':
-        b['k'] = next((z[0] for z in ('ind', 'com', 'yard') if any(pip(c, poly) for poly in zones[z])), 'h')
+    if b['k'] in 'hy':
+        c = centre(b)
+        b['k'] = next((ZONE[z] for z in ZONE if any(pip(c, poly) for poly in zones[z])), b['k'])
 areas.sort(key=lambda a: -a.pop('a'))
 
 # Through traffic: drop cul-de-sacs so AI cars never need a three-point turn.
@@ -256,7 +356,9 @@ for k, p in pois.items():
 
 out = {'w': WW, 'h': WH, 'roads': roads, 'nodes': flat(nodes), 'edges': flat(edges), 'areas': areas,
        'buildings': buildings, 'trees': flat(trees), 'hedges': hedges, 'fences': fences, 'pois': pois}
-print('// Generated by tools/osm2map.py. Map data (c) OpenStreetMap contributors, ODbL.')
+print('// Generated by tools/osm2map.py. Map data (c) OpenStreetMap contributors, ODbL.'
+      + (' Buildings: Bayerische Vermessungsverwaltung, www.geodaten.bayern.de, CC BY 4.0, simplified.'
+         if len(sys.argv) > 2 else ''))
 print('export const MAP = ' + json.dumps(out, separators=(',', ':'), ensure_ascii=False) + ';')
 print(f'{len(roads)} roads, {len(nodes)} nodes, {len(buildings)} buildings, {len(areas)} areas, {len(trees)} trees, '
       f'{len(hedges)} hedges, {WW}x{WH} m', file=sys.stderr)

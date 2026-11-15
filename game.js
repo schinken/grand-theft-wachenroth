@@ -47,7 +47,8 @@ let Car;
 let Ped;
 
 /**
- * A building from the map: outline p, height h, walls and roof.
+ * A building from the map: outline p, wall height h, kind k, and where it was
+ * surveyed the roof shape r: 'f' flat, 'g' gable, 'p' hip.
  * @typedef {!Object}
  */
 let Building;
@@ -951,7 +952,7 @@ const LANDMARKS = {
   hq: {wall: '#f2f1ec', roof: 'slate', hip: true, pv: true},
   murk: {plate: ['#60bfcc', '#ffffff']},
   bakery: {wall: '#f0e2c0', plate: ['#b5622f', '#ffffff']},
-  works: {plate: ['#284d98', '#ffffff']},
+  works: {roof: 'metal', plate: ['#284d98', '#ffffff']},
   clubhouse: {plate: ['#c8201c', '#ffffff']},
   club: {wall: '#d9c9a4', roof: 'tile3'},
   lavite: {wall: '#f1ead8', roof: 'tile2'},
@@ -1060,7 +1061,7 @@ function addWindows(b, look) {
   const k = b.k;
   const hall = k === 'i' || k === 'm';
   const lived = k === 'h' || k === 'c' || (k === 'y' && b.a < 250);
-  if (!(hall || lived) || b.h < 5) {
+  if (!(hall || lived) || b.h < (k === 'h' ? 2.6 : 5)) {
     return;
   }
   // Rows of windows as shares of the wall height: [bottom, top].
@@ -1179,7 +1180,8 @@ function prepBuilding(b, r) {
   b.lpath = new Path2D(`M${b.lp.join(' ')}Z`);
   const big = b.a > 900;
   const v = r();
-  let gable = b.p.length <= 28 && wide > 2.5;
+  const simple = b.p.length <= 28 && wide > 2.5;
+  let gable = simple;
   if (k === 's' || k === 't') {
     b.apex = k === 's' ? 2 : b.a < 20 ? 2.6 : 9;
     gable = false;
@@ -1233,8 +1235,28 @@ function prepBuilding(b, r) {
             textures.slate,
           ][(v * 6) | 0];
   }
+  if (b.r && !'stwxo'.includes(k)) {
+    // The surveyed roof shape beats the guess. Tiles never lie flat, and a
+    // ridge never carries roofing felt.
+    gable = simple && b.r !== 'f';
+    const tiles = [
+      textures.tile1,
+      textures.tile2,
+      textures.tile3,
+      textures.tile4,
+      textures.slate,
+    ];
+    if (b.r === 'f' && tiles.includes(b.roof)) {
+      b.roof = b.a > 150 ? textures.flat : textures.tar;
+    } else if (
+      b.r !== 'f' &&
+      [textures.flat, textures.flatLight].includes(b.roof)
+    ) {
+      b.roof = textures.metal;
+    }
+  }
   if (fresh) {
-    b.roof = textures.slate;
+    b.roof = gable ? textures.slate : textures.solar;
   }
   if (look.roof) {
     b.roof = textures[look.roof];
@@ -1248,7 +1270,7 @@ function prepBuilding(b, r) {
       k === 'c'
         ? clamp(wide * 0.45, 2, 6)
         : clamp(wide * (metal ? 0.14 : 0.27), 0.7, 3.4);
-    ridge(b, rise, fresh || !!look.hip);
+    ridge(b, rise, fresh || !!look.hip || b.r === 'p');
   }
   if (b.halves && b.gables.length < 2) {
     b.halves = null;
@@ -1307,7 +1329,7 @@ function prepBuilding(b, r) {
 const pick2 = (a, r) => a[(r() * a.length) | 0];
 {
   // Not on the map, so made up: Röckelein's yard with silos and stacks of
-  // concrete slabs, and garden sheds
+  // concrete slabs
   const r = rng(7);
   const [wx, wy] = MAP.pois.works;
   const [mx, my] = MAP.pois.depot;
@@ -1387,37 +1409,8 @@ const pick2 = (a, r) => a[(r() * a.length) | 0];
     }
     return found;
   };
-  // House number 11, east of Flo's, is newer than the map: put it there.
-  const [hx, hy] = MAP.pois.hq;
-  const flosStreet = streetOf(hx, hy);
-  if (flosStreet) {
-    const sg = flosStreet[2];
-    const east = sg[2] > sg[0] ? 1 : -1;
-    const dx = ((sg[2] - sg[0]) / sg[5]) * east;
-    const dy = ((sg[3] - sg[1]) / sg[5]) * east;
-    const cx = hx + dx * 25;
-    const cy = hy + dy * 25;
-    const corners = [
-      [-6.5, -5],
-      [6.5, -5],
-      [6.5, 5],
-      [-6.5, 5],
-    ];
-    BUILD.push({
-      p: corners.flatMap(([u, v]) => [
-        cx + u * dx - v * dy,
-        cy + u * dy + v * dx,
-      ]),
-      h: 7,
-      a: 130,
-      k: 'h',
-      look: {flat: true, roof: 'solar', wall: '#e9e8e2'},
-    });
-    boxes.push([cx - 9, cy - 9, cx + 9, cy + 9]);
-  }
-  for (const b of [...BUILD]) {
-    // every house remembers its street; every third one gets a shed in the back
-    // garden
+  for (const b of BUILD) {
+    // every house remembers its street
     if (b.k !== 'h' || b.a < 50 || b.a > 420) {
       continue;
     }
@@ -1425,41 +1418,6 @@ const pick2 = (a, r) => a[(r() * a.length) | 0];
     const cx = b.p.reduce((sum, v, i) => (i % 2 ? sum : sum + v), 0) / n;
     const cy = b.p.reduce((sum, v, i) => (i % 2 ? sum + v : sum), 0) / n;
     b.rd = streetOf(cx, cy);
-    if (!b.rd) {
-      continue;
-    }
-    const [qx, qy, , far] = b.rd;
-    const ux = (cx - qx) / far;
-    const uy = (cy - qy) / far;
-    const back = Math.sqrt(b.a) / 2 + 4.5 + r() * 3;
-    const side = (r() - 0.5) * 9;
-    const keep = r() < 0.36;
-    const sx = cx + ux * back - uy * side;
-    const sy = cy + uy * back + ux * side;
-    const w = 1.3 + r() * 0.5;
-    const l = 1.6 + r() * 0.7;
-    if (
-      !keep ||
-      b.a < 70 ||
-      !free(sx, sy, 3.6) ||
-      surfAt(sx, sy) ||
-      sx < 8 ||
-      sy < 8 ||
-      sx > WORLD_W - 8 ||
-      sy > WORLD_H - 8
-    ) {
-      continue;
-    }
-    add(
-      [
-        [-w, -l],
-        [w, -l],
-        [w, l],
-        [-w, l],
-      ].flatMap(([u, v]) => [sx + u * ux - v * uy, sy + u * uy + v * ux]),
-      2.1 + r() * 0.5,
-      'd'
-    );
   }
   // Which building is which landmark: the one the place stands in, or the
   // nearest one.
@@ -1486,6 +1444,9 @@ const pick2 = (a, r) => a[(r() * a.length) | 0];
     if (best) {
       best.poi = key;
       best.label = SIGNS[key];
+      // A place with a name is somebody's house, even where the survey files
+      // it under barns.
+      best.k = best.k === 'y' ? 'h' : best.k;
       best.rd = best.rd || streetOf(bestAt[0], bestAt[1], 70);
     }
   }
