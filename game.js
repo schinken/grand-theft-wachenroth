@@ -3938,11 +3938,29 @@ function stepCar(c, dt) {
   fy = Math.sin(c.a);
   vf = c.vx * fx + c.vy * fy;
   let vl = c.vy * fx - c.vx * fy; // sideways slip
-  // Tuned at the garage: faster, quicker off the mark, and it takes bends
-  const boost = c.boost || 1;
+  // Tuned at the garage: faster, quicker off the mark, and it takes bends.
+  // NoS on top: much more push and top speed while the bottle lasts, some six
+  // seconds.
+  const nos = c.boosting && c.nos > 0;
+  if (nos) {
+    c.nos = Math.max(0, c.nos - dt / 6);
+    state.shake = Math.max(state.shake, 0.15);
+    puff(
+      c.x - Math.cos(c.a) * (type.length / 2 + 0.4),
+      c.y - Math.sin(c.a) * (type.length / 2 + 0.4),
+      'fire'
+    );
+  }
+  const boost = (c.boost || 1) * (nos ? 1.45 : 1);
   const max = type.max * boost * (road ? 1 : 0.7);
   if (c.thr > 0 && vf < max) {
-    vf += type.acc * boost * (vf < 0 ? 2.5 : 1 - (vf / max) ** 2) * c.thr * dt;
+    vf +=
+      type.acc *
+      boost *
+      (nos ? 1.5 : 1) *
+      (vf < 0 ? 2.5 : 1 - (vf / max) ** 2) *
+      c.thr *
+      dt;
   } // punchy launch, tapering to top speed
   if (c.thr < 0 && vf > -max * 0.35) {
     vf += (vf > 0 ? 30 : type.acc * 0.7) * c.thr * dt;
@@ -5577,6 +5595,19 @@ function openGarage(c) {
       },
     },
     {
+      // Fitted once, filled up after that
+      get label() {
+        return c.nos === undefined ? 'NoS einbauen' : 'NoS auffüllen';
+      },
+      get price() {
+        return c.nos === undefined ? 1200 : 150;
+      },
+      ok: () => c.nos === undefined || c.nos < 1,
+      buy() {
+        c.nos = 1;
+      },
+    },
+    {
       label: 'Neue Farbe',
       price: 100,
       ok: () => true,
@@ -5719,7 +5750,7 @@ function finish() {
 // ---------- player
 
 const keys = {};
-const pad = {x: 0, y: 0, brake: false, horn: false};
+const pad = {x: 0, y: 0, brake: false, horn: false, nos: false};
 const axis = (neg, pos) =>
   (pos.some(k => keys[k]) ? 1 : 0) - (neg.some(k => keys[k]) ? 1 : 0);
 
@@ -5777,6 +5808,13 @@ function controlPlayer(dt) {
     }
     c.thr = thr;
     c.steer = clamp(steer, -1, 1);
+    // NoS from Bernhard's garage: Shift, or the NOS button, while on the gas
+    const nos = !!(keys.ShiftLeft || keys.ShiftRight || pad.nos);
+    const firing = nos && c.nos > 0 && thr > 0;
+    if (firing && !c.boosting) {
+      audio.play('nos');
+    }
+    c.boosting = firing;
     c.hb = !!keys.Space;
     c.siren =
       (c.kind === 'police' || c.kind === 'fire') && (keys.KeyH || pad.horn);
@@ -5830,6 +5868,7 @@ function toggleCar() {
     c.thr = c.steer = 0;
     c.hb = false;
     c.siren = false;
+    c.boosting = false;
     audio.radio(-1);
     audio.play('door');
     return;
@@ -6120,6 +6159,14 @@ function hud(dt) {
   const hot = state.bust > 0.3;
   if (changed('hot', hot)) {
     byId('heat').classList.toggle('hot', hot);
+  }
+  const hasNos = !!c && c.nos !== undefined;
+  if (changed('hasNos', hasNos)) {
+    byId('nos').hidden = byId('bN').hidden = !hasNos;
+  }
+  const nosLeft = hasNos ? Math.round(c.nos * 100) : -1;
+  if (hasNos && changed('nosLeft', nosLeft)) {
+    byId('nos').querySelector('i').style.width = `${nosLeft}%`;
   }
   if (changed('onFoot', !c)) {
     byId('bB').textContent = c ? 'BREMSE' : 'RENNEN';
@@ -6447,6 +6494,7 @@ document.addEventListener('visibilitychange', () => {
     }
   };
   hold(byId('bB'), 'brake');
+  hold(byId('bN'), 'nos');
   hold(byId('bH'), 'horn');
   byId('bA').addEventListener('pointerdown', e => {
     e.preventDefault();

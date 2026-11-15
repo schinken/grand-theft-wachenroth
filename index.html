@@ -324,7 +324,8 @@
         color: var(--teal);
         min-height: 1.2em;
       }
-      #dmg div {
+      #dmg div,
+      #nos div {
         display: inline-block;
         width: 130px;
         height: 10px;
@@ -332,10 +333,14 @@
         border: 3px solid #000;
         background: #333;
       }
-      #dmg i {
+      #dmg i,
+      #nos i {
         display: block;
         height: 100%;
         background: var(--gold);
+      }
+      #nos i {
+        background: #3bb0ff;
       }
       #info {
         color: var(--gold);
@@ -484,6 +489,10 @@
         border-color: var(--gold);
         color: var(--gold);
       }
+      #btns #bN {
+        border-color: #3bb0ff;
+        color: #3bb0ff;
+      }
       #btns #bH {
         grid-column: 2;
         width: 60px;
@@ -553,7 +562,8 @@
           text-align: left;
           font-size: 15px;
         }
-        #dmg div {
+        #dmg div,
+        #nos div {
           width: 90px;
         }
         #hint {
@@ -606,16 +616,21 @@
           KAROSSE
           <div><i></i></div>
         </div>
+        <div id="nos" class="out" hidden>
+          NOS&nbsp;&nbsp;&nbsp;&nbsp;
+          <div><i></i></div>
+        </div>
       </div>
       <div id="hint" class="out">
-        PFEILE / WASD fahren &nbsp;·&nbsp; SHIFT rennen &nbsp;·&nbsp; LEERTASTE
-        Handbremse &nbsp;·&nbsp; F ein-/aussteigen &nbsp;·&nbsp; H Hupe
-        &nbsp;·&nbsp; R Radio &nbsp;·&nbsp; TAB Karte &nbsp;·&nbsp; P Pause
+        PFEILE / WASD fahren &nbsp;·&nbsp; SHIFT rennen / NoS &nbsp;·&nbsp;
+        LEERTASTE Handbremse &nbsp;·&nbsp; F ein-/aussteigen &nbsp;·&nbsp; H
+        Hupe &nbsp;·&nbsp; R Radio &nbsp;·&nbsp; TAB Karte &nbsp;·&nbsp; P Pause
       </div>
       <div id="zone"></div>
       <div id="stick"><i></i></div>
       <div id="btns">
         <button id="bH">HUPE</button>
+        <button id="bN" hidden>NOS</button>
         <button id="bB">BREMSE</button>
         <button id="bA">EIN<br />AUS</button>
       </div>
@@ -648,7 +663,7 @@
         <li>
           <kbd>↑</kbd> <kbd>↓</kbd> <kbd>←</kbd> <kbd>→</kbd> oder <kbd>W</kbd>
           <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> fahren und laufen, mit
-          <kbd>Shift</kbd> rennen
+          <kbd>Shift</kbd> rennen, im Auto mit NoS vom Bernhard: Lachgas
         </li>
         <li>
           <kbd>Leertaste</kbd> Handbremse &nbsp; <kbd>F</kbd> ein- und

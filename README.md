@@ -52,8 +52,9 @@ Money is for spending, too:
 
 - **Mechanic Monkeys**, Bernhard's garage: drive in and he repairs the car and
   makes the police forget you (250 €, he puts it on the slate when you are
-  broke), fits a V6 burble or a 300 hp petrol scream, tunes it, paints it,
-  adds racing stripes, flames or a rear spoiler.
+  broke), fits a V6 burble or a 300 hp petrol scream, tunes it, builds in NoS
+  and fills it up again, paints it, adds racing stripes, flames or a rear
+  spoiler.
 - **Maras Marktschänke**: walk in for a Wurzelsepp, and the world turns yellow
   and wobbly for a minute. Hic.
 
@@ -79,16 +80,16 @@ At least not that we know of.
 
 ## Playing
 
-| Keyboard       | Phone       | Does               |
-| -------------- | ----------- | ------------------ |
-| Arrows or WASD | Thumb stick | Drive or walk      |
-| Shift          | RENNEN      | Run, on foot       |
-| Space          | BREMSE      | Handbrake          |
-| F or Enter     | EIN/AUS     | Get in or out      |
-| H              | HUPE        | Horn               |
-| Tab            | Map button  | Map of the village |
-| R, M           | ♪ and ♫     | Radio, sound       |
-| P or Esc       | II          | Pause              |
+| Keyboard       | Phone       | Does                                  |
+| -------------- | ----------- | ------------------------------------- |
+| Arrows or WASD | Thumb stick | Drive or walk                         |
+| Shift          | RENNEN, NOS | Run on foot; NoS in a car that has it |
+| Space          | BREMSE      | Handbrake                             |
+| F or Enter     | EIN/AUS     | Get in or out                         |
+| H              | HUPE        | Horn                                  |
+| Tab            | Map button  | Map of the village                    |
+| R, M           | ♪ and ♫     | Radio, sound                          |
+| P or Esc       | II          | Pause                                 |
 
 The game saves after every job.
 
