@@ -16,7 +16,9 @@
 //            houses (kerb); trees to cut stand where they grow. foot = on foot
 //            only, veh = with the mission vehicle only, doris = Mama Doris
 //            guards her hens, db = the noise the rockers make (10 dB less for
-//            each one met)
+//            each one met), exact = the thing lies exactly at place `near`,
+//            guards = the lines they patrol with their lamps [x0, y0, x1, y1],
+//            dogs = where the shepherd dogs lie [x, y]
 //   hold     stay within r (10 m) of place `to` for secs seconds: veh = in the
 //            mission vehicle, fx = what it does ('water', 'spread', 'dig')
 //   chase    ram the getaway `veh` (with `trailer`), which sets off near place
@@ -89,6 +91,8 @@ export const PLACES = {
   toxicity: 'Toxicity',
   gumbrecht: 'Gumbrecht Tiefbau',
   dentist: 'Zahnarzt Mickoleit',
+  xmasfarm: 'Weihnachtsbaumkultur am Weißen Berg',
+  fichte: 'Die Festtags-Fichte',
   linsner: 'Gasthof Linsner',
 };
 
@@ -795,6 +799,53 @@ export const MISSIONS = [
       },
     ],
     outro: ['Der Ofen bullert. Soll der Winter ruhig kommen.'],
+  },
+
+  {
+    id: 'luckyxmas',
+    title: 'Lucky XMAS',
+    reward: 1000,
+    intro: [
+      'Seh ich gar net ein, für so ein Gestrüpp Geld rauszuschmeißen! Den hau ich in vier Wochen eh in den Ofen.',
+      'Kann man sich doch auch organisieren. Fahr zur Weihnachtsbaumkultur am Weißen Berg und besorg mir die nadeligste Festtags-Fichte.',
+    ],
+    steps: [
+      {
+        do: 'goto',
+        to: 'xmasfarm',
+        obj: 'Fahr zur Weihnachtsbaumkultur am Weißen Berg',
+      },
+      {
+        do: 'collect',
+        n: 1,
+        near: 'fichte',
+        exact: true,
+        item: 'xmas',
+        foot: true,
+        guards: [
+          [1272, 61, 1325, 66],
+          [1333, 101, 1259, 95],
+          [1276, 32, 1306, 36],
+        ],
+        dogs: [
+          [1305, 80],
+          [1300, 122],
+        ],
+        obj: 'Hol die Festtags-Fichte, zu Fuß. Bleib aus dem Licht der Wachen!',
+        say: 'Die Kultur wird bewacht. Bleib aus dem Lichtkegel der Wachen, und kommt ein Schäferhund: renn!',
+      },
+      {
+        do: 'goto',
+        to: 'hq',
+        time: 150,
+        obj: 'Bring die Fichte heim ins Hauptquartier',
+        say: 'Hast sie! Nix wie weg, bevor einer was merkt.',
+      },
+    ],
+    outro: [
+      'Die Fichte steht. Nadelt schon. Aber umsonst!',
+      'Frohe Weihnachten, und kein Wort zu niemandem.',
+    ],
   },
 
   {

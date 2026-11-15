@@ -2094,9 +2094,47 @@ function paintKita(g) {
   tower(g, 1418.6, 787, 0, '#d83a3a');
 }
 
+/**
+ * The Christmas tree plantation on the Weißer Berg, as the aerial photo shows
+ * it: rows of young spruces in three blocks, with grass lanes between them.
+ * Drawn on the map.
+ * @param {!CanvasRenderingContext2D} g
+ */
+function paintXmasFarm(g) {
+  const edge = [1240.8, 127.8, 1247.8, 97.9, 1257.2, 62.6, 1266.7, 27.7]
+    .concat([1285.8, 27.2, 1307.7, 35, 1327, 55.2, 1335.8, 67.2, 1341.9, 80.8])
+    .concat([1342.5, 96.4, 1337.6, 133.7, 1336.9, 155.8, 1333.1, 155.3]);
+  fillPoly(g, '#9a8a5a', edge);
+  g.save();
+  g.clip();
+  const r = rng(1224);
+  // the lanes: from x 1255 to 1336, at these heights and slopes
+  const lane = (x, y) =>
+    Math.abs(y - (60 + (x - 1270) * 0.1)) < 2.2 ||
+    Math.abs(y - (94 + (x - 1257) * 0.095)) < 2.4;
+  for (let y = 28; y < 156; y += 1.8) {
+    for (let x = 1241; x < 1343; x += 1.8) {
+      const tx = x + (r() - 0.5) * 0.4;
+      const ty = y + (x - 1240) * 0.08 + (r() - 0.5) * 0.4;
+      if (lane(tx, ty) || r() < 0.08) {
+        continue; // a gap where one was sold
+      }
+      g.fillStyle = pick2(['#1f4a26', '#24572c', '#2c6232'], r);
+      g.beginPath();
+      g.arc(tx, ty, 0.5 + r() * 0.35, 0, TAU);
+      g.fill();
+    }
+  }
+  g.restore();
+}
+
 // Places without a building of their own that are painted on the map:
-// the playgrounds.
-const GROUNDS = {playground: paintPlayground, kindergarten: paintKita};
+// the playgrounds and the Christmas tree plantation.
+const GROUNDS = {
+  playground: paintPlayground,
+  kindergarten: paintKita,
+  xmasfarm: paintXmasFarm,
+};
 
 /**
  * The plot of Pizzeria La Vite, as the aerial photos show it: the terrace
@@ -5674,6 +5712,20 @@ function looseSpot(c, r, ok) {
 }
 
 /**
+ * Whether a guard's lamp falls on a point.
+ * @param {!Object} g With its facing a, reach r and half-angle fov.
+ * @param {!Point} p
+ * @param {number=} more Extra metres and a tenth as much angle, for caution.
+ * @return {boolean}
+ */
+function inSight(g, p, more = 0) {
+  return (
+    dist(g, p) < g.r + more &&
+    Math.abs(wrap(Math.atan2(p.y - g.y, p.x - g.x) - g.a)) < g.fov + more / 10
+  );
+}
+
+/**
  * A spot at the kerb in front of a house near a place, where people put out
  * what is to be fetched.
  * @param {!Point} c
@@ -5792,6 +5844,52 @@ function jobCast(j, dt) {
       v.ph += 1.7; // blocked: turn away
     }
   }
+  for (const g of j.guards) {
+    // up and down the line, a look around at each end
+    g.t += dt;
+    if (g.wait > 0) {
+      g.wait -= dt;
+      g.a += dt * 1.6;
+    } else {
+      const len = Math.hypot(g.x1 - g.x0, g.y1 - g.y0);
+      g.u += (g.dir * 1.4 * dt) / len;
+      if (g.u <= 0 || g.u >= 1) {
+        g.u = clamp(g.u, 0, 1);
+        g.dir = -g.dir;
+        g.wait = 2.5;
+      }
+      g.a = Math.atan2(g.y1 - g.y0, g.x1 - g.x0) + (g.dir < 0 ? Math.PI : 0);
+    }
+    g.x = lerp(g.x0, g.x1, g.u);
+    g.y = lerp(g.y0, g.y1, g.u);
+    if (inSight(g, player)) {
+      j.caught = 'seen';
+    }
+  }
+  for (const d of j.dogs) {
+    // a dog that smells you comes running, for a while
+    const near = dist(d, player);
+    if (afoot && near < 14 && d.chase <= 0) {
+      d.chase = 4;
+      float(d, 'WUFF!', '#ff5a1f');
+    }
+    const to = d.chase > 0 ? player : {x: d.hx, y: d.hy};
+    const far = dist(d, to);
+    if (far > 0.5) {
+      d.a = Math.atan2(to.y - d.y, to.x - d.x);
+      const sp = d.chase > 0 ? 5.6 : 2;
+      d.x += Math.cos(d.a) * Math.min(far, sp * dt);
+      d.y += Math.sin(d.a) * Math.min(far, sp * dt);
+      d.t += dt * sp;
+    }
+    d.chase -= dt;
+    if (Math.hypot(d.x - d.hx, d.y - d.hy) > 28) {
+      d.chase = 0;
+    }
+    if (afoot && near < 0.9) {
+      j.caught = 'dog';
+    }
+  }
   const dz = j.doris;
   if (!dz) {
     return;
@@ -5905,6 +6003,21 @@ function nextStep() {
   }
   calmThieves(j);
   j.thieves = st.thieves ? spawnThieves(st.thieves) : [];
+  // Guards walk their lines with a lamp; shepherd dogs lie in wait.
+  j.guards = (st.guards || []).map(([x0, y0, x1, y1]) => ({
+    ...{x0, y0, x1, y1, x: x0, y: y0, a: Math.atan2(y1 - y0, x1 - x0)},
+    ...{u: Math.random(), dir: 1, wait: 0, t: 0, r: 12, fov: 0.5},
+  }));
+  j.dogs = (st.dogs || []).map(([x, y]) => ({
+    hx: x,
+    hy: y,
+    x,
+    y,
+    a: 0,
+    t: 0,
+    chase: 0,
+  }));
+  j.caught = '';
   j.doris = null;
   if (st.doris) {
     // Mama Doris comes out of the house with her broom
@@ -5947,13 +6060,15 @@ function nextStep() {
       // Trees to cut stand where they stand; loose things lie anywhere off
       // the road, kerb things in front of houses; the rest lie on roads.
       const spot =
-        (st.item === 'tree'
-          ? treeSpot(c, st.r)
-          : st.loose
-            ? looseSpot(c, st.r, free)
-            : st.kerb
-              ? kerbSpot(c, st.r, free)
-              : roadPoint(free)) || c;
+        (st.exact
+          ? {x: MAP.pois[st.near][0], y: MAP.pois[st.near][1]}
+          : st.item === 'tree'
+            ? treeSpot(c, st.r)
+            : st.loose
+              ? looseSpot(c, st.r, free)
+              : st.kerb
+                ? kerbSpot(c, st.r, free)
+                : roadPoint(free)) || c;
       state.items.push({
         x: spot.x,
         y: spot.y,
@@ -5978,6 +6093,10 @@ function jobRules(dt) {
   const st = j.step;
   const sp = player.car ? Math.hypot(player.car.vx, player.car.vy) : 0;
   const lost = c => c && (c.dead || c.burn > 0 || c.gone);
+  if (j.caught) {
+    failJob(j.caught);
+    return;
+  }
   if (lost(j.veh) || lost(j.prey)) {
     failJob(j.prey && j.prey.gone ? 'gone' : 'wreck');
     return;
@@ -6135,6 +6254,8 @@ function failJob(why) {
       wreck: 'Fahrzeug Schrott',
       cargo: 'Ladung kaputt',
       wood: 'Kein Holz mehr am Hänger',
+      seen: 'Die Wache hat dich gesehen',
+      dog: 'Der Schäferhund hat dich gestellt',
       gone: 'Entkommen',
       busted: '',
       wasted: '',
@@ -7547,7 +7668,7 @@ function paintGround(g, x0, y0, x1, y1) {
   }
   for (const [key, paint] of Object.entries(GROUNDS)) {
     const [px, py] = MAP.pois[key];
-    if (px > x0 - 60 && px < x1 + 60 && py > y0 - 60 && py < y1 + 60) {
+    if (px > x0 - 130 && px < x1 + 130 && py > y0 - 130 && py < y1 + 130) {
       g.save();
       paint(g);
       g.restore();
@@ -9070,6 +9191,44 @@ function drawSprites(x0, y0, x1, y1) {
       drawPerson(p, p.shirt, p.hair, p.mane);
     }
   }
+  for (const g of (state.job && state.job.guards) || []) {
+    if (!seen(g)) {
+      continue;
+    }
+    ctx.fillStyle = 'rgba(255,224,102,.28)'; // the lamp
+    ctx.beginPath();
+    ctx.moveTo(g.x, g.y);
+    ctx.arc(g.x, g.y, g.r, g.a - g.fov, g.a + g.fov);
+    ctx.closePath();
+    ctx.fill();
+    drawPerson(g, '#3c5a2a', '#2a1d14');
+  }
+  for (const d of (state.job && state.job.dogs) || []) {
+    if (!seen(d)) {
+      continue;
+    }
+    // a shepherd dog: body, head and a tail that wags
+    box(ctx, d.x, d.y, 1.1, 0.45, d.a, '#5a3a1e');
+    box(
+      ctx,
+      d.x + Math.cos(d.a) * 0.6,
+      d.y + Math.sin(d.a) * 0.6,
+      0.4,
+      0.35,
+      d.a,
+      '#2a1d14'
+    );
+    const wag = Math.sin(d.t * 3 + state.t * 8) * 0.5;
+    box(
+      ctx,
+      d.x - Math.cos(d.a + wag) * 0.7,
+      d.y - Math.sin(d.a + wag) * 0.7,
+      0.4,
+      0.12,
+      d.a + wag,
+      '#5a3a1e'
+    );
+  }
   const dz = state.job && state.job.doris;
   if (dz && seen(dz)) {
     ctx.strokeStyle = '#8a5a2a';
@@ -9914,6 +10073,7 @@ window.GTW = {
   PROPS: streetProps,
   TREES,
   inFront,
+  inSight,
   poster,
   buy,
   closeShop,
