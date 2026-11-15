@@ -52,6 +52,11 @@ async page => {
       pad.x = 0;
       pad.y = 0;
       pad.brake = false;
+      if (state.shop) {
+        // In a shop: the first offer is what a job needs (the repair)
+        game.buy(0);
+        game.closeShop();
+      }
       if (state.mode !== 'play' || state.wasted || !job) {
         return;
       }
@@ -89,7 +94,25 @@ async page => {
       if (!car) {
         bot.walk += dt;
         if ((step.foot && far < 60) || (wanted && far < 60)) {
-          // Walk there, or to the car we should take.
+          // Walk there, or to the car we should take. Up against a wall, a
+          // person steps sideways for a moment.
+          if ((bot.sidestep = (bot.sidestep || 0) - dt) > 0) {
+            const a = Math.atan2(target.y - player.y, target.x - player.x);
+            const s = bot.side < 0 ? -1 : 1;
+            pad.x = Math.cos(a + s * 1.6);
+            pad.y = Math.sin(a + s * 1.6);
+            return;
+          }
+          if ((bot.footT = (bot.footT || 0) + dt) > 1.5) {
+            const moved = Math.hypot(player.x - bot.fx, player.y - bot.fy);
+            if (moved < 1 && far > 3) {
+              bot.sidestep = 1.2;
+              bot.side = -bot.side || 1;
+            }
+            bot.footT = 0;
+            bot.fx = player.x;
+            bot.fy = player.y;
+          }
           head(far > 45 ? along(target) : target);
           if (wanted && far < 4.5) {
             game.toggleCar();

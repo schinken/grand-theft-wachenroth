@@ -1299,6 +1299,7 @@ const LANDMARKS = {
   clubhouse: {plate: ['#c8201c', '#ffffff']},
   club: {wall: '#d9c9a4', roof: 'tile3'},
   lavite: {wall: '#f1ead8', roof: 'tile2'},
+  garage: {plate: ['#15151a', '#f2a01c'], gates: '#5a5d63'},
   no14: {wall: '#f4f2ea', roof: 'slate'},
 };
 
@@ -2860,10 +2861,12 @@ const spriteCache = new Map();
  * @param {string} kind
  * @param {string} col Body colour; 'wreck' gives the burnt-out shell.
  * @param {number=} frame Animation frame or livery.
+ * @param {string=} extras From the garage: r racing stripes, f flames, s a
+ *     rear spoiler.
  * @return {!HTMLCanvasElement}
  */
-function carSprite(kind, col, frame = 0) {
-  const key = kind + col + frame;
+function carSprite(kind, col, frame = 0, extras = '') {
+  const key = kind + col + frame + extras;
   if (spriteCache.has(key)) {
     return spriteCache.get(key);
   }
@@ -3028,12 +3031,37 @@ function carSprite(kind, col, frame = 0) {
     rect(w - 14, 3, 3, h - 6, shade(body, 1.15));
   }
   lamps();
+  if (!wreck && extras) {
+    // From the garage: racing stripes, flames on the bonnet, a rear spoiler
+    if (extras.includes('r')) {
+      rect(3, mid - 3, w - 6, 2, '#f4f4ef');
+      rect(3, mid + 1, w - 6, 2, '#f4f4ef');
+    }
+    if (extras.includes('f')) {
+      for (let i = 0; i < 4; i++) {
+        const y = 2 + (i * (h - 4)) / 4;
+        g.fillStyle = i % 2 ? '#f2a01c' : '#e8501c';
+        g.beginPath();
+        g.moveTo(w - 3, y);
+        g.lineTo(w - 3, y + (h - 4) / 4);
+        g.lineTo(w * 0.55, y + (h - 4) / 8);
+        g.fill();
+      }
+    }
+    if (extras.includes('s')) {
+      rect(0, 1, 3, h - 2, '#15151a');
+      rect(3, 3, 2, 2, '#15151a');
+      rect(3, h - 5, 2, 2, '#15151a');
+    }
+  }
   spriteCache.set(key, c);
   return c;
 }
 const TRAILERS = {
   grain: {length: 5.2, width: 2.3},
   log: {length: 13, width: 1.8},
+  cart: {length: 5.2, width: 2.3},
+  wood: {length: 5.2, width: 2.3},
 };
 for (const [kind, type] of Object.entries(TRAILERS)) {
   const w = (type.length * PX_PER_M) | 0;
@@ -3044,7 +3072,19 @@ for (const [kind, type] of Object.entries(TRAILERS)) {
     g.fillStyle = f;
     g.fillRect(x, y, ww, hh);
   };
-  if (kind === 'grain') {
+  if (kind === 'cart' || kind === 'wood') {
+    // a farm cart, empty or with logs stacked crosswise
+    rect(4, 0, 8, h, '#101012');
+    rect(w - 14, 0, 8, h, '#101012');
+    rect(0, 1, w - 3, h - 2, '#0b0b0d');
+    rect(1, 2, w - 5, h - 4, '#6b4a2a');
+    rect(3, 4, w - 9, h - 8, kind === 'wood' ? '#3a2a1a' : '#8a6a48');
+    for (let x = 4; kind === 'wood' && x < w - 8; x += 4) {
+      rect(x, 3, 3, h - 6, x % 8 ? '#a0703c' : '#8a5a2a');
+      rect(x + 1, h / 2 - 1, 1, 2, '#e0c08a');
+    }
+    rect(w - 3, h / 2 - 1, 3, 2, '#333');
+  } else if (kind === 'grain') {
     rect(4, 0, 8, h, '#101012');
     rect(w - 14, 0, 8, h, '#101012');
     rect(0, 1, w - 3, h - 2, '#0b0b0d');
@@ -3105,6 +3145,21 @@ function icon(kind) {
     rect(3, 3, 4, 6, '#a8b894');
     rect(8, 3, 2, 6, '#6f7f62');
     rect(3, 5, 1, 1, '#111');
+  } else if (kind === 'hen') {
+    rect(3, 4, 7, 6, '#f4f2ea');
+    rect(2, 5, 2, 3, '#e0dccf');
+    rect(8, 2, 3, 3, '#f4f2ea');
+    rect(9, 1, 2, 1, '#d8302a');
+    rect(11, 3, 1, 1, '#f2a01c');
+    rect(9, 3, 1, 1, '#111');
+    rect(5, 10, 1, 2, '#f2a01c');
+    rect(7, 10, 1, 2, '#f2a01c');
+  } else if (kind === 'tree') {
+    rect(1, 4, 6, 5, '#e8501c');
+    rect(2, 5, 4, 3, '#f2a01c');
+    rect(7, 5, 5, 3, '#b9bec4');
+    rect(7, 6, 5, 1, '#6f757c');
+    rect(1, 3, 3, 1, '#15151a');
   } else if (kind === 'barrel') {
     rect(2, 1, 8, 10, '#6b4a2a');
     rect(1, 3, 10, 6, '#8a6238');
@@ -3187,6 +3242,14 @@ function reset(mode, save) {
     gpsT: 0,
     copF: null,
     copT: 0,
+    // Seconds of being drunk left, and when the next hic comes
+    drunk: 0,
+    hicT: 0,
+    // An open shop, and the place whose shop was last open: it opens again
+    // only once you have left
+    shop: null,
+    shopCool: '',
+    thiefF: null,
     whereT: 0,
     finale: 0,
     map: false,
@@ -3222,6 +3285,14 @@ function reset(mode, save) {
 }
 
 /**
+ * Paints a car afresh after its colour or its extras changed.
+ * @param {!Car} c
+ */
+function repaint(c) {
+  c.spr = carSprite(c.kind, c.col, c.frame, c.extras);
+}
+
+/**
  * Puts a vehicle into the world.
  * @param {number} x
  * @param {number} y
@@ -3246,7 +3317,9 @@ function makeCar(x, y, a, kind, col = PAINT[kind] || pick(COLORS)) {
     type,
     kind,
     col,
-    spr: carSprite(kind, col, kind === 'van' ? (Math.random() * 9) | 0 : 0),
+    frame: kind === 'van' ? (Math.random() * 9) | 0 : 0, // the company stripe
+    extras: '',
+    spr: null,
     name: pick(type.name),
     hp: type.hp,
     burn: 0,
@@ -3261,6 +3334,7 @@ function makeCar(x, y, a, kind, col = PAINT[kind] || pick(COLORS)) {
           ? -1
           : (Math.random() * 4) | 0,
   };
+  repaint(c);
   state.cars.push(c);
   return c;
 }
@@ -3311,11 +3385,16 @@ function puff(x, y, kind) {
  * @param {string} kind
  */
 function decal(x, y, kind) {
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < (kind === 'stump' ? 1 : 3); i++) {
     state.decals.push({
       x: x + rand(-0.8, 0.8),
       y: y + rand(-0.8, 0.8),
-      r: kind === 'blood' ? rand(0.4, 1) : rand(1.5, 2.6),
+      r:
+        kind === 'blood'
+          ? rand(0.4, 1)
+          : kind === 'stump'
+            ? 0.55
+            : rand(1.5, 2.6),
       kind,
     });
   }
@@ -3549,16 +3628,18 @@ function stepCar(c, dt) {
   let fy = Math.sin(c.a);
   let vf = c.vx * fx + c.vy * fy;
   c.a +=
-    ((c.steer * (c.hb ? 3.5 : 2.8)) / (1 + Math.abs(vf) / 26)) *
+    ((c.steer * (c.hb ? 3.5 : c.boost ? 3.2 : 2.8)) / (1 + Math.abs(vf) / 26)) *
     clamp(vf / 5, -1, 1) *
     dt;
   fx = Math.cos(c.a);
   fy = Math.sin(c.a);
   vf = c.vx * fx + c.vy * fy;
   let vl = c.vy * fx - c.vx * fy; // sideways slip
-  const max = type.max * (road ? 1 : 0.7);
+  // Tuned at the garage: faster, quicker off the mark, and it takes bends
+  const boost = c.boost || 1;
+  const max = type.max * boost * (road ? 1 : 0.7);
   if (c.thr > 0 && vf < max) {
-    vf += type.acc * (vf < 0 ? 2.5 : 1 - (vf / max) ** 2) * c.thr * dt;
+    vf += type.acc * boost * (vf < 0 ? 2.5 : 1 - (vf / max) ** 2) * c.thr * dt;
   } // punchy launch, tapering to top speed
   if (c.thr < 0 && vf > -max * 0.35) {
     vf += (vf > 0 ? 30 : type.acc * 0.7) * c.thr * dt;
@@ -3614,6 +3695,9 @@ function stepCar(c, dt) {
       }
     }
     for (const t of at(treeGrid, px, py)) {
+      if (t.cut) {
+        continue;
+      }
       const dx = c.x + fx * off - t.x;
       const dy = c.y + fy * off - t.y;
       const d = Math.hypot(dx, dy);
@@ -3750,8 +3834,9 @@ function collideCars() {
 function nextNode(from, to, ai) {
   const a = NODES[from];
   const b = NODES[to];
-  if (ai.cop && state.copF) {
-    const n = downhill(state.copF, to);
+  const chase = ai.cop ? state.copF : ai.thief ? state.thiefF : null;
+  if (chase) {
+    const n = downhill(chase, to);
     if (n >= 0) {
       return n;
     }
@@ -3789,7 +3874,7 @@ function driveAI(c, dt) {
   const a = NODES[ai.from];
   const b = NODES[ai.to];
   const player = state.player;
-  const hunt = ai.cop && state.wanted >= 1 && !state.wasted;
+  const hunt = ((ai.cop && state.wanted >= 1) || ai.thief) && !state.wasted;
   let dx = b.x - a.x;
   let dy = b.y - a.y;
   const len = Math.hypot(dx, dy) || 1;
@@ -4519,6 +4604,19 @@ function grab(v) {
     return;
   }
   const j = state.job;
+  if (v.tree) {
+    // The saw: down comes the tree, a stump is left
+    v.tree.cut = true;
+    decal(v.tree.x, v.tree.y, 'stump');
+    for (let i = 0; i < 12; i++) {
+      puff(v.tree.x + rand(-2, 2), v.tree.y + rand(-2, 2), 'smoke');
+    }
+    float(v.tree, 'RATSCH!', '#ff5a1f');
+    audio.play('saw');
+  }
+  if (v.kind === 'hen') {
+    audio.play('cluck');
+  }
   const left = state.items.filter(o => o.job).length;
   float(v, left ? `noch ${left}` : 'Alles da!');
   if (j) {
@@ -4584,6 +4682,192 @@ function startJob() {
   nextStep();
 }
 
+/**
+ * A tree to cut near a place, one of the surveyed ones that is not too far
+ * from a road or a track; the mark goes on the side of the road, clear of the
+ * crown.
+ * @param {!Point} c
+ * @param {number} r
+ * @return {?Object} The mark's x and y, and its tree.
+ */
+function treeSpot(c, r) {
+  const taken = new Set(state.items.map(v => v.tree).filter(Boolean));
+  const near = TREES.filter(
+    t =>
+      !t.cut &&
+      !taken.has(t) &&
+      t.h > 4 &&
+      Math.hypot(t.x - c.x, t.y - c.y) < r &&
+      ![...taken].some(o => Math.hypot(o.x - t.x, o.y - t.y) < 7)
+  );
+  for (let n = 0; n < 60 && near.length; n++) {
+    const t = near.splice((Math.random() * near.length) | 0, 1)[0];
+    let best = null;
+    let bd = 15;
+    for (const sg of SEGS) {
+      if (Math.abs(sg[0] - t.x) > 60 || Math.abs(sg[1] - t.y) > 60) {
+        continue;
+      }
+      const q = nearest(t.x, t.y, sg[0], sg[1], sg[2], sg[3]);
+      const d = Math.hypot(q[0] - t.x, q[1] - t.y);
+      if (d < bd) {
+        bd = d;
+        best = q;
+      }
+    }
+    if (best) {
+      const k = Math.min(1, (t.r + 0.8) / (bd || 1));
+      return {
+        x: t.x + (best[0] - t.x) * k,
+        y: t.y + (best[1] - t.y) * k,
+        tree: t,
+      };
+    }
+  }
+  return null;
+}
+
+/**
+ * A free spot near a place: not in a house, not in the water, not on the
+ * road.
+ * @param {!Point} c
+ * @param {number} r
+ * @param {function(number, number): boolean} ok
+ * @return {?Point}
+ */
+function looseSpot(c, r, ok) {
+  for (let n = 0; n < 300; n++) {
+    const x = c.x + rand(-r, r);
+    const y = c.y + rand(-r, r);
+    if (ok(x, y) && !blocked(x, y, 0.8) && !(surfAt(x, y) & 12)) {
+      return {x, y};
+    }
+  }
+  return null;
+}
+
+/**
+ * Wood thieves: cars that come for you and ram you.
+ * @param {number} n
+ * @return {!Array<!Car>}
+ */
+function spawnThieves(n) {
+  const player = state.player;
+  const spots = NODES.filter(o => {
+    const d = dist(o, player);
+    return d > 60 && d < 150 && o.car.length;
+  });
+  const out = [];
+  for (let i = 0; i < n && spots.length; i++) {
+    const a = spots.splice((Math.random() * spots.length) | 0, 1)[0];
+    const to = a.car[0].n;
+    const c = makeCar(
+      a.x,
+      a.y,
+      Math.atan2(NODES[to].y - a.y, NODES[to].x - a.x),
+      'car',
+      '#22242a'
+    );
+    c.ai = newAI(NODES.indexOf(a), to, {thief: true});
+    out.push(c);
+  }
+  return out;
+}
+
+/**
+ * The thieves of a job give up and go back to being traffic.
+ * @param {!Object} j
+ */
+function calmThieves(j) {
+  for (const c of j.thieves || []) {
+    if (c.ai) {
+      c.ai.thief = false;
+    }
+  }
+  j.thieves = [];
+}
+
+/**
+ * The hens run from you, Mama Doris runs after you, and the thieves find
+ * their way to you.
+ * @param {!Object} j
+ * @param {number} dt
+ */
+function jobCast(j, dt) {
+  const player = state.player;
+  const st = j.step;
+  const afoot = !player.car && !state.wasted;
+  if (j.thieves.length && (j.thiefT = (j.thiefT || 0) - dt) <= 0) {
+    j.thiefT = 1;
+    state.thiefF = field(player);
+  }
+  const home = st.near && SPOT[st.near];
+  for (const v of state.items) {
+    if (v.kind !== 'hen' || !v.job) {
+      continue;
+    }
+    // A hen flees when you come close, zigzagging; otherwise it pecks about.
+    const d = Math.hypot(v.x - player.x, v.y - player.y);
+    let a = v.ph;
+    let sp = 0;
+    if (afoot && d < 6) {
+      a =
+        Math.atan2(v.y - player.y, v.x - player.x) +
+        Math.sin(state.t * 6 + v.ph);
+      sp = 2.6;
+    } else if (Math.sin(state.t * 1.3 + v.ph * 3) > 0.7) {
+      a = v.ph + state.t * 0.5;
+      sp = 0.8;
+    }
+    const x = v.x + Math.cos(a) * sp * dt;
+    const y = v.y + Math.sin(a) * sp * dt;
+    const inside = !home || Math.hypot(x - home.x, y - home.y) < st.r + 15;
+    // Hens keep off the road and out of the water
+    if (sp && inside && !blocked(x, y, 0.4) && !(surfAt(x, y) & 12)) {
+      v.x = x;
+      v.y = y;
+    } else if (sp) {
+      v.ph += 1.7; // blocked: turn away
+    }
+  }
+  const dz = j.doris;
+  if (!dz) {
+    return;
+  }
+  if (dz.rest > 0) {
+    dz.rest -= dt;
+    return;
+  }
+  const d = dist(dz, player);
+  // She guards her yard: she does not chase cars, nor anybody who has left
+  // it, and then she goes home
+  const chase = afoot && dist(player, home) < st.r;
+  const to = chase ? player : home;
+  if (dist(dz, to) > 0.8) {
+    dz.a = Math.atan2(to.y - dz.y, to.x - dz.x);
+    dz.x += Math.cos(dz.a) * 3 * dt; // slower than you
+    dz.y += Math.sin(dz.a) * 3 * dt;
+    dz.t += 3 * dt;
+    shove(dz, 0.35);
+  }
+  if (chase && d < 1.1) {
+    // The broom: you are pushed back, and one hen gets away again
+    player.x += Math.cos(dz.a) * 3.5;
+    player.y += Math.sin(dz.a) * 3.5;
+    shove(player, 0.4);
+    state.shake = 0.6;
+    float(player, 'AUA! DER BESEN!', '#ff5a1f');
+    audio.play('crash', 8);
+    dz.rest = 5;
+    if (j.got > 0) {
+      j.got--;
+      const spot = looseSpot(home, st.r, () => true) || home;
+      state.items.push({...spot, kind: 'hen', job: true, ph: rand(0, TAU)});
+      float(spot, 'GACK!', '#ffe9a0');
+    }
+  }
+}
+
 /** Moves the mission on to its next step, or ends it. */
 function nextStep() {
   const j = state.job;
@@ -4624,6 +4908,22 @@ function nextStep() {
     crime(st.wanted);
     audio.play('alarm');
   }
+  if (st.drunk) {
+    state.drunk = Math.max(state.drunk, st.drunk);
+    state.hicT = 1;
+  }
+  if (st.load && j.veh && j.veh.tr) {
+    j.veh.tr.kind = st.load;
+    j.veh.tr.type = TRAILERS[st.load];
+  }
+  calmThieves(j);
+  j.thieves = st.thieves ? spawnThieves(st.thieves) : [];
+  j.doris = null;
+  if (st.doris) {
+    // Mama Doris comes out of the house with her broom
+    const home = SPOT[st.near];
+    j.doris = {x: home.x, y: home.y, a: 0, t: 0, rest: 4};
+  }
   if (st.say) {
     page(st.say);
   }
@@ -4657,14 +4957,28 @@ function nextStep() {
     const c = SPOT[st.near];
     j.got = 0;
     j.need = st.n;
+    const free = (x, y) =>
+      Math.hypot(x - c.x, y - c.y) < st.r &&
+      !state.items.some(
+        v => Math.hypot(v.x - x, v.y - y) < (st.loose ? 5 : 25)
+      );
     for (let i = 0; i < st.n; i++) {
+      // Trees to cut stand where they stand; loose things lie anywhere off
+      // the road; the rest lie on roads.
       const spot =
-        roadPoint(
-          (x, y) =>
-            Math.hypot(x - c.x, y - c.y) < st.r &&
-            !state.items.some(v => Math.hypot(v.x - x, v.y - y) < 25)
-        ) || c;
-      state.items.push({...spot, kind: st.item, job: true, ph: rand(0, TAU)});
+        (st.item === 'tree'
+          ? treeSpot(c, st.r)
+          : st.loose
+            ? looseSpot(c, st.r, free)
+            : roadPoint(free)) || c;
+      state.items.push({
+        x: spot.x,
+        y: spot.y,
+        tree: spot.tree,
+        kind: st.item,
+        job: true,
+        ph: rand(0, TAU),
+      });
     }
   }
   state.gps = null;
@@ -4710,7 +5024,10 @@ function jobRules(dt) {
         j.told = true;
         info('Aussteigen und zu Fuß reingehen');
       }
-      if (st.foot ? !player.car && near(3.5) : near(st.r || 7) && sp < 9) {
+      if (
+        (st.foot ? !player.car && near(3.5) : near(st.r || 7) && sp < 9) &&
+        !(st.fix && state.wanted >= 1)
+      ) {
         nextStep();
       }
       break;
@@ -4769,6 +5086,10 @@ function endJob() {
   state.stats.missions++;
   state.pager.idle = '';
   state.items = state.items.filter(v => !v.job);
+  calmThieves(j);
+  if (m.sober) {
+    state.drunk = 0; // slept it off
+  }
   flash('Mission erfüllt!', `+${fmt(m.reward)}`);
   audio.play('win');
   store();
@@ -4788,6 +5109,7 @@ function endJob() {
 function failJob(why) {
   const j = state.job;
   state.job = null;
+  calmThieves(j);
   state.nextJob = 10;
   state.pager.idle = '';
   state.items = state.items.filter(v => !v.job);
@@ -4826,8 +5148,11 @@ function playRules(dt) {
   if (state.wasted) {
     return;
   }
+  // Hens are caught by hand, trees cut with the saw: on foot only
   const got = state.items.filter(
-    v => Math.hypot(v.x - player.x, v.y - player.y) < reach
+    v =>
+      Math.hypot(v.x - player.x, v.y - player.y) < reach &&
+      !(player.car && (v.kind === 'hen' || v.kind === 'tree'))
   );
   if (got.length) {
     state.items = state.items.filter(v => !got.includes(v));
@@ -4836,7 +5161,17 @@ function playRules(dt) {
   if (player.car && state.wanted >= 1 && dist(player, SPOT.carwash) < 7) {
     wash();
   }
+  shops();
+  if (state.drunk > 0) {
+    state.drunk -= dt;
+    if ((state.hicT -= dt) <= 0) {
+      state.hicT = rand(3, 6);
+      float(player, 'hic!', '#ffe9a0');
+      audio.play('hic');
+    }
+  }
   if (state.job) {
+    jobCast(state.job, dt);
     jobRules(dt);
   } else if ((state.nextJob -= dt) <= 0 && state.jobN < MISSIONS.length) {
     startJob();
@@ -4846,13 +5181,193 @@ function playRules(dt) {
   }
 }
 
+/**
+ * Opens a shop when you come in: Bernhard's garage by car, Mara's bar on
+ * foot. It opens again only once you have left.
+ */
+function shops() {
+  const player = state.player;
+  const c = player.car;
+  if (state.shopCool && dist(player, SPOT[state.shopCool]) > 9) {
+    state.shopCool = '';
+  }
+  if (state.shopCool || state.mode !== 'play' || state.wasted) {
+    return;
+  }
+  if (c && !c.burn && dist(player, SPOT.garage) < 6) {
+    if (Math.hypot(c.vx, c.vy) < 3) {
+      state.shopCool = 'garage';
+      openGarage(c);
+    }
+  } else if (!c && dist(player, SPOT.maras) < 3) {
+    state.shopCool = 'maras';
+    openShop('Maras Marktschänke', 'Mara stellt ein Stamperl auf den Tresen.', [
+      {
+        label: 'Wurzelsepp (Kräuterschnaps)',
+        price: 3,
+        ok: () => true,
+        buy() {
+          state.drunk = Math.max(state.drunk, 60);
+          state.hicT = 2;
+        },
+      },
+    ]);
+  }
+}
+
+/**
+ * Bernhard's garage, Mechanic Monkeys: repairs, and what makes a car yours.
+ * @param {!Car} c
+ */
+function openGarage(c) {
+  const extra = (key, label, price) => ({
+    label,
+    price,
+    ok: () => !c.extras.includes(key),
+    buy() {
+      c.extras += key;
+      repaint(c);
+    },
+  });
+  openShop('Mechanic Monkeys', 'Der Bernhard wischt sich die Hände ab.', [
+    {
+      label: 'Reparieren, Fahndung weg',
+      price: 250,
+      credit: true, // Bernhard puts it on the slate when you are broke
+      ok: () => c.hp < c.type.hp || state.wanted >= 1,
+      buy() {
+        c.hp = c.type.hp;
+        state.wanted = 0;
+        state.bust = 0;
+      },
+    },
+    {
+      label: 'Motorsound V6-Blubbern',
+      price: 300,
+      ok: () => c.sound !== 'v6',
+      buy() {
+        c.sound = 'v6';
+      },
+    },
+    {
+      label: 'Motorsound 300-PS-Benziner',
+      price: 500,
+      ok: () => c.sound !== 'turbo',
+      buy() {
+        c.sound = 'turbo';
+      },
+    },
+    {
+      label: 'Tuning: schneller, besser in Kurven',
+      price: 1000,
+      ok: () => !c.boost,
+      buy() {
+        c.boost = 1.25;
+      },
+    },
+    {
+      label: 'Neue Farbe',
+      price: 100,
+      ok: () => true,
+      buy() {
+        c.col = COLORS[(COLORS.indexOf(c.col) + 1) % COLORS.length];
+        repaint(c);
+      },
+    },
+    extra('r', 'Rennstreifen', 300),
+    extra('f', 'Flammen', 500),
+    extra('s', 'Heckspoiler (nur Optik)', 800),
+  ]);
+}
+
+/**
+ * Shows a shop; the game holds still until you leave it.
+ * @param {string} title
+ * @param {string} line
+ * @param {!Array<!Object>} offers Each with label, price, ok() and buy().
+ */
+function openShop(title, line, offers) {
+  state.shop = {title, line, offers};
+  audio.play('till');
+  showShop();
+}
+
+/** Draws the open shop afresh, or hides it. */
+function showShop() {
+  const sh = state.shop;
+  const el = byId('shop');
+  el.hidden = !sh;
+  if (!sh) {
+    return;
+  }
+  el.querySelector('h3').textContent = sh.title;
+  el.querySelector('p').textContent = `${sh.line} Kasse: ${fmt(state.money)}`;
+  const rows = sh.offers.map((o, i) => {
+    const b = document.createElement('button');
+    const price = Object.assign(document.createElement('b'), {
+      textContent:
+        o.credit && state.money < o.price && o.ok()
+          ? `${fmt(o.price)} (anschreiben)`
+          : fmt(o.price),
+    });
+    b.append(`${i + 1}. ${o.label}`, price);
+    b.disabled = !canBuy(o);
+    b.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      buy(i);
+    });
+    const li = document.createElement('li');
+    li.append(b);
+    return li;
+  });
+  const leave = document.createElement('button');
+  leave.append('Weiter');
+  leave.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    closeShop();
+  });
+  const li = document.createElement('li');
+  li.append(leave);
+  el.querySelector('ol').replaceChildren(...rows, li);
+}
+
+/**
+ * Whether an offer can be bought now.
+ * @param {!Object} o
+ * @return {boolean}
+ */
+function canBuy(o) {
+  return o.ok() && (o.credit || state.money >= o.price);
+}
+
+/**
+ * Buys an offer of the open shop.
+ * @param {number} i
+ */
+function buy(i) {
+  const o = state.shop && state.shop.offers[i];
+  if (!o || !canBuy(o)) {
+    return;
+  }
+  state.money -= o.price;
+  o.buy();
+  audio.play('coin');
+  showShop();
+}
+
+/** Leaves the shop. */
+function closeShop() {
+  state.shop = null;
+  showShop();
+}
+
 /** The car wash at Murk: new paint, nobody recognises you. */
 function wash() {
   const c = state.player.car;
   state.wanted = 0;
   state.money -= 15;
   c.col = pick(COLORS.filter(col => col !== c.col));
-  c.spr = carSprite(c.kind, c.col);
+  repaint(c);
   for (let i = 0; i < 40; i++) {
     puff(c.x + rand(-3, 3), c.y + rand(-3, 3), 'water');
   }
@@ -4942,8 +5457,15 @@ function controlPlayer(dt) {
     if (pad.brake) {
       thr = -1;
     }
+    const tipsy = clamp(state.drunk / 4, 0, 1);
+    if (tipsy) {
+      // drunk: the wheel wanders
+      steer +=
+        (Math.sin(state.t * 1.7) * 0.4 + Math.sin(state.t * 4.3) * 0.15) *
+        tipsy;
+    }
     c.thr = thr;
-    c.steer = steer;
+    c.steer = clamp(steer, -1, 1);
     c.hb = !!keys.Space;
     c.siren =
       (c.kind === 'police' || c.kind === 'fire') && (keys.KeyH || pad.horn);
@@ -4964,6 +5486,12 @@ function controlPlayer(dt) {
   } // wading
   player.x += Math.cos(player.a) * sp * dt;
   player.y += Math.sin(player.a) * sp * dt;
+  const lurch = clamp(state.drunk / 4, 0, 1) * Math.sin(state.t * 2.4) * 2;
+  if (sp && lurch) {
+    // drunk: a step to the side now and then
+    player.x -= Math.sin(player.a) * lurch * dt;
+    player.y += Math.cos(player.a) * lurch * dt;
+  }
   player.t += Math.abs(sp) * dt;
   shove(player, 0.4);
 }
@@ -5420,7 +5948,7 @@ function hud(dt) {
   audio.engine(
     c ? c.vf : 0,
     c && state.mode === 'play' && !state.paused,
-    c && c.kind
+    c && (c.sound || c.kind)
   );
 }
 
@@ -5435,6 +5963,7 @@ function start(save) {
   byId('hud').hidden = false;
   byId('lcd').textContent = '';
   onShow.clear(); // the page was just reset by hand: write everything afresh
+  byId('shop').hidden = true;
   for (const id of ['flash', 'mission', 'pause', 'info', 'map']) {
     byId(id).hidden = true;
   }
@@ -5475,6 +6004,17 @@ function pause(p) {
 
 addEventListener('keydown', e => {
   if (state.mode !== 'play') {
+    return;
+  }
+  if (state.shop) {
+    // 1 to 9 buys, Escape or F leaves
+    e.preventDefault();
+    const n = /^(Digit|Numpad)([1-9])$/.exec(e.code);
+    if (n) {
+      buy(+n[2] - 1);
+    } else if (['Escape', 'KeyF', 'Enter', 'Space'].includes(e.code)) {
+      closeShop();
+    }
     return;
   }
   if (e.code.startsWith('Arrow') || e.code === 'Space' || e.code === 'Tab') {
@@ -6347,6 +6887,9 @@ function drawShadows(builds, trees, x0, y0, x1, y1) {
   }
   ctx.beginPath();
   for (const t of trees) {
+    if (t.cut) {
+      continue;
+    }
     ctx.moveTo(t.x + 1.6 + t.r * 0.9, t.y + 1.6);
     ctx.arc(t.x + 1.6, t.y + 1.6, t.r * 0.9, 0, TAU);
   }
@@ -7123,6 +7666,9 @@ function drawTrees(trees, cx, cy, hc) {
   ctx.strokeStyle = '#4a3420';
   ctx.lineWidth = 0.5;
   for (const t of trees) {
+    if (t.cut) {
+      continue;
+    }
     const s = hc / (hc - t.h);
     const x = t.x * s + cx * (1 - s);
     const y = t.y * s + cy * (1 - s);
@@ -7334,10 +7880,21 @@ function drawSprites(x0, y0, x1, y1) {
     o.x > x0 - 14 && o.x < x1 + 14 && o.y > y0 - 14 && o.y < y1 + 14;
   for (const d of state.decals) {
     ctx.fillStyle =
-      d.kind === 'blood' ? 'rgba(140,10,16,.8)' : 'rgba(15,12,10,.55)';
+      d.kind === 'blood'
+        ? 'rgba(140,10,16,.8)'
+        : d.kind === 'stump'
+          ? '#7a5634'
+          : 'rgba(15,12,10,.55)';
     ctx.beginPath();
     ctx.arc(d.x, d.y, d.r, 0, TAU);
     ctx.fill();
+    if (d.kind === 'stump') {
+      ctx.strokeStyle = '#c8a070'; // the year rings
+      ctx.lineWidth = 0.08;
+      ctx.beginPath();
+      ctx.arc(d.x, d.y, d.r * 0.55, 0, TAU);
+      ctx.stroke();
+    }
   }
   drawProps();
   for (const v of state.items) {
@@ -7368,6 +7925,26 @@ function drawSprites(x0, y0, x1, y1) {
     if (seen(p) && !(p.fly > 0)) {
       drawPerson(p, p.shirt, p.hair);
     }
+  }
+  const dz = state.job && state.job.doris;
+  if (dz && seen(dz)) {
+    ctx.strokeStyle = '#8a5a2a';
+    ctx.lineWidth = 0.18;
+    ctx.beginPath();
+    ctx.moveTo(dz.x, dz.y);
+    ctx.lineTo(dz.x + Math.cos(dz.a) * 1.5, dz.y + Math.sin(dz.a) * 1.5);
+    ctx.stroke();
+    ctx.fillStyle = '#d9b23c'; // the bristles
+    ctx.beginPath();
+    ctx.arc(
+      dz.x + Math.cos(dz.a) * 1.6,
+      dz.y + Math.sin(dz.a) * 1.6,
+      0.35,
+      0,
+      TAU
+    );
+    ctx.fill();
+    drawPerson(dz, '#c85aa8', '#d8d4cc');
   }
   for (const c of state.cars) {
     if (!seen(c)) {
@@ -7489,8 +8066,22 @@ let eye = null;
 /** Draws one frame. */
 function render() {
   const z = state.cam.z;
-  const cx = state.cam.x + rand(-1, 1) * state.shake;
-  const cy = state.cam.y + rand(-1, 1) * state.shake;
+  // Drunk: the world sways, fading out in the last seconds
+  const tipsy = clamp(state.drunk / 4, 0, 1);
+  const cx =
+    state.cam.x +
+    rand(-1, 1) * state.shake +
+    Math.sin(state.t * 1.1) * 1.6 * tipsy;
+  const cy =
+    state.cam.y +
+    rand(-1, 1) * state.shake +
+    Math.cos(state.t * 0.83) * 1.2 * tipsy;
+  const tilt = tipsy
+    ? `rotate(${(Math.sin(state.t * 0.7) * 1.6 * tipsy).toFixed(2)}deg) scale(${1 + 0.05 * tipsy})`
+    : '';
+  if (changed('tilt', tilt)) {
+    gameCanvas.style.transform = tilt;
+  }
   const hw = viewW / 2 / z;
   const hh = viewH / 2 / z;
   const x0 = cx - hw;
@@ -7531,6 +8122,10 @@ function render() {
   ctx.fillRect(x0, WORLD_H, x1 - x0, m(y1 - WORLD_H));
   ctx.fillRect(x0, 0, m(-x0), WORLD_H);
   ctx.fillRect(WORLD_W, 0, m(x1 - WORLD_W), WORLD_H);
+  if (tipsy) {
+    ctx.fillStyle = `rgba(255,205,40,${(0.22 * tipsy).toFixed(3)})`;
+    ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+  }
   if (state.mode === 'play') {
     drawOverlay(cx, cy, z);
   }
@@ -8133,7 +8728,7 @@ function frame(now) {
     drawMap();
   } // the game holds its breath while you read the map
   else {
-    if (!state.paused) {
+    if (!state.paused && !state.shop) {
       for (let n = dt > 0.02 ? 2 : 1, i = 0; i < n; i++) {
         update(dt / n);
       }
@@ -8166,6 +8761,8 @@ window.GTW = {
   TREES,
   inFront,
   poster,
+  buy,
+  closeShop,
   TRAIN,
   CROSSINGS,
   TYPES,
