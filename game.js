@@ -450,6 +450,13 @@ const textures = {
     ['#4f9a34', '#5fae3e', '#3f8a2c']
   ),
   farmD: rows('#c9ad4a', '#9f8636', ['#d8bf5c', '#b39a44']),
+  // What the aerial photo shows on the fields: pale stubble, then crops from
+  // olive to dark green
+  field1: rows('#cbbd92', '#b3a57c', ['#d6c9a0', '#beb087']),
+  field2: rows('#a2a45c', '#888b49', ['#aeb068', '#94974f']),
+  field3: rows('#83a84a', '#6c8f3a', ['#8fb455', '#779a40']),
+  field4: rows('#5f8d3c', '#4c772e', ['#699944', '#548233']),
+  field5: rows('#42702f', '#345c25', ['#4b7b36', '#3a6429']),
   asphalt: tex(
     '#48484d',
     (g, r, n) => {
@@ -673,8 +680,13 @@ function layOutCemetery(a) {
 
 AREAS.forEach((a, i) => {
   prepPoly(a);
+  // School grounds are lawn; the photo adds what is paved there.
   a.fill =
-    a.k === 'farm' ? FARM[i % 4] : a.k === 'pitch' ? null : textures[a.k];
+    a.k === 'farm'
+      ? FARM[i % 4]
+      : a.k === 'pitch'
+        ? null
+        : textures[a.k === 'school' ? 'resi' : a.k];
   a.lpath = new Path2D(`M${a.lp.join(' ')}Z`);
   if (a.k === 'cem') {
     layOutCemetery(a);
@@ -825,7 +837,7 @@ const SURF = (() => {
   g.globalCompositeOperation = 'lighter';
   g.fillStyle = '#f00';
   for (const a of AREAS) {
-    if (['park', 'ind', 'com', 'school', 'yard'].includes(a.k)) {
+    if (['park', 'ind', 'com', 'yard'].includes(a.k)) {
       g.fill(a.path);
     }
   }
@@ -2046,8 +2058,9 @@ const TREES = [];
 const treeGrid = grid();
 {
   const r = rng(3);
-  // `gap` is how far a trunk keeps from roads, water and walls.
-  const add = (tx, ty, size, tall = 4 + r() * 5, gap = 3) => {
+  // `gap` is how far a trunk keeps from walls and from the ground it must
+  // not stand on: `off`, as bits of the ground lookup.
+  const add = (tx, ty, size, tall = 4 + r() * 5, gap = 3, off = 15) => {
     if (
       [
         [0, 0],
@@ -2055,7 +2068,7 @@ const treeGrid = grid();
         [-gap, 0],
         [0, gap],
         [0, -gap],
-      ].some(o => surfAt(tx + o[0], ty + o[1]))
+      ].some(o => surfAt(tx + o[0], ty + o[1]) & off)
     ) {
       return;
     }
@@ -2109,7 +2122,8 @@ const treeGrid = grid();
   }
   // Every surveyed tree: x, y and its height, which decides how wide and how
   // high it is drawn. A height of 0 means nobody measured it. They stand
-  // where they really stand, so they may be close to a road or a wall.
+  // where they really stand: close to a road or a wall, and in yards and car
+  // parks, only not on the road itself or in the water.
   for (let i = 0; i < MAP.trees.length; i += 3) {
     const tall = MAP.trees[i + 2] || 12;
     add(
@@ -2117,7 +2131,8 @@ const treeGrid = grid();
       MAP.trees[i + 1],
       clamp(tall * 0.12, 1, 3),
       clamp(tall * 0.35, 3.5, 9.5),
-      1.5
+      1.5,
+      12
     );
   }
 }
@@ -4019,7 +4034,10 @@ function parkCars() {
           const take = r() < 0.42;
           const flip = r() < 0.5;
           const kind = r();
-          const free = (px, py) => pip(px, py, a.p) && !(surfAt(px, py) & 4);
+          const free = (px, py) =>
+            pip(px, py, a.p) &&
+            !(surfAt(px, py) & 4) &&
+            !at(treeGrid, px, py).some(t => Math.hypot(t.x - px, t.y - py) < 3);
           if (
             !take ||
             !free(x, y) ||
@@ -5550,7 +5568,10 @@ function paintGround(g, x0, y0, x1, y1) {
       }
     }
   }
-  paintYards(g, x0, y0);
+  fieldMasks.forEach((mask, i) => {
+    paintMask(g, mask, 0.5, textures[`field${i + 1}`], FURROWS[i], x0, y0);
+  });
+  paintMask(g, yardMask, 1, textures.yard, 0, x0, y0);
   for (const a of AREAS) {
     if (seen(a) && a.k === 'pitch') {
       drawPitch(g, a);
@@ -5565,6 +5586,21 @@ function paintGround(g, x0, y0, x1, y1) {
     g.fillStyle = textures.constr;
     g.fillRect(b.u0 - 6, b.v0 - 6, b.u1 - b.u0 + 12, b.v1 - b.v0 + 12);
     g.restore();
+  }
+  for (let i = 0; i < MAP.pools.length; i += 4) {
+    // Garden pools: a pale rim around the water
+    const [px, py, across, down] = MAP.pools.slice(i, i + 4);
+    g.fillStyle = '#d9d6cc';
+    g.fillRect(
+      px - across / 2 - 0.4,
+      py - down / 2 - 0.4,
+      across + 0.8,
+      down + 0.8
+    );
+    g.fillStyle = '#3fb2d6';
+    g.fillRect(px - across / 2, py - down / 2, across, down);
+    g.fillStyle = 'rgba(255,255,255,.35)';
+    g.fillRect(px - across / 2 + 0.5, py - down / 2 + 0.5, across * 0.4, 0.3);
   }
   for (const b of MODELLED) {
     if (b.x1 < x0 - 40 || b.x0 > x1 + 40 || b.y1 < y0 - 40 || b.y0 > y1 + 40) {
@@ -5761,32 +5797,60 @@ const FENCE_TILES = borderTiles('fences');
 const yardMask = new Image();
 yardMask.onload = () => groundTiles.clear();
 yardMask.src = MAP.yards;
+// What grows on the fields, read off the same photo parcel by parcel: one
+// such picture for each kind of field, with a pixel every 2 m.
+const fieldMasks = MAP.fields.map(src => {
+  const mask = new Image();
+  mask.onload = () => groundTiles.clear();
+  mask.src = src;
+  return mask;
+});
+// Which way the furrows run on each kind of field
+const FURROWS = [0.35, -0.9, 1.25, -0.2, 0.75];
 const yardTile = canvas(TILE_PX, TILE_PX);
 
 /**
- * Paints the yards of one ground tile: the picture cuts their shape out of
- * the paving.
+ * Paints what a see-through picture marks in one ground tile: the picture
+ * cuts its shape out of a texture.
  * @param {!CanvasRenderingContext2D} g
+ * @param {!HTMLImageElement} mask
+ * @param {number} perMetre The pixels the picture has for a metre.
+ * @param {!CanvasPattern} fill
+ * @param {number} turn The angle the texture is turned by.
  * @param {number} x0 The tile's corner, in metres.
  * @param {number} y0
  */
-function paintYards(g, x0, y0) {
-  if (!yardMask.naturalWidth) {
+function paintMask(g, mask, perMetre, fill, turn, x0, y0) {
+  if (!mask.naturalWidth) {
     return;
   }
   const y = yardTile.getContext('2d');
+  const k = perMetre;
   y.setTransform(1, 0, 0, 1, 0, 0);
   y.globalCompositeOperation = 'source-over';
   y.clearRect(0, 0, TILE_PX, TILE_PX);
-  y.drawImage(yardMask, x0, y0, TILE_M, TILE_M, 0, 0, TILE_PX, TILE_PX);
+  y.drawImage(
+    mask,
+    x0 * k,
+    y0 * k,
+    TILE_M * k,
+    TILE_M * k,
+    0,
+    0,
+    TILE_PX,
+    TILE_PX
+  );
   // Scaling up leaves a soft rim a metre wide; laying the picture over
   // itself twice makes it crisp.
   y.drawImage(yardTile, 0, 0);
   y.drawImage(yardTile, 0, 0);
   y.globalCompositeOperation = 'source-in';
   y.setTransform(PX_PER_M, 0, 0, PX_PER_M, -x0 * PX_PER_M, -y0 * PX_PER_M);
-  y.fillStyle = textures.yard;
-  y.fillRect(x0, y0, TILE_M, TILE_M);
+  // Turned about the corner of the world, so furrows run on from tile to
+  // tile.
+  y.rotate(turn);
+  y.fillStyle = fill;
+  y.fillRect(-2 * WORLD_W, -2 * WORLD_W, 4 * WORLD_W, 4 * WORLD_W);
   g.drawImage(yardTile, x0, y0, TILE_M, TILE_M);
 }
 
@@ -7748,8 +7812,9 @@ if (location.search.includes('selftest')) {
       a && a[0] === 1 && Math.abs(a[2] - 0.5) < 1e-9,
     'inside a building: pushed out through the nearest wall':
       b && b[0] === 1 && Math.abs(b[2] - 2) < 1e-9,
-    'the map has its surveyed trees, roof colours, yards and fences':
+    'the map has its surveyed trees, roof colours, yards, fields and fences':
       FENCE_TILES.size > 100 &&
+      fieldMasks.length === FURROWS.length &&
       TREES.length > 4000 &&
       BUILD.filter(b => b.c).length > 1000 &&
       MAP.yards.length > 1000,
