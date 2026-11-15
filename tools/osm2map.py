@@ -112,6 +112,10 @@ POIS = {
     'toxicity': (49.750962, 10.712070),  # Toxicity, the rock club on Hauptstraße
     'gumbrecht': (49.749289, 10.71403),  # Gumbrecht Tiefbau, Kirchstraße 11
     'dentist': (49.751197, 10.715213),  # Zahnarztpraxis Mickoleit, Schulstraße 2a
+    # The Christmas tree plantation on the Weißer Berg (ALKIS: Weihnachtsbaumkultur): its gate on the track to the
+    # south, and the finest spruce, deep in the northern block
+    'xmasfarm': (49.757777, 10.712546),
+    'fichte': (49.758622, 10.712936),
 }
 
 # Read off the state's aerial photo, as lat/lon, because no map has them: the five grain silos of the Lagerhaus, and

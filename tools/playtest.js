@@ -95,7 +95,8 @@ async page => {
       }
       if (!car) {
         bot.walk += dt;
-        if ((step.foot && far < 60) || (wanted && far < 60)) {
+        const sneak = job.guards && job.guards.length > 0;
+        if ((step.foot && far < (sneak ? 130 : 60)) || (wanted && far < 60)) {
           // Walk there, or to the car we should take. Up against a wall, a
           // person steps sideways for a moment.
           if ((bot.sidestep = (bot.sidestep || 0) - dt) > 0) {
@@ -114,6 +115,23 @@ async page => {
             bot.footT = 0;
             bot.fx = player.x;
             bot.fy = player.y;
+          }
+          if (sneak) {
+            // Wait while a lamp would fall on the next steps, back off if it
+            // comes this way, and run when a dog does.
+            const a = Math.atan2(target.y - player.y, target.x - player.x);
+            const next = {
+              x: player.x + Math.cos(a) * 3,
+              y: player.y + Math.sin(a) * 3,
+            };
+            const lit = p => job.guards.some(g => game.inSight(g, p, 3));
+            if (lit(next) || lit(player)) {
+              const back = lit(player) ? -1 : 0;
+              pad.x = Math.cos(a) * back;
+              pad.y = Math.sin(a) * back;
+              return;
+            }
+            pad.brake = job.dogs.some(d => d.chase > 0);
           }
           head(far > 45 ? along(target) : target);
           if (wanted && far < 4.5) {
@@ -147,7 +165,9 @@ async page => {
 
       const speed = Math.hypot(car.vx, car.vy);
       bot.walk = 0;
-      if ((step.foot && far < 9) || (wanted && car !== wanted && far < 11)) {
+      const hide = job.guards && job.guards.length > 0;
+      const walk = step.foot && far < (hide ? 120 : 9);
+      if (walk || (wanted && car !== wanted && far < 11)) {
         // Get out and walk the rest.
         pad.brake = speed > 1;
         if (speed < 4) {
