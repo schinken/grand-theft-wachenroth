@@ -45,6 +45,10 @@ Each job name links to the game with that job up next: the start button names
 it, and it begins as soon as you press it. In the address, `?job=` takes the
 job's name from `missions.js` or its number.
 
+After the last job you can play on freely: the money, Bernhard's garage and
+Mara's bar stay, only Flo has no more jobs. The title screen continues a free
+game where you left it.
+
 The Kerwa is the village fair, the biggest weekend of the year.
 
 ![The village square in front of the town hall](docs/screenshots/townhall.jpg)

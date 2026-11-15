@@ -108,6 +108,10 @@ export const TALK = {
     'Lebst du noch? Gut. Die Rechnung vom Krankenhaus zahlst du selber.',
     'Allmächd, wie schaust du denn aus! Aufstehen, weitermachen.',
   ],
+  free: [
+    'Keine Aufträge mehr. Wachenroth gehört dir.',
+    'Fahr rum, heb das Geld auf, das rumliegt, und lass dir beim Bernhard die Karre aufmotzen.',
+  ],
 };
 
 export const MISSIONS = [
