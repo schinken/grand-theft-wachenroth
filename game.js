@@ -1293,6 +1293,7 @@ const LANDMARKS = {
   works: {roof: 'metal', plate: ['#284d98', '#ffffff']},
   clubhouse: {plate: ['#c8201c', '#ffffff']},
   club: {wall: '#d9c9a4', roof: 'tile2'},
+  butcher: {},
   lavite: {wall: '#f1ead8', roof: 'tile2'},
   garage: {plate: ['#15151a', '#f2a01c'], gates: '#5a5d63'},
   no14: {wall: '#f4f2ea', roof: 'slate'},
@@ -1905,6 +1906,40 @@ function paintClub(g, b) {
 }
 
 /**
+ * The forecourt of Metzgerei Braun on a Fässlafreitag, as the aerial photos
+ * show it: a row of white parasols over the beer tables along the hedge.
+ * Drawn on the map.
+ * @param {!CanvasRenderingContext2D} g
+ * @param {!Building} b
+ */
+function paintButcher(g, b) {
+  onMap(g, b);
+  for (let i = 0; i < 6; i++) {
+    const x = 1334 - i * 0.85;
+    const y = 759.5 + i * 2.4;
+    g.fillStyle = 'rgba(0,0,0,.22)';
+    g.beginPath();
+    g.arc(x + 0.5, y + 0.5, 1.2, 0, TAU);
+    g.fill();
+    g.fillStyle = '#f4f4ef';
+    g.beginPath();
+    g.arc(x, y, 1.2, 0, TAU);
+    g.fill();
+    g.strokeStyle = '#c9c6bc';
+    g.lineWidth = 0.08;
+    g.beginPath();
+    for (let k = 0; k < 6; k++) {
+      g.moveTo(x, y);
+      g.lineTo(
+        x + Math.cos((k * TAU) / 6) * 1.2,
+        y + Math.sin((k * TAU) / 6) * 1.2
+      );
+    }
+    g.stroke();
+  }
+}
+
+/**
  * The plot of Pizzeria La Vite, as the aerial photos show it: the terrace
  * with tables and parasols to the street, the paved forecourt where the
  * guests park, the white awning on the garden side, a gravel path along the
@@ -2082,6 +2117,23 @@ const ROOFS = {
   },
   // The Schwallclub keeps the roof of the survey; its beer garden is painted.
   club: {ground: paintClub},
+  // Metzgerei Braun has its roof from the survey (see LOOKS in osm2map.py);
+  // its forecourt is painted.
+  butcher: {
+    trees: [
+      [17.5, 20.2, 2.3, 8],
+      [24.1, 16, 2.5, 9],
+      [28.2, 10, 2.2, 8],
+      [26.6, 2.1, 2.4, 8.5],
+      [23, -3.3, 2, 7],
+    ],
+    // in the drive next door, as on the photos
+    cars: [
+      [-11, 7.8, 0, '#2b2f36'],
+      [-6.7, 8.8, 0, '#e8e6df'],
+    ],
+    ground: paintButcher,
+  },
   // Pizzeria La Vite keeps the five parts of the survey; the plot is painted.
   lavite: {
     trees: [
@@ -2734,7 +2786,8 @@ function prepBuilding(b, r) {
     );
     b.signW = b.signH * aspect;
   }
-  const spec = ROOFS[b.poi] || (b.f && surveyedRoof(b));
+  // A surveyed roof keeps its faces under a plot that is painted.
+  const spec = b.f ? {...ROOFS[b.poi], ...surveyedRoof(b)} : ROOFS[b.poi];
   if (spec) {
     buildRoof(b, spec, base);
   }
@@ -2976,14 +3029,6 @@ const treeGrid = grid();
       plant(a, 8, 1, 1.4, 0.2);
     }
   }
-  for (const b of BUILD) {
-    // Fruit trees in the modelled gardens
-    for (const [u, v, size, tall] of (ROOFS[b.poi] && ROOFS[b.poi].trees) ||
-      []) {
-      const [x, y] = fromFrame(b, u, v);
-      add(x, y, size, tall, 1);
-    }
-  }
   // Every surveyed tree: x, y and its height, which decides how wide and how
   // high it is drawn. A height of 0 means nobody measured it. They stand
   // where they really stand: close to a road or a wall, and in yards and car
@@ -2998,6 +3043,15 @@ const treeGrid = grid();
       1.5,
       12
     );
+  }
+  for (const b of BUILD) {
+    // The trees of the modelled places come last, so that adding some does
+    // not change how the other trees look.
+    for (const [u, v, size, tall] of (ROOFS[b.poi] && ROOFS[b.poi].trees) ||
+      []) {
+      const [x, y] = fromFrame(b, u, v);
+      add(x, y, size, tall, 1);
+    }
   }
 }
 const blocked = (x, y, r) =>
