@@ -10,8 +10,9 @@ More files add what OSM does not know. All of them are open data of the Bayerisc
           the way the ridge runs, and towers as buildings of their own. Wachenroth is on
           622_5510, 624_5510, 622_5512 and 624_5512 of https://download1.bayernwolke.de/a/lod2/citygml/<tile>.gml
   *.gpkg  single trees with their height: https://geodaten.bayern.de/odd/m/8/baeume3d/data/125021_baeume.gpkg
-  *.png   two pictures of exactly the map, one pixel per metre, told apart by whether one can see through them:
-          the aerial photo for roof colours and paved yards, and the outlines of the parcels for garden fences.
+  *.png   two pictures of the map, one pixel per metre, told apart by whether one can see through them: the aerial
+          photo for roof colours and paved yards, and the outlines of the parcels for garden fences. They start at the
+          north edge and may end above the south edge: what lies below gets no roof colours, yards or fences.
           https://geoservices.bayern.de/od/wms/dop/v1/dop20?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&LAYERS=by_dop20c
           &STYLES=&SRS=EPSG:4326&BBOX=10.6950,49.7440,10.7300,49.7590&WIDTH=2517&HEIGHT=1668&FORMAT=image/png
           and the same from .../od/wms/alkis/v1/parzellarkarte? with LAYERS=by_alkis_parzellarkarte_umr_schwarz
@@ -31,7 +32,9 @@ import urllib.request
 import xml.etree.ElementTree as ET
 import zlib
 
-S, W, N, E = 49.7440, 10.6950, 49.7590, 10.7300
+# The map: south, west, north, east. It grew 111 m to the south for the Koppel of Rock, whose gate lies just below the
+# old edge of 49.7440.
+S, W, N, E = 49.7430, 10.6950, 49.7590, 10.7300
 MARGIN = 80  # metres of road kept outside the playable world
 QUERY = f"""[out:json][timeout:90][bbox:{S - .002},{W - .003},{N + .002},{E + .003}];
 (way[highway];way[waterway];way[building];relation[building];way[landuse];relation[landuse];
@@ -93,6 +96,10 @@ POIS = {
     'club': (49.75088, 10.71262),   # Schwallclub clubhouse, Hauptstraße 2, opposite the bakery
     'roadworks': (49.75245, 10.71595),  # Schulstraße is being rebuilt
     'drinks': (49.74719, 10.72087),  # Getränke Braun, Kleinwachenroth 25
+    'muehle': (49.748285, 10.720787),  # Kleinwachenrother Mühle, an inn with rooms
+    # Koppel of Rock: the meadow north of its gate. The gate is where Google Maps has the festival, at 49.743891,
+    # 10.7237281.
+    'koppel': (49.744180, 10.723945),
     'warehouse': (49.75125, 10.71829),  # Lagerhaus, Am Graben 9
     'fairground': (49.7503858, 10.7130321),  # the Kerwa ground behind the parish office, where Google Maps has it
     'linsner': (49.75086, 10.71445),   # Gasthof Linsner, Hauptstraße 7
@@ -111,15 +118,25 @@ BARE = [
      (49.754794, 10.701099), (49.754907, 10.700724), (49.755142, 10.700937)],
 ]
 
-# Ways OSM lacks, read off the same photo: their tags, the OSM node they start at, and where they go as lat/lon. The
-# one so far is the gravel drive from the bend of Kirchstraße to the Kerwa ground.
+# Areas OSM lacks, read off the same photo: their kind and their corners as lat/lon. The meadow of the Koppel of Rock
+# is mapped as a part of one big field.
+PATCHES = [
+    ('meadow', [(49.74614, 10.723502), (49.746158, 10.723697), (49.745583, 10.72442),
+                (49.745511, 10.724462), (49.743991, 10.724573), (49.743955, 10.723613)]),
+]
+
+# Ways OSM lacks, read off the same photo: their tags, the OSM node they start at, and where they go as lat/lon: the
+# gravel drive from the bend of Kirchstraße to the Kerwa ground, and the drive from the bridge over the Reiche Ebrach
+# into the yard of the Kleinwachenrother Mühle. Without it the road ended on the river bank.
 WAYS = [
     ({'highway': 'track'}, 269367677,
      [(49.749883, 10.714128), (49.749875, 10.71392), (49.749928, 10.713735), (49.75001, 10.713572),
       (49.7501, 10.713446), (49.750212, 10.713342), (49.750317, 10.713272)]),
+    ({'highway': 'service'}, 2481574253,
+     [(49.747975, 10.720353), (49.748074, 10.72043), (49.748159, 10.720527), (49.748186, 10.720582)]),
 ]
 
-KX = 111320 * math.cos(math.radians((S + N) / 2))
+KX = 111320 * math.cos(math.radians(49.7515))  # metres per degree at the village; fixed, so growing moves nothing
 KY = 111200
 WW, WH = round((E - W) * KX), round((N - S) * KY)
 
@@ -675,7 +692,7 @@ for lat, lon in SILOS:
 tiles = [a for a in sys.argv[2:] if a.endswith('.gml')]
 photo = plan = None
 for picture in (read_png(a) for a in sys.argv[2:] if a.endswith('.png')):
-    assert picture[:2] == (WW, WH), f'the pictures must be {WW} x {WH} pixels'
+    assert picture[0] == WW and picture[1] <= WH, f'the pictures must be {WW} pixels wide and at most {WH} high'
     if picture[2] == 4 and 0 in picture[3][3::4 * 97]:
         plan = picture  # one can see through it
     else:
@@ -699,6 +716,9 @@ if tiles:
     lone = sum(b.pop('osm', 0) for b in buildings)
     assert lone < len(drawn) / 5, f'{lone} OSM buildings have no state building: do the tiles line up?'
     print(f'{len(buildings)} buildings: {lone} only in OSM, {len(drawn)} drawn in OSM', file=sys.stderr)
+for kind, patch in PATCHES:
+    pts = ring([{'lat': lat, 'lon': lon} for lat, lon in patch])
+    areas.append({'k': kind, 'p': flat(pts), 'a': shoelace(pts)})
 for b in buildings:
     if b['k'] in 'hy':
         c = centre(b)

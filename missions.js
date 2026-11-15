@@ -47,6 +47,8 @@ export const PLACES = {
   club: 'Schwallclub',
   roadworks: 'Baustelle Schulstraße',
   drinks: 'Getränke Braun',
+  muehle: 'Kleinwachenrother Mühle',
+  koppel: 'Koppel of Rock',
   warehouse: 'Lagerhaus',
   fairground: 'Kerwa-Festplatz',
   linsner: 'Gasthof Linsner',
@@ -477,6 +479,59 @@ export const MISSIONS = [
       },
     ],
     outro: ['Ozapft is! Die Kerwa kann anfangen.'],
+  },
+
+  {
+    id: 'koppel',
+    title: 'Koppel of Rock',
+    reward: 1200,
+    props: [
+      {k: 'stage', at: 'koppel'},
+      {k: 'person', at: 'inn', until: 2, col: '#22252b'},
+      {k: 'person', at: 'inn', until: 2, col: '#3a3a3f', dx: 1.5},
+      {k: 'person', at: 'inn', until: 2, col: '#22252b', dx: -1.5},
+      {k: 'person', at: 'muehle', until: 3, col: '#22252b'},
+      {k: 'person', at: 'muehle', until: 3, col: '#7a1f1f', dx: 1.5},
+      {k: 'person', at: 'muehle', until: 3, col: '#3a3a3f', dx: -1.5},
+    ],
+    intro: [
+      'Am Wochenende ist Koppel of Rock: Stoner, Thrash und Hardcore auf der Koppel hinter Kleinwachenroth!',
+      'Der Shuttle-Fahrer liegt flach, und die Bands hocken noch in ihren Hotels. Der Bandbus steht am Hotel Relax, beim Linsner.',
+    ],
+    steps: [
+      {
+        do: 'steal',
+        veh: 'van',
+        at: 'linsner',
+        obj: 'Steig in den Bandbus am Hotel Relax',
+      },
+      {
+        do: 'bring',
+        to: 'inn',
+        time: 45,
+        obj: 'Hol die Thrash-Band am Grünen Baum ab',
+        say: 'Die Stoner-Band pennt schon hinten drin. Weiter zum Grünen Baum, die Thrasher warten!',
+      },
+      {
+        do: 'bring',
+        to: 'muehle',
+        time: 60,
+        obj: 'Hol die Hardcore-Band an der Kleinwachenrother Mühle ab',
+        say: 'Zwei von drei. Die Hardcore-Band wohnt in der Kleinwachenrother Mühle. Gib Gas!',
+      },
+      {
+        do: 'bring',
+        to: 'koppel',
+        time: 150,
+        fragile: true,
+        obj: 'Bring Bands und Verstärker heil zur Koppel of Rock',
+        say: 'Alle drin, die Verstärker auch? Dann ab auf die Koppel, gleich ist Soundcheck. Und fahr anständig!',
+      },
+    ],
+    outro: [
+      'Die erste Band steht auf der Bühne, und du hast Backstage.',
+      'Bier vier Euro, die Mucke gibts dazu. Geiles Wochenende!',
+    ],
   },
 
   {

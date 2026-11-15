@@ -6734,6 +6734,96 @@ function drawPerson(p, shirt, hair) {
   ctx.restore();
 }
 
+// The festival's banner over the stage and where its people and tents are,
+// made when first needed.
+let festival = null;
+
+/**
+ * The Koppel of Rock: a stage with its lights, the crowd in front of it, a
+ * beer stand, and the tents of those who stay the night.
+ * @param {number} x The middle of the ground.
+ * @param {number} y
+ */
+function drawFestival(x, y) {
+  if (!festival) {
+    const r = rng(1984);
+    festival = {
+      banner: makeSign('KOPPEL OF ROCK', ['#15151a', '#e8c21c']),
+      crowd: Array.from({length: 46}, () => [
+        -8 + r() * 16,
+        -19 + r() * r() * 12,
+        pick2(SHIRTS, r),
+        r() * TAU,
+      ]),
+      tents: Array.from({length: 14}, (v, i) => [
+        -31 + (i % 7) * 4.6 + r(),
+        -58 + ((i / 7) | 0) * 6 + r(),
+        pick2(['#d86a2a', '#2f5fa8', '#3c7a30', '#c8201c', '#e8c21c'], r),
+      ]),
+    };
+  }
+  ctx.save();
+  ctx.translate(x, y);
+  // Tents, north of the stage
+  for (const [tx, ty, col] of festival.tents) {
+    ctx.fillStyle = col;
+    ctx.fillRect(tx, ty, 3, 2.4);
+    ctx.fillStyle = 'rgba(0,0,0,.25)';
+    ctx.fillRect(tx, ty + 1.2, 3, 1.2);
+    ctx.fillStyle = 'rgba(255,255,255,.5)';
+    ctx.fillRect(tx, ty + 1.1, 3, 0.2);
+  }
+  // The beer stand
+  ctx.fillStyle = '#6b4a2a';
+  ctx.fillRect(13, -14, 6, 3);
+  for (let i = 0; i < 4; i++) {
+    ctx.fillStyle = i % 2 ? '#f4f4ef' : '#c8201c';
+    ctx.fillRect(13 + i * 1.5, -15.5, 1.5, 1.5);
+  }
+  // The crowd jumps to the beat
+  for (const [cx, cy, col, phase] of festival.crowd) {
+    const hop = Math.max(0, Math.sin(state.t * 9 + phase)) * 0.35;
+    ctx.fillStyle = col;
+    ctx.fillRect(cx - 0.35, cy - 0.3 - hop, 0.7, 0.6);
+    ctx.fillStyle = '#e6c79c';
+    ctx.fillRect(cx - 0.2, cy - 0.2 - hop, 0.4, 0.4);
+  }
+  // The stage: boards, the boxes left and right, lights that change colour
+  ctx.fillStyle = 'rgba(0,0,0,.3)';
+  ctx.fillRect(-8.4, -29.4, 18, 8);
+  ctx.fillStyle = '#2b2b2e';
+  ctx.fillRect(-9, -30, 18, 8);
+  ctx.fillStyle = '#15151a';
+  ctx.fillRect(-11.5, -28, 2.2, 5);
+  ctx.fillRect(9.3, -28, 2.2, 5);
+  const lights = ['#ff3b3b', '#3bb0ff', '#e8c21c', '#c85aa8', '#58e06a'];
+  for (let i = 0; i < 6; i++) {
+    ctx.fillStyle = lights[(i + ((state.t * 4) | 0)) % lights.length];
+    ctx.beginPath();
+    ctx.arc(-7.5 + i * 3, -23.2, 0.55, 0, TAU);
+    ctx.fill();
+  }
+  ctx.fillStyle = '#c9cdd3'; // the drums and three who play
+  ctx.beginPath();
+  ctx.arc(0, -27.5, 1, 0, TAU);
+  ctx.fill();
+  for (const bx of [-4.5, 0, 4.5]) {
+    ctx.fillStyle = '#22252b';
+    ctx.fillRect(bx - 0.4, -25.4, 0.8, 0.7);
+  }
+  const wide = 15;
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(
+    festival.banner,
+    -wide / 2,
+    -33.2,
+    wide,
+    (wide * festival.banner.height) / festival.banner.width
+  );
+  ctx.imageSmoothingEnabled = false;
+  ctx.restore();
+}
+
 /** Mission scenery: bonfires, tents, people waiting for a lift. */
 function drawProps() {
   const j = state.job;
@@ -6781,6 +6871,8 @@ function drawProps() {
       ctx.lineTo(12, 0);
       ctx.stroke();
       ctx.restore();
+    } else if (pr.k === 'stage') {
+      drawFestival(...MAP.pois[pr.at]);
     } else if (pr.k === 'person') {
       drawPerson(
         {x, y, a: state.t * 0.8 + x, t: 0},
@@ -7157,6 +7249,7 @@ const MAP_NAMES = [
   'school',
   'butcher',
   'fairground',
+  'koppel',
   'station',
   'beach',
   'carwash',
