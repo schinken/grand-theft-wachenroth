@@ -60,6 +60,7 @@ PAVED = ('resi', 'yard')  # where the photo decides between lawn and paved groun
 # Places the missions use, as lat/lon read off OpenStreetMap (name tags, house numbers).
 POIS = {
     'hq': (49.75477, 10.71925),        # Johann-Philipp-Ring 9
+    'no14': (49.754393, 10.720043),    # a house modelled with its garden
     'murk': (49.75185, 10.72136),      # Bekleidungshaus Murk, Anton-Murk-Straße 2
     'fuel': (49.75100, 10.72129),     # Murk Tankstelle
     'carwash': (49.75116, 10.72180),     # Murk Waschanlage
