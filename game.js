@@ -1286,12 +1286,7 @@ const LANDMARKS = {
     hip: true,
     plate: ['#7a1f1f', '#f3e2a0'],
   },
-  shop: {
-    wall: '#f4f4ef',
-    roof: 'flatLight',
-    flat: true,
-    plate: ['#f2d23e', '#1f4fa8'],
-  },
+  shop: {wall: '#f4f4ef', roof: 'tile6', plate: ['#f2d23e', '#1f4fa8']},
   hq: {wall: '#f2f1ec', roof: 'slate', hip: true, pv: true},
   murk: {plate: ['#60bfcc', '#ffffff']},
   bakery: {wall: '#f0e2c0', plate: ['#b5622f', '#ffffff']},
@@ -1301,6 +1296,7 @@ const LANDMARKS = {
   lavite: {wall: '#f1ead8', roof: 'tile2'},
   garage: {plate: ['#15151a', '#f2a01c'], gates: '#5a5d63'},
   no14: {wall: '#f4f2ea', roof: 'slate'},
+  schul22: {wall: '#efe9dc', roof: 'slate'},
 };
 
 // The roof for the colour the aerial photo shows: orange, red or brown tiles,
@@ -1644,6 +1640,242 @@ function paintSquare(g, b) {
   g.fillRect(44.6, -5.2, 2.2, 0.6);
 }
 
+/**
+ * The plot of Schulstraße 22, as the aerial photos show it: a paved path
+ * along the west side, a patio with a parasol in front of the house, the
+ * front lawn, the drive to the carport and the garage, vegetable beds and a
+ * greenhouse east of the house, and at the back a terrace, a gravel yard,
+ * raised beds and a lawn. Drawn with x east along the front of the house and
+ * y towards the street in the south.
+ * @param {!CanvasRenderingContext2D} g
+ */
+function paintSchul22(g) {
+  const r = rng(22);
+  const fill = (style, pts) => fillPoly(g, style, pts);
+  // The whole plot is garden, mown in stripes in front of the house
+  const plot = [-5.9, -24.2, 6.9, -25, 21.7, -24.6, 21.2, 13.8, -4.7, 14.4];
+  fill(textures.resi, plot);
+  g.save();
+  g.beginPath();
+  g.rect(-2, 3.4, 12.6, 10.3);
+  g.clip();
+  g.fillStyle = 'rgba(190,255,150,.09)';
+  for (let x = -2; x < 11; x += 2.2) {
+    g.fillRect(x, 3.4, 1.1, 10.3);
+  }
+  g.restore();
+  // Paving: the path along the west side, the patio, the drive and the floor
+  // of the carport, the terrace behind the house
+  fill(textures.school, [-4.5, -3, -2, -3, -2, 13.9, -4.6, 13.9]);
+  fill(textures.school, [-2, 0, 7, 0, 7, 3.4, -2, 3.4]);
+  fill(textures.school, [10.5, 0, 21.3, 0, 21.2, 13.8, 10.4, 13.6]);
+  fill(textures.school, [0, -14.2, 16, -14.2, 16, -11.5, 0, -11.5]);
+  fill(textures.gravel, [0.9, -19.2, 9.4, -19.2, 9.4, -14.2, 0.9, -14.2]);
+  // A flower bed along the hedge to the street
+  for (let i = 0; i < 70; i++) {
+    g.fillStyle = pick2(['#d83a3a', '#f2d23e', '#f4f4ef', '#c85aa8'], r);
+    g.fillRect(-1.6 + r() * 11.6, 12.4 + r() * 0.8, 0.3, 0.3);
+  }
+  // The patio: a round table under a parasol
+  g.fillStyle = 'rgba(0,0,0,.22)';
+  g.beginPath();
+  g.arc(-0.4, 3.1, 1.5, 0, TAU);
+  g.fill();
+  g.fillStyle = '#f2efe6';
+  g.beginPath();
+  g.arc(-0.8, 2.7, 1.5, 0, TAU);
+  g.fill();
+  g.strokeStyle = '#c9c2b0';
+  g.lineWidth = 0.08;
+  g.beginPath();
+  for (let i = 0; i < 8; i++) {
+    g.moveTo(-0.8, 2.7);
+    g.lineTo(
+      -0.8 + Math.cos((i * TAU) / 8) * 1.5,
+      2.7 + Math.sin((i * TAU) / 8) * 1.5
+    );
+  }
+  g.stroke();
+  // Vegetable beds in rows east of the house
+  g.fillStyle = '#4a3a2a';
+  g.fillRect(17.4, -10, 3.8, 9.4);
+  g.fillStyle = '#3c7a30';
+  for (let y = -9.6; y < -0.8; y += 1) {
+    g.fillRect(17.7, y, 3.2, 0.45);
+  }
+  // The greenhouse: panes of glass in a white frame
+  g.fillStyle = 'rgba(0,0,0,.2)';
+  g.fillRect(16.7, -16.5, 5, 5.2);
+  g.fillStyle = '#cfe2ea';
+  g.fillRect(16.3, -16.9, 5, 5.2);
+  g.strokeStyle = '#f4f4ef';
+  g.lineWidth = 0.12;
+  g.beginPath();
+  for (let x = 16.3; x <= 21.4; x += 1) {
+    g.moveTo(x, -16.9);
+    g.lineTo(x, -11.7);
+  }
+  g.moveTo(16.3, -14.3);
+  g.lineTo(21.3, -14.3);
+  g.rect(16.3, -16.9, 5, 5.2);
+  g.stroke();
+  // Raised beds of wood at the back
+  for (let i = 0; i < 3; i++) {
+    g.fillStyle = '#8a5a2a';
+    g.fillRect(-5.6 + i * 1.9, -22.1, 1.5, 4.2);
+    g.fillStyle = '#3c7a30';
+    g.fillRect(-5.45 + i * 1.9, -21.95, 1.2, 3.9);
+  }
+}
+
+/**
+ * Fills a polygon given as x, y, x, y and so on.
+ * @param {!CanvasRenderingContext2D} g
+ * @param {string|!CanvasPattern} style
+ * @param {!Array<number>} pts
+ */
+function fillPoly(g, style, pts) {
+  g.fillStyle = style;
+  g.beginPath();
+  for (let i = 0; i < pts.length; i += 2) {
+    g.lineTo(pts[i], pts[i + 1]);
+  }
+  g.fill();
+}
+
+/**
+ * The plot of Edeka Claudia, as the aerial photos show it: the forecourt to
+ * the street with three parking bays, the shelter for the trolleys and crates
+ * of vegetables at the door, bike stands and a strip of grass on the east
+ * side, the sign by the road, and an overgrown garden at the back. Drawn with
+ * x east along the front of the shop and y towards the street.
+ * @param {!CanvasRenderingContext2D} g
+ */
+function paintShop(g) {
+  fillPoly(g, textures.resi, [-3.2, -21.4, 22.6, -21.3, 25.1, 5, -2.3, 4.7]);
+  fillPoly(
+    g,
+    textures.concrete,
+    [-2.3, 4.7, 25.1, 5, 24.6, -1.8, 15, -9, 15, 0]
+  );
+  fillPoly(g, textures.concrete, [-2.5, -12.5, 0, -13.6, 0, 0, -2.3, 4.7]);
+  // Three bays east of the door, nose to the shop, tarmac with white lines
+  fillPoly(g, textures.park, [15.2, 5, 24.6, 5, 24.6, -0.3, 15.2, -0.3]);
+  g.strokeStyle = 'rgba(236,236,226,.8)';
+  g.lineWidth = 0.14;
+  g.beginPath();
+  for (let x = 15.6; x <= 24.2; x += 2.85) {
+    g.moveTo(x, 4.8);
+    g.lineTo(x, -0.2);
+  }
+  g.stroke();
+  // The trolley shelter and the crates of vegetables by the door
+  g.fillStyle = 'rgba(0,0,0,.25)';
+  g.fillRect(0.9, 0.7, 3.8, 1.5);
+  g.fillStyle = '#2b62c8';
+  g.fillRect(0.6, 0.4, 3.8, 1.5);
+  g.fillStyle = '#c9cdd3';
+  for (let i = 0; i < 6; i++) {
+    g.fillRect(0.85 + i * 0.6, 0.65, 0.4, 1);
+  }
+  ['#d83a3a', '#f2a01c', '#4c9a34', '#f2d23e', '#d83a3a'].forEach((crop, i) => {
+    g.fillStyle = '#6b4a2a';
+    g.fillRect(5.4 + i * 1.2, 0.3, 1, 1);
+    g.fillStyle = crop;
+    g.fillRect(5.55 + i * 1.2, 0.45, 0.7, 0.7);
+  });
+  // Bike stands on the east side
+  g.strokeStyle = '#3b3e44';
+  g.lineWidth = 0.12;
+  g.beginPath();
+  for (let x = 16.2; x < 23; x += 1.1) {
+    g.moveTo(x, -3);
+    g.lineTo(x, -4.6);
+  }
+  g.stroke();
+  // The sign by the road, yellow with the blue letters
+  g.fillStyle = 'rgba(0,0,0,.3)';
+  g.fillRect(-1.5, 3.9, 2.4, 0.6);
+  g.fillStyle = '#f2d23e';
+  g.fillRect(-1.8, 3.5, 2.4, 0.6);
+  g.fillStyle = '#1f4fa8';
+  g.fillRect(-1.6, 3.65, 2, 0.3);
+}
+
+/**
+ * The plot of Pizzeria La Vite, as the aerial photos show it: the terrace
+ * with tables and parasols to the street, the paved forecourt where the
+ * guests park, the white awning on the garden side, a gravel path along the
+ * north-west side, and the garden. Drawn with x along the front of the main
+ * block and y towards the street.
+ * @param {!CanvasRenderingContext2D} g
+ */
+function paintLavite(g) {
+  const r = rng(5);
+  fillPoly(g, textures.resi, [-10.6, 12.3, -9.3, -13, 17.6, -12.8, 18.4, 11.7]);
+  fillPoly(g, textures.gravel, [-10.3, 6.8, -9.4, -7.7, -5.4, -7.4, -6, 7]);
+  for (let i = 0; i < 14; i++) {
+    // shrubs along the path
+    g.fillStyle = pick2(['#2a5a22', '#356a27', '#3c7a30'], r);
+    g.beginPath();
+    g.arc(-9.6 + r() * 0.8, 6 - i * 0.95, 0.5 + r() * 0.3, 0, TAU);
+    g.fill();
+  }
+  fillPoly(
+    g,
+    textures.school,
+    [1.4, 11.1, 5.2, 6, 8.7, 3.6, 13.2, 0, 19.5, 0.1, 18.4, 11.7, 3.4, 11.6]
+  );
+  // The terrace: boards, three tables, each under a parasol
+  fillPoly(g, '#9a7a52', [-2.9, 11, -2.9, 5.2, 3.1, 5.4, 2.9, 11.1]);
+  g.strokeStyle = 'rgba(60,40,20,.35)';
+  g.lineWidth = 0.06;
+  g.beginPath();
+  for (let x = -2.6; x < 3; x += 0.5) {
+    g.moveTo(x, 5.3);
+    g.lineTo(x, 11);
+  }
+  g.stroke();
+  for (const [x, y, col] of [
+    [-1.2, 7, '#c8201c'],
+    [1.6, 7.4, '#f4f4ef'],
+    [0.2, 9.8, '#2f7a2c'],
+  ]) {
+    g.fillStyle = 'rgba(0,0,0,.22)';
+    g.beginPath();
+    g.arc(x + 0.4, y + 0.4, 1.2, 0, TAU);
+    g.fill();
+    g.fillStyle = col;
+    g.beginPath();
+    g.arc(x, y, 1.2, 0, TAU);
+    g.fill();
+    g.strokeStyle = 'rgba(0,0,0,.25)';
+    g.lineWidth = 0.06;
+    g.beginPath();
+    for (let i = 0; i < 6; i++) {
+      g.moveTo(x, y);
+      g.lineTo(
+        x + Math.cos((i * TAU) / 6) * 1.2,
+        y + Math.sin((i * TAU) / 6) * 1.2
+      );
+    }
+    g.stroke();
+  }
+  // The white awning on the garden side
+  fillPoly(
+    g,
+    'rgba(0,0,0,.22)',
+    [13.5, -4.4, 17.5, -5.3, 18, -2.8, 14.2, -1.8]
+  );
+  fillPoly(g, '#f4f2ea', [13, -4.9, 17, -5.8, 17.5, -3.3, 13.7, -2.3]);
+  g.strokeStyle = '#c9c2b0';
+  g.lineWidth = 0.08;
+  g.beginPath();
+  g.moveTo(13.35, -3.6);
+  g.lineTo(17.25, -4.55);
+  g.stroke();
+}
+
 // What the three have: eaves and ridge height, roof slopes, walls above the
 // eaves, where the name goes on the roof [u, v, height of the letters], where
 // the car stands [u, v], and for the garden trees [u, v, size, height], fences
@@ -1675,6 +1907,72 @@ const ROOFS = {
     trees: [[-0.2, 12.1, 1.6, 5]], // at the entrance of the car park
     plot: [-7.4, -8.6, 60.6, -11.4, 61.9, 19.5, -6.1, 22.4],
     ground: paintSquare,
+  },
+  // Schulstraße 22: a gable roof along the street with solar panels to the
+  // south and roof windows to the north, the carport and the garage in front
+  // of it, the garden all around.
+  schul22: {
+    eaves: 5.3,
+    ridge: 8.7,
+    slopes: [
+      [
+        [0, 0, 5.3, 15, 0, 5.3, 15, 5.75, 8.7, 0, 5.75, 8.7],
+        [0.5, 3, 4, 5.2],
+        [5.6, 0.6, 13.6, 4.9],
+      ],
+      [
+        [0, 5.75, 8.7, 15, 5.75, 8.7, 15, 11.5, 5.3, 0, 11.5, 5.3],
+        [7.4, 7.2, 8.4, 8.4, true],
+        [10.6, 7.2, 11.6, 8.4, true],
+      ],
+    ],
+    gables: [
+      [-1, 0, [0, 0, 5.3, 0, 11.5, 5.3, 0, 5.75, 8.7]],
+      [1, 0, [15, 11.5, 5.3, 15, 0, 5.3, 15, 5.75, 8.7]],
+    ],
+    chimney: [9.6, 6.6],
+    trees: [
+      [1.1, -6.6, 2.2, 6.5],
+      [7.1, -6.8, 2.5, 7.5],
+      [6.7, 22.4, 1.8, 7],
+    ],
+    hedges: [
+      [-1.8, -13.75, 10.3, -13.85],
+      [-5.6, 23.9, 6.8, 24.7],
+      [-5.6, 23.9, -5.1, 14],
+    ],
+    fences: [[-4.65, -13.9, -4.45, 3]],
+    cars: [[18.3, -11.4, 0, '#2b2f36']],
+    plot: [-5.9, 24.2, 6.9, 25, 21.7, 24.6, 21.2, -13.8, -4.7, -14.4],
+    ground: paintSchul22,
+  },
+  // Edeka Claudia keeps the gable roof of the survey; the plot is painted.
+  shop: {
+    trees: [
+      [3.5, 17, 2.2, 7],
+      [8.5, 18.6, 2.6, 8.5],
+      [13.6, 18.4, 2, 6.5],
+      [18.6, 17.4, 2.3, 7.5],
+    ],
+    hedges: [[-3, 21.1, 22.4, 21]],
+    cars: [[17, -1, 0, '#eeeee8', 'van']],
+    plot: [-3.2, 21.4, 22.6, 21.3, 25.1, -5, -2.3, -4.7, -2.1, 2.4, -2.5, 12.5],
+    ground: paintShop,
+  },
+  // Pizzeria La Vite keeps the five parts of the survey; the plot is painted.
+  lavite: {
+    trees: [
+      [16.3, 3.2, 1.6, 5],
+      [15.2, 9.4, 1.9, 6],
+    ],
+    hedges: [[-9.2, 12.6, 17.4, 12.4]],
+    cars: [
+      [8.9, -8.6, 0, '#eeeee8', 'van'],
+      [12.9, -8.4, 0, '#2b2f36'],
+      [16.8, -8.1, 0, '#e8e6df'],
+    ],
+    plot: [-10.6, -12.3, -9.3, 13, 17.6, 12.8, 18.4, -11.7],
+    ground: paintLavite,
   },
   // The house no14: a plain gable roof, the garage on its west side,
   // and the garden around it up to the pavement of the bend.
@@ -1721,6 +2019,9 @@ function buildRoof(b, spec, wall) {
     sw = lp[i] - lp[i + 1] < lp[sw] - lp[sw + 1] ? i : sw;
   }
   b.at = [lp[sw], lp[sw + 1]];
+  if (!spec.slopes) {
+    return; // the roof the survey gives it is right
+  }
   const [au, av] = b.at;
   // How much a face looking along (du, dv) of the building is turned away
   // from the sun
@@ -1770,11 +2071,12 @@ function buildRoof(b, spec, wall) {
     const dv = (e[2] * g[0] - e[0] * g[2]) * up;
     f.tint = roofTint(shadow(du, dv) / Math.hypot(du, dv));
     f.turned = Math.abs(du) > Math.abs(dv);
-    f.pv = panels.map(([u0, v0, u1, v1]) => [
+    f.pv = panels.map(([u0, v0, u1, v1, glass]) => [
       au + u0,
       av - v1,
       au + u1,
       av - v0,
+      glass,
     ]);
     // Corners run clockwise, so a slope seen from below turns the other way.
     let turn = 0;
@@ -1794,6 +2096,7 @@ function buildRoof(b, spec, wall) {
   b.halves = null;
   b.h = spec.eaves;
   b.rh = spec.ridge - spec.eaves;
+  b.chimney = spec.chimney && [au + spec.chimney[0], av - spec.chimney[1]];
 }
 
 /**
@@ -2189,7 +2492,7 @@ function prepBuilding(b, r) {
   if (spec) {
     buildRoof(b, spec, base);
   }
-  if (spec && b.sign) {
+  if (spec && spec.sign && b.sign) {
     b.signH = spec.sign[2];
     b.signW = b.signH * (b.sign.width / b.sign.height);
     b.signU = b.at[0] + spec.sign[0];
@@ -2429,7 +2732,7 @@ const treeGrid = grid();
   }
   for (const b of BUILD) {
     // Fruit trees in the modelled gardens
-    for (const [u, v, size, tall] of (b.planes && ROOFS[b.poi].trees) || []) {
+    for (const [u, v, size, tall] of (b.at && ROOFS[b.poi].trees) || []) {
       const [x, y] = fromFrame(b, u, v);
       add(x, y, size, tall, 1);
     }
@@ -2601,7 +2904,7 @@ function driveSpot(b) {
 }
 const HOME = BUILD.find(b => b.poi === 'hq');
 // The modelled buildings that have a ground of their own
-const MODELLED = BUILD.filter(b => b.planes && ROOFS[b.poi].ground);
+const MODELLED = BUILD.filter(b => b.at && ROOFS[b.poi].ground);
 
 /**
  * Index of the junction closest to a point.
@@ -4516,6 +4819,14 @@ function parkCars() {
   for (const [kind, key] of fleet) {
     makeCar(SPOT[key].x, SPOT[key].y, SPOT[key].a, kind);
   }
+  for (const b of MODELLED) {
+    // The cars of a modelled house, on its drive: nose to the north of the
+    // house, turned by the angle given
+    for (const [u, v, turn, col, kind = 'car'] of ROOFS[b.poi].cars || []) {
+      const [x, y] = fromFrame(b, u, v);
+      makeCar(x, y, Math.atan2(-b.ca, b.sa) + turn, kind, col);
+    }
+  }
   for (let i = 0; i < 46; i++) {
     // and a few along the kerb in the village
     const s = SEGS[(r() * SEGS.length) | 0];
@@ -6279,36 +6590,6 @@ const DECOR = {
       g.fillRect(-10 + i * 2, 0, 2, 0.5);
     }
   },
-  // Parking bays, a shelter for the trolleys and crates of vegetables.
-  shop(g) {
-    g.fillStyle = textures.park;
-    g.fillRect(-11, 0.5, 22, 7);
-    g.strokeStyle = 'rgba(236,236,226,.6)';
-    g.lineWidth = 0.14;
-    g.beginPath();
-    for (let x = -11; x <= 11; x += 2.75) {
-      g.moveTo(x, 0.5);
-      g.lineTo(x, 5.4);
-    }
-    g.stroke();
-    g.fillStyle = '#2b62c8'; // the trolley shelter
-    g.fillRect(6.4, 5.9, 4.2, 1.5);
-    g.fillStyle = '#c9cdd3';
-    for (let i = 0; i < 6; i++) {
-      g.fillRect(6.7 + i * 0.62, 6.2, 0.42, 0.9);
-    }
-    const crops = ['#d83a3a', '#f2a01c', '#4c9a34', '#f2d23e'];
-    crops.forEach((crop, i) => {
-      g.fillStyle = '#6b4a2a';
-      g.fillRect(-10.4 + i * 1.5, 6, 1.3, 1.3);
-      g.fillStyle = crop;
-      g.fillRect(-10.2 + i * 1.5, 6.2, 0.9, 0.9);
-    });
-    g.fillStyle = '#f2d23e'; // the sign by the road
-    g.fillRect(-12.6, 0.6, 1, 2.2);
-    g.fillStyle = '#2b62c8';
-    g.fillRect(-12.5, 0.75, 0.8, 0.8);
-  },
   // Beer benches on the gravel by the clubhouse.
   club(g) {
     g.fillStyle = textures.gravel;
@@ -6325,25 +6606,6 @@ const DECOR = {
     g.fillRect(6.6, 6.4, 1.6, 1.6);
     g.fillStyle = '#8a5a22';
     g.fillRect(6.9, 6.7, 1, 1);
-  },
-  // Tables under the vines.
-  lavite(g) {
-    g.fillStyle = '#b3a98f';
-    g.fillRect(-6, 0.6, 12, 6);
-    g.strokeStyle = '#2f7a2c';
-    g.lineWidth = 0.3;
-    g.beginPath();
-    for (let x = -6; x <= 6; x += 1.5) {
-      g.moveTo(x, 0.6);
-      g.lineTo(x, 6.6);
-    }
-    g.stroke();
-    for (let i = 0; i < 3; i++) {
-      g.fillStyle = i % 2 ? '#c8201c' : '#f4f4ef';
-      g.beginPath();
-      g.arc(-3.6 + i * 3.6, 3.6, 0.9, 0, TAU);
-      g.fill();
-    }
   },
   // Stacks of crates in the yard.
   drinks(g) {
@@ -6675,7 +6937,7 @@ function byTile(lines) {
 function borderTiles(kind) {
   let lines = MAP[kind];
   for (const b of BUILD) {
-    const spec = b.planes && ROOFS[b.poi];
+    const spec = b.at && ROOFS[b.poi];
     if (!spec || !spec.plot) {
       continue;
     }
@@ -7291,9 +7553,10 @@ function drawPlanes(b, lx, ly, s, s2) {
     ctx.fillStyle = f.tint;
     ctx.fill();
     ctx.stroke();
-    for (const [u0, v0, u1, v1] of f.pv) {
-      // Solar panels lie on the slope, so they use the same map as its
-      // tiles: the field, then the gaps between the modules.
+    for (const [u0, v0, u1, v1, glass] of f.pv) {
+      // Solar panels and roof windows lie on the slope, so they use the same
+      // map as its tiles: the field, then the gaps between the modules or
+      // the frame of the window.
       ctx.beginPath();
       ctx.moveTo(
         (m.a * u0 + m.c * v0) * q + m.e,
@@ -7312,9 +7575,9 @@ function drawPlanes(b, lx, ly, s, s2) {
         (m.b * u0 + m.d * v1) * q + m.f
       );
       ctx.closePath();
-      ctx.fillStyle = '#1b2a47';
+      ctx.fillStyle = glass ? '#9cc3d9' : '#1b2a47';
       ctx.fill();
-      for (let u = u0 + 1.1; u < u1 - 0.3; u += 1.1) {
+      for (let u = u0 + 1.1; u < u1 - 0.3 && !glass; u += 1.1) {
         ctx.moveTo(
           (m.a * u + m.c * v0) * q + m.e,
           (m.b * u + m.d * v0) * q + m.f
@@ -7324,7 +7587,7 @@ function drawPlanes(b, lx, ly, s, s2) {
           (m.b * u + m.d * v1) * q + m.f
         );
       }
-      ctx.strokeStyle = '#4a6a9c';
+      ctx.strokeStyle = glass ? '#e8e6df' : '#4a6a9c';
       ctx.lineWidth = 0.12;
       ctx.stroke();
       ctx.strokeStyle = 'rgba(0,0,0,.5)';
@@ -7332,6 +7595,16 @@ function drawPlanes(b, lx, ly, s, s2) {
     }
   }
   b.roof.setTransform(PATTERN_HOME);
+  if (b.chimney) {
+    // a little higher than the ridge
+    const ss = 1 / (1 / s + (1 / s2 - 1 / s) * 1.15);
+    const x = b.chimney[0] * ss + lx * (1 - ss);
+    const y = b.chimney[1] * ss + ly * (1 - ss);
+    ctx.fillStyle = '#5a2c22';
+    ctx.fillRect(x - 0.45, y - 0.45, 0.9, 0.9);
+    ctx.fillStyle = '#1c1c1c';
+    ctx.fillRect(x - 0.2, y - 0.2, 0.4, 0.4);
+  }
 }
 
 /**
@@ -8872,7 +9145,7 @@ if (location.search.includes('selftest')) {
     "Flo's house has its own roof: slopes, gable walls and solar panels":
       HOME.planes.filter(f => f.wall).length === HOME_GABLES.length &&
       HOME.planes.filter(f => !f.wall).length === HOME_SLOPES.length &&
-      BUILD.filter(b => b.planes).length === Object.keys(ROOFS).length &&
+      BUILD.filter(b => b.at).length === Object.keys(ROOFS).length &&
       ROADS.lane.length === 1 &&
       HOME.planes.every(f => f.p.every(v => v > -40 && v < 40)) &&
       HOME.planes.filter(f => f.pv && f.pv.length).length === 2,

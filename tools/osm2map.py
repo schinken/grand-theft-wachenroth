@@ -99,7 +99,7 @@ POIS = {
     'drinks': (49.74719, 10.72087),  # Getränke Braun, Kleinwachenroth 25
     'garage': (49.745715, 10.719340),  # Mechanic Monkeys, Bernhard's garage
     'forest': (49.75695, 10.719331),  # the wood north of Johann-Philipp-Ring, at its track
-    'schul22': (49.753622, 10.714771),   # Schulstraße 22, Michi's hens
+    'schul22': (49.753622, 10.714771),   # Schulstraße 22: Michi's hens, the house modelled with its garden
     'muehle': (49.748285, 10.720787),  # Kleinwachenrother Mühle, an inn with rooms
     # Koppel of Rock: the meadow north of its gate. The gate is where Google Maps has the festival, at 49.743891,
     # 10.7237281.
@@ -120,6 +120,31 @@ BARE = [
      (49.75566, 10.701024)],
     [(49.755312, 10.701187), (49.755223, 10.701412), (49.755029, 10.701187), (49.754899, 10.701162),
      (49.754794, 10.701099), (49.754907, 10.700724), (49.755142, 10.700937)],
+]
+
+# Buildings the survey models as one, split into the parts the photo shows, each with its own height and roof: a point
+# in the building, then the parts with their corners as lat/lon. Pizzeria La Vite is a main block with a cross wing,
+# a low wing, a porch and a roof over the entrance.
+SPLIT = [
+    (49.751833, 10.711545, [
+        ({'h': 7.7, 'r': 'g', 't': 4.4, 'dir': 45},  # main block
+         [(49.751908, 10.711542), (49.751826, 10.711672), (49.751762, 10.711573), (49.751844, 10.711442)]),
+        ({'h': 6.8, 'r': 'g', 't': 3.1, 'dir': 135},  # cross wing
+         [(49.751807, 10.711384), (49.751844, 10.711442), (49.751811, 10.711495), (49.751773, 10.711435)]),
+        ({'h': 4.1, 'r': 'g', 't': 2.0, 'dir': 45},  # low wing
+         [(49.751844, 10.711327), (49.751907, 10.711424), (49.751871, 10.711483),
+          (49.751844, 10.711442), (49.751807, 10.711384)]),
+        ({'h': 3.7, 'r': 'f'},  # porch
+         [(49.751816, 10.711327), (49.751829, 10.711348), (49.751817, 10.711367), (49.751803, 10.711345)]),
+        ({'h': 2.9, 'r': 'f'},  # entrance roof
+         [(49.751788, 10.711459), (49.751811, 10.711495), (49.75179, 10.711528), (49.751766, 10.711494)]),
+    ]),
+]
+
+# How single buildings look where the photo shows it better than any rule: a point in the building, and what it
+# gets. The garage of Schulstraße 22 is covered with solar panels.
+LOOKS = [
+    (49.753529, 10.714888, {'look': {'roof': 'solar', 'flat': True}}),
 ]
 
 # Garden pools, turquoise on the same photo: lat, lon, and how many metres they measure east-west and north-south.
@@ -774,6 +799,14 @@ if tiles:
 for kind, patch in PATCHES:
     pts = ring([{'lat': lat, 'lon': lon} for lat, lon in patch])
     areas.append({'k': kind, 'p': flat(pts), 'a': shoelace(pts)})
+for lat, lon, pieces in SPLIT:
+    spot = xy({'lat': lat, 'lon': lon})
+    whole = next((b for b in buildings if pip(spot, corners(b))), None)
+    if whole:
+        buildings.remove(whole)
+        for shape, corner_list in pieces:
+            pts = ring([{'lat': la, 'lon': lo} for la, lo in corner_list])
+            buildings.append({'p': flat(pts), 'a': round(shoelace(pts)), 'k': whole['k'], **shape})
 for b in buildings:
     if b['k'] in 'hy':
         c = centre(b)
@@ -781,6 +814,11 @@ for b in buildings:
 areas.sort(key=lambda a: -a.pop('a'))
 if photo:
     roofs(buildings, photo)
+for lat, lon, changes in LOOKS:
+    spot = xy({'lat': lat, 'lon': lon})
+    for b in buildings:
+        if pip(spot, corners(b)):
+            b.update(changes)
 if plan:
     drawn = len(fences), len(hedges)
     more = borders(plan, photo, buildings, areas, roads)
