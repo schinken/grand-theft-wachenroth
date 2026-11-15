@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "esbuild game.js --bundle --minify --format=esm --outfile=_site/game.js && cp index.html _site/index.html",
+    "build": "esbuild game.js --bundle --minify --format=esm --outfile=_site/game.js && node tools/stamp.js",
     "format": "prettier --write .",
     "lint": "eslint .",
     "check": "prettier --check . && eslint ."
