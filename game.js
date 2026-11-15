@@ -7347,6 +7347,33 @@ const fieldMasks = MAP.fields.map(src => {
 // Which way the furrows run on each kind of field
 const FURROWS = [0.35, -0.9, 1.25, -0.2, 0.75];
 const yardTile = canvas(TILE_PX, TILE_PX);
+// Kept in memory, not on the graphics card, so reading it back is cheap.
+const probe = canvas(TILE_M + 4, TILE_M + 4).getContext('2d', {
+  willReadFrequently: true,
+});
+
+/**
+ * Whether a see-through picture marks anything in one ground tile, with two
+ * pixels to spare for the smoothing when it is scaled up. Most tiles have no
+ * field of a kind, and painting them would draw nothing.
+ * @param {!HTMLImageElement} mask
+ * @param {number} k The pixels the picture has for a metre.
+ * @param {number} x0 The tile's corner, in metres.
+ * @param {number} y0
+ * @return {boolean}
+ */
+function marks(mask, k, x0, y0) {
+  const n = TILE_M * k + 4;
+  probe.clearRect(0, 0, n, n);
+  probe.drawImage(mask, x0 * k - 2, y0 * k - 2, n, n, 0, 0, n, n);
+  const d = probe.getImageData(0, 0, n, n).data;
+  for (let i = 3; i < d.length; i += 4) {
+    if (d[i]) {
+      return true;
+    }
+  }
+  return false;
+}
 
 /**
  * Paints what a see-through picture marks in one ground tile: the picture
@@ -7360,7 +7387,7 @@ const yardTile = canvas(TILE_PX, TILE_PX);
  * @param {number} y0
  */
 function paintMask(g, mask, perMetre, fill, turn, x0, y0) {
-  if (!mask.naturalWidth) {
+  if (!mask.naturalWidth || !marks(mask, perMetre, x0, y0)) {
     return;
   }
   const y = yardTile.getContext('2d');
