@@ -5963,12 +5963,18 @@ function finish() {
   audio.play('win');
   audio.radio(1);
   audio.siren(false);
-  try {
-    localStorage.removeItem(SAVE_KEY);
-  } catch {
-    /* private mode */
-  }
-  byId('again').focus();
+  store(); // with every job done: a saved game goes on in free play
+  byId('free').focus();
+}
+
+/** After the finale: on through Wachenroth with the money, without jobs. */
+function freePlay() {
+  state.mode = 'play';
+  byId('end').hidden = true;
+  byId('hud').hidden = false;
+  onShow.clear();
+  document.activeElement.blur();
+  page(...TALK.free);
 }
 
 // ---------- player
@@ -6578,7 +6584,8 @@ function start(save) {
     state.nextJob = 0.5;
     return;
   }
-  page(...(save ? TALK.back : TALK.hello));
+  const free = save && save.n >= MISSIONS.length;
+  page(...(free ? TALK.free : save ? TALK.back : TALK.hello));
 }
 
 // index.html?job=koppel, or ?job=12, jumps straight to a job: by its name in
@@ -6772,6 +6779,18 @@ document.addEventListener('visibilitychange', () => {
 
 byId('start').onclick = () => start();
 byId('again').onclick = () => start();
+byId('free').onclick = freePlay;
+// Free play has no jobs left that save the game: it is saved when the page
+// goes out of sight.
+document.addEventListener('visibilitychange', () => {
+  if (
+    document.hidden &&
+    state.mode === 'play' &&
+    state.jobN >= MISSIONS.length
+  ) {
+    store();
+  }
+});
 byId('resume').onclick = () => start(load());
 byId('how').onclick = () => {
   byId('help').hidden = !byId('help').hidden;
@@ -6780,10 +6799,12 @@ byId('how').onclick = () => {
 {
   const save = load();
   byId('resume').hidden =
-    PICKED >= 0 || !(save && save.n > 0 && save.n < MISSIONS.length);
+    PICKED >= 0 || !(save && save.n > 0 && save.n <= MISSIONS.length);
   if (save) {
     byId('resume').textContent =
-      `Weiterspielen (Auftrag ${save.n + 1}/${MISSIONS.length})`;
+      save.n >= MISSIONS.length
+        ? 'Weiterspielen (freies Spiel)'
+        : `Weiterspielen (Auftrag ${save.n + 1}/${MISSIONS.length})`;
   }
   if (PICKED >= 0) {
     // the link asked for a job: say which one the button starts
