@@ -7432,11 +7432,12 @@ function groundTile(tx, ty, paint, room) {
 function drawGround(x0, y0, x1, y1) {
   const view = ctx.getTransform();
   const z = view.a;
-  textures.water.setTransform(
-    new DOMMatrix()
-      .scaleSelf(1 / PX_PER_M)
-      .translateSelf((state.t * 5) % 64, (state.t * 2) % 64)
-  );
+  textures.water.setTransform({
+    a: 1 / PX_PER_M,
+    d: 1 / PX_PER_M,
+    e: ((state.t * 5) % 64) / PX_PER_M,
+    f: ((state.t * 2) % 64) / PX_PER_M,
+  });
   ctx.fillStyle = textures.water;
   ctx.fillRect(x0 - 1, y0 - 1, x1 - x0 + 2, y1 - y0 + 2);
   // Tiles go down in whole screen pixels, so neighbours meet without a seam.
@@ -7467,7 +7468,7 @@ function drawGround(x0, y0, x1, y1) {
       ctx.drawImage(tile, sx, sy, sw, sh);
     }
   }
-  ctx.setTransform(view);
+  ctx.setTransform(z, 0, 0, z, view.e, view.f);
   const j = state.job;
   const to = j && j.to;
   if (to && to !== j.veh && to !== j.prey) {
@@ -7644,8 +7645,9 @@ function wallsHidden(front, back, cx, cy) {
 const visibleWalls = [];
 const rowLo = [];
 const rowHi = [];
-const PATTERN_HOME = new DOMMatrix().scaleSelf(1 / PX_PER_M);
-const pinned = new DOMMatrix();
+// Plain objects, not DOMMatrix: the canvas reads them twice as fast.
+const PATTERN_HOME = {a: 1 / PX_PER_M, d: 1 / PX_PER_M};
+const pinned = {a: 0, b: 0, c: 0, d: 0, e: 0, f: 0};
 // Three points of a roof face and where they appear: x, y, then seen x, y.
 const face = new Float64Array(12);
 
@@ -8247,7 +8249,7 @@ function drawBuilding(b, cx, cy, hc, base) {
   const lx = (cx - b.mx) * b.ca + (cy - b.my) * b.sa;
   const ly = (cy - b.my) * b.ca - (cx - b.mx) * b.sa;
   drawRoof(b, lx, ly, s, hc / (hc - top));
-  ctx.setTransform(base);
+  ctx.setTransform(z, 0, 0, z, base.e, base.f); // ten times faster than (base)
 }
 
 /**
