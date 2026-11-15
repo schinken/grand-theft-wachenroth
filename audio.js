@@ -76,7 +76,37 @@ export function init() {
   lp.connect(g).connect(sfx);
   o.start();
   o2.start();
-  engineNodes = {o, o2, lp, g};
+  // Four slightly uneven combustion strokes: low exhaust thumps with a
+  // short metallic injection clatter, looping at 750 rpm for an old diesel.
+  const dieselBuf = audioCtx.createBuffer(
+    1,
+    Math.round(audioCtx.sampleRate * 0.16),
+    audioCtx.sampleRate
+  );
+  const dieselSamples = dieselBuf.getChannelData(0);
+  for (const [i, at] of [0, 0.041, 0.079, 0.121].entries()) {
+    for (let n = 0; n < audioCtx.sampleRate * 0.039; n++) {
+      const index = Math.round(at * audioCtx.sampleRate) + n;
+      if (index >= dieselSamples.length) {
+        break;
+      }
+      const t = n / audioCtx.sampleRate;
+      const thump = Math.sin(2 * Math.PI * 78 * t) * Math.exp(-t * 100);
+      const clatter = (Math.random() * 2 - 1) * Math.exp(-t * 650) * 0.7;
+      dieselSamples[index] += (thump + clatter) * (i % 2 ? 0.8 : 1);
+    }
+  }
+  const diesel = audioCtx.createBufferSource();
+  diesel.buffer = dieselBuf;
+  diesel.loop = true;
+  const dieselFilter = audioCtx.createBiquadFilter();
+  dieselFilter.type = 'lowpass';
+  dieselFilter.frequency.value = 1800;
+  const dieselGain = audioCtx.createGain();
+  dieselGain.gain.value = 0;
+  diesel.connect(dieselFilter).connect(dieselGain).connect(sfx);
+  diesel.start();
+  engineNodes = {o, o2, lp, g, diesel, dieselGain};
 
   const so = audioCtx.createOscillator();
   const lfo = audioCtx.createOscillator();
@@ -290,6 +320,7 @@ export function babble() {
 }
 
 const ENGINES = {
+  n1000: [32, 3, 300],
   tractor: [26, 3.2, 300],
   mixer: [30, 3.4, 300],
   truck: [32, 3.6, 320],
@@ -315,6 +346,16 @@ export function engine(speed, on, kind) {
   engineNodes.o2.frequency.setTargetAtTime(f / 2, t, 0.03);
   engineNodes.lp.frequency.value = cut;
   engineNodes.g.gain.setTargetAtTime(on ? 0.045 : 0, t, 0.05);
+  engineNodes.diesel.playbackRate.setTargetAtTime(
+    1 + Math.abs(speed) * 0.07,
+    t,
+    0.08
+  );
+  engineNodes.dieselGain.gain.setTargetAtTime(
+    on && kind === 'n1000' ? 0.12 : 0,
+    t,
+    0.05
+  );
 }
 /**
  * Switches the police siren on or off.

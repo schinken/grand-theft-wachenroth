@@ -2006,7 +2006,7 @@ const ROOFS = {
     hedges: [[40, 4.9, 34.3, 3.2, 28.3, 1.6, 22.8, 0.3, 17.4, -1.2]],
     cars: [
       [36.5, 6.9, 1.36, '#2b2f36'],
-      [31.1, 6.1, 1.36, '#eeeee8', 'van'],
+      [31.1, 6.1, 1.36, '#eeeee8', 'n1000'],
       [25.5, 4.2, 1.36, '#d9dcdf'],
       [18.7, 3.6, 1.36, '#eeeee8'],
     ],
@@ -3209,6 +3209,15 @@ const TYPES = {
     hp: 140,
     mass: 1.7,
   },
+  n1000: {
+    name: ['n1000'],
+    length: 5.6,
+    width: 2.3,
+    max: 25,
+    acc: 9,
+    hp: 140,
+    mass: 1.7,
+  },
   pizza: {
     name: ['Pizza-Flitzer'],
     length: 3.9,
@@ -3300,6 +3309,7 @@ const PAINT = {
   mixer: '#284d98',
   fire: '#c8201c',
   van: '#eeeee8',
+  n1000: '#eeeee8',
 };
 const spriteCache = new Map();
 /**
@@ -3386,13 +3396,23 @@ function carSprite(kind, col, frame = 0, extras = '') {
       rect(a + 7, mid - 3, 2, 6, '#f4f4ef');
       rect(a + 9, mid - 3, 2, 6, '#c8201c');
     }
-  } else if (kind === 'van') {
+  } else if (kind === 'van' || kind === 'n1000') {
     box(0, w, body);
-    rect(w - 12, 2, 5, h - 4, glass);
-    rect(3, 2, w - 17, h - 4, shade(body, 1.06));
-    if (!wreck) {
-      rect(3, mid - 1, w - 17, 3, COLORS[frame % COLORS.length]);
-    } // company stripe
+    if (kind === 'n1000') {
+      // Same shell as the van. The MB100's thin windscreen sits farther
+      // forward, with just a one-pixel bow at its upper and lower edges.
+      rect(3, 2, w - 10, h - 4, shade(body, 1.06));
+      for (let y = 2; y < h - 2; y++) {
+        const edge = y === 2 || y === h - 3;
+        rect(edge ? w - 6 : w - 5, y, 2, 1, glass);
+      }
+    } else {
+      rect(w - 12, 2, 5, h - 4, glass);
+      rect(3, 2, w - 17, h - 4, shade(body, 1.06));
+      if (!wreck) {
+        rect(3, mid - 1, w - 17, 3, COLORS[frame % COLORS.length]);
+      } // company stripe
+    }
   } else if (kind === 'tractor') {
     rect(1, 0, 12, 5, '#101012');
     rect(1, h - 5, 12, 5, '#101012');
@@ -4897,15 +4917,17 @@ function populate(dt, near) {
         ang,
         r < 0.6
           ? 'car'
-          : r < 0.78
+          : r < 0.7
             ? 'van'
-            : r < 0.86
-              ? 'sport'
-              : r < 0.93
-                ? 'tractor'
-                : r < 0.97
-                  ? 'truck'
-                  : 'tipper'
+            : r < 0.78
+              ? 'n1000'
+              : r < 0.86
+                ? 'sport'
+                : r < 0.93
+                  ? 'tractor'
+                  : r < 0.97
+                    ? 'truck'
+                    : 'tipper'
       );
       c.ai = newAI(NODES.indexOf(a), to);
       if (c.kind === 'tractor' && Math.random() < 0.5) {
@@ -4962,7 +4984,13 @@ function parkCars() {
             x,
             y,
             a.ang + Math.PI / 2 + (flip ? Math.PI : 0),
-            kind < 0.8 ? 'car' : kind < 0.93 ? 'van' : 'sport',
+            kind < 0.8
+              ? 'car'
+              : kind < 0.87
+                ? 'van'
+                : kind < 0.93
+                  ? 'n1000'
+                  : 'sport',
             COLORS[(r() * COLORS.length) | 0]
           );
         }
@@ -5012,7 +5040,13 @@ function parkCars() {
       x,
       y,
       Math.atan2(s[3] - s[1], s[2] - s[0]) + (flip ? Math.PI : 0),
-      kind < 0.85 ? 'car' : kind < 0.95 ? 'van' : 'sport',
+      kind < 0.85
+        ? 'car'
+        : kind < 0.9
+          ? 'van'
+          : kind < 0.95
+            ? 'n1000'
+            : 'sport',
       col
     );
   }
