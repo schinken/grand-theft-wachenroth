@@ -110,6 +110,8 @@ POIS = {
     'sammelstelle': (49.75098, 10.71742),  # the recycling containers, where the Christmas trees are collected
     'streuobst': (49.755250, 10.704037),  # the orchard meadow of the Obst- und Gartenbauverein, above the pitch
     'toxicity': (49.750962, 10.712070),  # Toxicity, the rock club on Hauptstraße
+    'gumbrecht': (49.749289, 10.71403),  # Gumbrecht Tiefbau, Kirchstraße 11
+    'dentist': (49.751197, 10.715213),  # Zahnarztpraxis Mickoleit, Schulstraße 2a
 }
 
 # Read off the state's aerial photo, as lat/lon, because no map has them: the five grain silos of the Lagerhaus, and

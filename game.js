@@ -3571,6 +3571,15 @@ const TYPES = {
     hp: 250,
     mass: 3.2,
   },
+  digger: {
+    name: ['Mini-Bagger'],
+    length: 3.6,
+    width: 1.7,
+    max: 11,
+    acc: 6,
+    hp: 220,
+    mass: 2.6,
+  },
   tanker: {
     name: ['Heizöl-Laster'],
     length: 7.6,
@@ -3625,6 +3634,7 @@ const PAINT = {
   tipper: '#284d98',
   mixer: '#284d98',
   tanker: '#c8201c',
+  digger: '#e8b21c',
   fire: '#c8201c',
   van: '#eeeee8',
 };
@@ -3758,6 +3768,24 @@ function carSprite(kind, col, frame = 0, extras = '') {
       }
     }
     cab(15);
+  } else if (kind === 'digger') {
+    // tracks, the yellow house with its cab, the arm and the bucket in
+    // front, full of earth when extras says e
+    for (const y of [0, h - 3]) {
+      rect(1, y, w - 9, 3, '#1c1c1e');
+      for (let x = 2; x < w - 9; x += 3) {
+        rect(x, y, 1, 3, '#3a3a3e');
+      }
+    }
+    rect(3, 2, 14, h - 4, '#0b0b0d');
+    rect(4, 3, 12, h - 6, body);
+    rect(10, 3, 5, h - 6, glass);
+    rect(16, mid - 1, w - 22, 3, shade(body, 0.8));
+    rect(w - 7, mid - 3, 6, 7, '#3a3a3e');
+    if (extras.includes('e') && !wreck) {
+      rect(w - 7, mid - 3, 6, 7, '#6b4a2a');
+      rect(w - 6, mid - 2, 2, 2, '#8a6a48');
+    }
   } else if (kind === 'tanker') {
     // a silver tank with ribs and a red stripe behind the cab
     const tw = w - 17;
@@ -4183,7 +4211,10 @@ function puff(x, y, kind) {
   const sp =
     kind === 'spark'
       ? rand(4, 12)
-      : kind === 'blood' || kind === 'water' || kind === 'dung'
+      : kind === 'blood' ||
+          kind === 'water' ||
+          kind === 'dung' ||
+          kind === 'dirt'
         ? rand(1, 6)
         : rand(0.2, 1.5);
   state.parts.push({
@@ -4200,6 +4231,7 @@ function puff(x, y, kind) {
       fire: 0.5,
       water: 0.6,
       dung: 0.6,
+      dirt: 0.6,
     }[kind],
   });
 }
@@ -4219,7 +4251,9 @@ function decal(x, y, kind) {
           ? rand(0.4, 1)
           : kind === 'stump'
             ? 0.55
-            : rand(1.5, 2.6),
+            : kind === 'dirt'
+              ? rand(0.5, 1.1)
+              : rand(1.5, 2.6),
       kind,
     });
   }
@@ -5849,6 +5883,25 @@ function nextStep() {
   if (st.load && j.veh && j.veh.tr) {
     j.veh.tr.kind = st.load;
     j.veh.tr.type = TRAILERS[st.load];
+  } else if (st.load !== undefined && j.veh) {
+    // a bucket full of earth, or empty again
+    j.veh.extras = st.load ? 'e' : '';
+    repaint(j.veh);
+  }
+  if (st.beat) {
+    // The workers: out of the digger, a few slaps, and you see stars.
+    const p = state.player;
+    if (p.car) {
+      p.car.vx = p.car.vy = 0;
+      toggleCar();
+    }
+    state.shake = 0.9;
+    state.drunk = Math.max(state.drunk, 25);
+    state.hicT = 3;
+    audio.play('bonk');
+    ['BATSCH!', 'KLATSCH!', 'AUA!'].forEach((word, i) =>
+      float({x: p.x + (i - 1) * 2, y: p.y - i}, word, '#ff5a1f')
+    );
   }
   calmThieves(j);
   j.thieves = st.thieves ? spawnThieves(st.thieves) : [];
@@ -5979,6 +6032,19 @@ function jobRules(dt) {
           }
           if (Math.random() < dt * 5) {
             audio.play('spray');
+          }
+        }
+        if (st.fx === 'dig') {
+          puff(player.x + rand(-2, 2), player.y + rand(-2, 2), 'dirt');
+          // the garden gets dug up, not the street
+          const x = j.to.x + rand(-12, 12);
+          const y = j.to.y + rand(-12, 12);
+          if (
+            Math.random() < dt * 8 &&
+            !(surfAt(x, y) & 4) &&
+            !blocked(x, y, 0.5)
+          ) {
+            decal(x, y, 'dirt');
           }
         }
         if (st.fx === 'spread') {
@@ -8946,7 +9012,9 @@ function drawSprites(x0, y0, x1, y1) {
         ? 'rgba(140,10,16,.8)'
         : d.kind === 'stump'
           ? '#7a5634'
-          : 'rgba(15,12,10,.55)';
+          : d.kind === 'dirt'
+            ? 'rgba(107,74,42,.9)'
+            : 'rgba(15,12,10,.55)';
     ctx.beginPath();
     ctx.arc(d.x, d.y, d.r, 0, TAU);
     ctx.fill();
@@ -9105,7 +9173,8 @@ function drawParticles() {
       p.kind === 'spark' ||
       p.kind === 'blood' ||
       p.kind === 'water' ||
-      p.kind === 'dung'
+      p.kind === 'dung' ||
+      p.kind === 'dirt'
     ) {
       ctx.fillStyle =
         p.kind === 'spark'
@@ -9114,7 +9183,9 @@ function drawParticles() {
             ? '#b0121a'
             : p.kind === 'dung'
               ? '#ecebe4'
-              : '#9fd0f0';
+              : p.kind === 'dirt'
+                ? '#6b4a2a'
+                : '#9fd0f0';
       ctx.fillRect(p.x, p.y, 0.35, 0.35);
       continue;
     }

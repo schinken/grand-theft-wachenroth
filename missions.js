@@ -18,7 +18,7 @@
 //            guards her hens, db = the noise the rockers make (10 dB less for
 //            each one met)
 //   hold     stay within r (10 m) of place `to` for secs seconds: veh = in the
-//            mission vehicle, fx = what it sprays ('water' or 'spread')
+//            mission vehicle, fx = what it does ('water', 'spread', 'dig')
 //   chase    ram the getaway `veh` (with `trailer`), which sets off near place
 //            `at`, `hits` times or until it is badly dented
 //   take     get into the car you just stopped
@@ -31,10 +31,13 @@
 //   wanted   police heat
 //   drop     the mission vehicle is no longer needed
 //   drunk    seconds of being drunk
-//   load     what the trailer carries from now on
+//   load     what the trailer carries from now on; without a trailer,
+//            'earth' fills the digger's bucket and '' empties it
 //   thieves  cars that ram you
 //   logs     rams by the thieves the wood on the cart takes
 //   got      what you call out once the step is done
+//   beat     you are pulled out of the vehicle and slapped about, and see
+//            stars for a while
 //
 // Props: k ('fire', 'tent', 'stage', or 'person' with shirt colour col) at
 // place `at`, dx and dy metres off it, shown from step `from` until before
@@ -84,6 +87,8 @@ export const PLACES = {
   sammelstelle: 'Christbaum-Sammelstelle',
   streuobst: 'Streuobstwiese',
   toxicity: 'Toxicity',
+  gumbrecht: 'Gumbrecht Tiefbau',
+  dentist: 'Zahnarzt Mickoleit',
   linsner: 'Gasthof Linsner',
 };
 
@@ -882,6 +887,72 @@ export const MISSIONS = [
     outro: [
       'Die Bäume danken es dir. Im Herbst gibts Most für den ganzen Verein.',
       'Der Obst- und Gartenbauverein macht dich zum Ehrenmitglied.',
+    ],
+  },
+
+  {
+    id: 'heimwerker',
+    title: 'Frühlingsfest der Heimwerker',
+    reward: 900,
+    props: [
+      {k: 'person', at: 'dump', from: 4, col: '#f2a01c', dx: 3},
+      {k: 'person', at: 'dump', from: 4, col: '#f2a01c', dx: -3, dy: 2},
+    ],
+    intro: [
+      'Frühling! Endlich kann man seinen Garten frisieren. Wenn man doch nur das richtige Grobgerät hätte.',
+      'Ah, ich weiß, wo man sich das eben ausleihen kann: Beim Gumbrecht in der Kirchstraße steht ein Mini-Bagger.',
+    ],
+    steps: [
+      {
+        do: 'steal',
+        veh: 'digger',
+        at: 'gumbrecht',
+        obj: 'Hol dir den Mini-Bagger beim Gumbrecht in der Kirchstraße',
+      },
+      {
+        do: 'hold',
+        to: 'hq',
+        r: 14,
+        secs: 8,
+        veh: true,
+        fx: 'dig',
+        obj: 'Fahr heim und bagger deinen Garten um',
+        say: 'Ab nach Hause, der Garten wartet!',
+      },
+      {
+        do: 'bring',
+        to: 'dump',
+        load: 'earth',
+        obj: 'Fahr den ersten Erdhaufen hoch zur Bauschuttdeponie',
+        say: 'Sauber umgegraben. Jetzt muss die Erde weg: hoch zur Bauschuttdeponie damit.',
+      },
+      {
+        do: 'bring',
+        to: 'hq',
+        load: '',
+        obj: 'Hol daheim den zweiten Erdhaufen',
+        say: 'Abgeladen. Einer fehlt noch!',
+      },
+      {
+        do: 'bring',
+        to: 'dump',
+        load: 'earth',
+        obj: 'Fahr den zweiten Erdhaufen hoch zur Deponie',
+        say: 'Und hoch damit, der letzte.',
+      },
+      {
+        do: 'goto',
+        to: 'dentist',
+        foot: true,
+        drop: true,
+        beat: true,
+        obj: 'Lass dir die Kauleiste beim Zahnarzt Mickoleit richten (zu Fuß rein)',
+        say: '"Sag mal, hast du die Erlaubnis, hier abzuladen? Und das ist doch unser Bagger!" Die Bauarbeiter verdreschen dir die Visage. Ab zum Zahnarzt in die Schulstraße!',
+      },
+    ],
+    outro: [
+      'Der Zahnarzt Mickoleit richtet dir die Kauleiste. Lächeln tut noch weh.',
+      'Aber wenigstens ist der Garten fertig.',
     ],
   },
 
