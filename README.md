@@ -115,6 +115,8 @@ into `selftest ok`.
 - `game.js`: the game. `missions.js`: Flo's jobs and lines. `audio.js`: sound.
 - `map.js` is generated. `tools/osm2map.py` bakes it from an OpenStreetMap
   extract and the open data files listed at the top of the script.
+- `GTW.poster()` in the browser console downloads a picture of the whole map,
+  4 pixels per metre.
 - `tools/playtest.js` is a bot that plays all jobs through the thumb stick, and
   `tools/perf.js` measures frame times; both run in Playwright.
 
