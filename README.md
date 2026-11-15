@@ -2,7 +2,7 @@
 
 A top-down crime caper set in Wachenroth, a market village of about 2,000
 people in the Steigerwald in Upper Franconia. You drive, steal and deliver your
-way through eighteen jobs, and a man called Flo tells you what to do over a
+way through nineteen jobs, and a man called Flo tells you what to do over a
 pager.
 
 **Play it in the browser:** https://schinken.github.io/grand-theft-wachenroth/
@@ -40,7 +40,8 @@ starts small and gets bigger:
 | 15  | [Der Winter kommt](https://schinken.github.io/grand-theft-wachenroth/?job=winter)           | Ten trees with the chainsaw, then the wood home on a tractor. Every ram by the wood thieves knocks some off: ten, and the cart is empty. |
 | 16  | [O Tannenbaum](https://schinken.github.io/grand-theft-wachenroth/?job=christbaum)           | The Schwallclub's tractor: Christmas trees from the doorsteps to the collection point, the donations to the kindergarten.                |
 | 17  | [Dünger für die Obstwiese](https://schinken.github.io/grand-theft-wachenroth/?job=duenger)  | Fertiliser from Lagerhaus Grönert to the orchard meadow above the sports ground, spread before the sacks fall off.                       |
-| 18  | [Kerwa-Samstag](https://schinken.github.io/grand-theft-wachenroth/?job=finale)              | Flo, the brass band and the police, all on the way to the tent.                                                                          |
+| 18  | [Zimmerlautstärke](https://schinken.github.io/grand-theft-wachenroth/?job=toxicity)         | The rockers at Toxicity ignore the evening quiet. Bernhard's Zerstampfer brings them down to 70 dB, one bonk each.                       |
+| 19  | [Kerwa-Samstag](https://schinken.github.io/grand-theft-wachenroth/?job=finale)              | Flo, the brass band and the police, all on the way to the tent.                                                                          |
 
 Each job name links to the game with that job up next: the start button names
 it, and it begins as soon as you press it. In the address, `?job=` takes the

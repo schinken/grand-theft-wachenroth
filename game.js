@@ -5152,8 +5152,23 @@ function grab(v) {
   if (v.kind === 'hen') {
     audio.play('cluck');
   }
+  if (v.kind === 'rocker') {
+    // BONK: he flies a bit, then runs home, unhurt and a lot quieter
+    const n = nearNode(v, 'walk');
+    const p = spawnPed(v.x, v.y, n, NODES[n].walk[0]);
+    const away = Math.atan2(v.y - state.player.y, v.x - state.player.x);
+    Object.assign(p, {shirt: '#16161a', hair: v.hair, mane: true});
+    knockPed(p, Math.cos(away) * 9, Math.sin(away) * 9);
+    audio.play('bonk');
+    state.shake = 0.35;
+  }
   const left = state.items.filter(o => o.job).length;
-  const gift = v.kind === 'xmas' ? ' · Spende +20 €' : '';
+  const gift =
+    v.kind === 'xmas'
+      ? ' · Spende +20 €'
+      : v.kind === 'rocker'
+        ? ' · BONK! -10 dB'
+        : '';
   float(v, `${left ? `noch ${left}` : 'Alles da!'}${gift}`);
   if (j) {
     j.got++;
@@ -5364,10 +5379,11 @@ function jobCast(j, dt) {
   }
   const home = st.near && SPOT[st.near];
   for (const v of state.items) {
-    if (v.kind !== 'hen' || !v.job) {
+    if ((v.kind !== 'hen' && v.kind !== 'rocker') || !v.job) {
       continue;
     }
     // A hen flees when you come close, zigzagging; otherwise it pecks about.
+    // A rocker does the same, only slower: he is moshing.
     const d = Math.hypot(v.x - player.x, v.y - player.y);
     let a = v.ph;
     let sp = 0;
@@ -5375,7 +5391,7 @@ function jobCast(j, dt) {
       a =
         Math.atan2(v.y - player.y, v.x - player.x) +
         Math.sin(state.t * 6 + v.ph);
-      sp = 2.6;
+      sp = v.kind === 'rocker' ? 2.1 : 2.6;
     } else if (Math.sin(state.t * 1.3 + v.ph * 3) > 0.7) {
       a = v.ph + state.t * 0.5;
       sp = 0.8;
@@ -5542,6 +5558,7 @@ function nextStep() {
         kind: st.item,
         job: true,
         ph: rand(0, TAU),
+        hair: pick(['#2a1d14', '#15151a', '#d8c08a', '#6b3a1e']),
       });
     }
   }
@@ -5722,13 +5739,13 @@ function playRules(dt) {
   if (state.wasted) {
     return;
   }
-  // Hens are caught by hand, trees cut with the saw: on foot only. Christmas
-  // trees go on the cart of the job's tractor.
+  // Hens are caught by hand, trees cut with the saw, rockers met with the
+  // hammer: on foot only. Christmas trees go on the cart of the job's tractor.
   const job = state.job;
   const got = state.items.filter(
     v =>
       Math.hypot(v.x - player.x, v.y - player.y) < reach &&
-      !(player.car && (v.kind === 'hen' || v.kind === 'tree')) &&
+      !(player.car && ['hen', 'tree', 'rocker'].includes(v.kind)) &&
       !(v.kind === 'xmas' && !(job && player.car === job.veh))
   );
   if (got.length) {
@@ -6494,7 +6511,7 @@ function hud(dt) {
       bits.push(`${(secs / 60) | 0}:${String(secs % 60).padStart(2, '0')}`);
     }
     if (st.do === 'collect') {
-      bits.push(`${j.got} / ${j.need}`);
+      bits.push(st.db ? `${st.db - 10 * j.got} dB` : `${j.got} / ${j.need}`);
     }
     if (st.do === 'chase') {
       bits.push(`Treffer ${j.prey.hits || 0} / ${st.hits}`);
@@ -8316,8 +8333,9 @@ function drawTrees(trees, cx, cy, hc) {
  * @param {!Object} p
  * @param {string} shirt
  * @param {string} hair
+ * @param {boolean=} mane Long hair down the back, as rockers wear it.
  */
-function drawPerson(p, shirt, hair) {
+function drawPerson(p, shirt, hair, mane = false) {
   const sw = Math.sin(p.t * 4) * 0.22;
   const rect = (x, y, w, h, f) => {
     ctx.fillStyle = f;
@@ -8340,7 +8358,28 @@ function drawPerson(p, shirt, hair) {
   rect(-0.08 - sw, -0.6, 0.3, 0.16, '#e0b08a');
   rect(-0.08 + sw, 0.44, 0.3, 0.16, '#e0b08a'); // hands
   rect(-0.24, -0.5, 0.48, 1, shirt);
+  if (mane) {
+    rect(-0.45, -0.24, 0.3, 0.48, hair); // long hair down the back
+  }
   rect(-0.2, -0.22, 0.42, 0.44, hair);
+  ctx.restore();
+}
+
+/**
+ * The Zerstampfer, a big hammer, in the hand of someone on foot.
+ * @param {!Point} p With its facing a.
+ */
+function drawHammer(p) {
+  ctx.save();
+  ctx.translate(p.x, p.y);
+  ctx.rotate(p.a);
+  ctx.scale(1.3, 1.3);
+  ctx.fillStyle = '#8a5a2a';
+  ctx.fillRect(0.05, 0.42, 1.35, 0.16);
+  ctx.fillStyle = '#4a4d53';
+  ctx.fillRect(1.15, 0.05, 0.55, 0.9);
+  ctx.fillStyle = '#9a9da3';
+  ctx.fillRect(1.15, 0.05, 0.55, 0.14);
   ctx.restore();
 }
 
@@ -8533,6 +8572,17 @@ function drawSprites(x0, y0, x1, y1) {
     ctx.beginPath();
     ctx.arc(v.x, v.y, (v.job ? 2.4 : 1.7) + k * 0.3, 0, TAU);
     ctx.fill();
+    if (v.kind === 'rocker') {
+      // headbanging
+      const a = v.ph + Math.sin(state.t * 9 + v.ph) * 0.35;
+      drawPerson(
+        {x: v.x, y: v.y, a, t: state.t * 2 + v.ph},
+        '#16161a',
+        v.hair,
+        true
+      );
+      continue;
+    }
     ctx.save();
     ctx.translate(v.x, v.y);
     ctx.rotate(Math.sin(state.t * 2 + v.ph) * 0.25);
@@ -8546,10 +8596,13 @@ function drawSprites(x0, y0, x1, y1) {
     ctx.arc(player.x, player.y, 1 + Math.sin(state.t * 6) * 0.1, 0, TAU);
     ctx.stroke();
     drawPerson(player, '#19c2bd', '#3a2a1a');
+    if (state.job && state.job.step.item === 'rocker') {
+      drawHammer(player);
+    }
   }
   for (const p of state.peds) {
     if (seen(p) && !(p.fly > 0)) {
-      drawPerson(p, p.shirt, p.hair);
+      drawPerson(p, p.shirt, p.hair, p.mane);
     }
   }
   const dz = state.job && state.job.doris;
@@ -8641,7 +8694,7 @@ function drawSprites(x0, y0, x1, y1) {
   drawTrain(x0, y0, x1, y1);
   for (const p of state.peds) {
     if (seen(p) && p.fly > 0) {
-      drawPerson(p, p.shirt, p.hair); // up in the air, above the cars
+      drawPerson(p, p.shirt, p.hair, p.mane); // up in the air, above the cars
     }
   }
 }

@@ -109,6 +109,7 @@ POIS = {
     'linsner': (49.75086, 10.71445),   # Gasthof Linsner, Hauptstraße 7
     'sammelstelle': (49.75098, 10.71742),  # the recycling containers, where the Christmas trees are collected
     'streuobst': (49.755250, 10.704037),  # the orchard meadow of the Obst- und Gartenbauverein, above the pitch
+    'toxicity': (49.750962, 10.712070),  # Toxicity, the rock club on Hauptstraße
 }
 
 # Read off the state's aerial photo, as lat/lon, because no map has them: the five grain silos of the Lagerhaus, and
