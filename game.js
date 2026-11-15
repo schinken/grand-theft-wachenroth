@@ -5163,13 +5163,8 @@ function grab(v) {
     state.shake = 0.35;
   }
   const left = state.items.filter(o => o.job).length;
-  const gift =
-    v.kind === 'xmas'
-      ? ' · Spende +20 €'
-      : v.kind === 'rocker'
-        ? ' · BONK! -10 dB'
-        : '';
-  float(v, `${left ? `noch ${left}` : 'Alles da!'}${gift}`);
+  const gift = {xmas: ' · Spende +20 €', rocker: ' · BONK! -10 dB'}[v.kind];
+  float(v, `${left ? `noch ${left}` : 'Alles da!'}${gift || ''}`);
   if (j) {
     j.got++;
   }
@@ -5190,6 +5185,10 @@ function page(...msgs) {
   }
   pg.q.push(...msgs);
 }
+
+// A new car at junction a, its nose towards junction b
+const carAt = (a, b, kind, col) =>
+  makeCar(a.x, a.y, Math.atan2(b.y - a.y, b.x - a.x), kind, col);
 
 /**
  * Parks a mission vehicle at a place.
@@ -5337,13 +5336,7 @@ function spawnThieves(n) {
   for (let i = 0; i < n && spots.length; i++) {
     const a = spots.splice((Math.random() * spots.length) | 0, 1)[0];
     const to = a.car[0].n;
-    const c = makeCar(
-      a.x,
-      a.y,
-      Math.atan2(NODES[to].y - a.y, NODES[to].x - a.x),
-      'car',
-      '#22242a'
-    );
+    const c = carAt(a, NODES[to], 'car', '#22242a');
     c.ai = newAI(NODES.indexOf(a), to, {thief: true});
     out.push(c);
   }
@@ -5514,15 +5507,9 @@ function nextStep() {
     j.to = j.veh;
   }
   if (st.do === 'chase') {
-    const s = SPOT[st.at];
-    const from = nearNode(s, 'car');
+    const from = nearNode(SPOT[st.at], 'car');
     const to = NODES[from].car[0].n;
-    j.prey = makeCar(
-      NODES[from].x,
-      NODES[from].y,
-      Math.atan2(NODES[to].y - NODES[from].y, NODES[to].x - NODES[from].x),
-      st.veh
-    );
+    j.prey = carAt(NODES[from], NODES[to], st.veh);
     if (st.trailer) {
       hitch(j.prey, st.trailer);
     }
@@ -5690,13 +5677,11 @@ function endJob() {
   flash('Mission erfüllt!', `+${fmt(m.reward)}`);
   audio.play('win');
   store();
+  page(...m.outro);
   if (state.jobN >= MISSIONS.length) {
-    page(...m.outro);
     state.nextJob = 1e9;
     state.finale = 9;
-    return;
   }
-  page(...m.outro);
 }
 
 /**
@@ -5746,14 +5731,16 @@ function playRules(dt) {
   if (state.wasted) {
     return;
   }
-  // Hens are caught by hand, trees cut with the saw, rockers met with the
-  // hammer: on foot only. Christmas trees go on the cart of the job's tractor.
+  // A job may want its things fetched on foot (hens caught by hand, trees cut
+  // with the saw, rockers met with the hammer) or with its own vehicle
+  // (Christmas trees onto the cart).
   const job = state.job;
+  const st = job ? job.step : {};
   const got = state.items.filter(
     v =>
       Math.hypot(v.x - player.x, v.y - player.y) < reach &&
-      !(player.car && ['hen', 'tree', 'rocker'].includes(v.kind)) &&
-      !(v.kind === 'xmas' && !(job && player.car === job.veh))
+      !(v.job && st.foot && player.car) &&
+      !(v.job && st.veh && player.car !== job.veh)
   );
   if (got.length) {
     state.items = state.items.filter(v => !got.includes(v));
@@ -6244,14 +6231,7 @@ function waste(title = 'Erledigt!') {
 function respawn() {
   const player = state.player;
   const best = NODES[nearNode(player, 'car')];
-  const to = NODES[best.car[0].n];
-  player.car = makeCar(
-    best.x,
-    best.y,
-    Math.atan2(to.y - best.y, to.x - best.x),
-    'car',
-    '#e0b21c'
-  );
+  player.car = carAt(best, NODES[best.car[0].n], 'car', '#e0b21c');
   audio.radio(player.car.radio);
   state.wasted = 0;
 }
@@ -6533,6 +6513,8 @@ function hud(dt) {
     if (changed('missionLine', line)) {
       el.firstElementChild.textContent = line;
     }
+    // The gauge: the load or the wood that is left, or how far a hold or a
+    // collection has got; other steps have none.
     const bar = j.fragile
       ? j.cargo
       : st.logs
@@ -6541,17 +6523,9 @@ function hud(dt) {
           ? j.hold / st.secs
           : st.do === 'collect'
             ? j.got / j.need
-            : j.timed
-              ? j.left / (st.time || j.left)
-              : 0;
-    const noGauge = !(
-      j.fragile ||
-      st.logs ||
-      st.do === 'hold' ||
-      st.do === 'collect'
-    );
-    if (changed('noGauge', noGauge)) {
-      el.lastElementChild.hidden = noGauge;
+            : null;
+    if (changed('noGauge', bar === null)) {
+      el.lastElementChild.hidden = bar === null;
     }
     const gauge = Math.round(clamp(bar, 0, 1) * 100);
     if (changed('gauge', gauge)) {
@@ -6609,12 +6583,10 @@ function hud(dt) {
 function start(save) {
   audio.init();
   reset('play', save);
-  byId('menu').hidden = byId('end').hidden = true;
   byId('hud').hidden = false;
   byId('lcd').textContent = '';
   onShow.clear(); // the page was just reset by hand: write everything afresh
-  byId('shop').hidden = true;
-  for (const id of ['flash', 'mission', 'pause', 'info', 'map']) {
+  for (const id of 'menu end shop flash mission pause info map'.split(' ')) {
     byId(id).hidden = true;
   }
   replay(byId('hint'));
@@ -6717,9 +6689,15 @@ addEventListener('blur', () => {
   }
 });
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) {
-    showMap(false);
-    pause(true);
+  if (!document.hidden) {
+    return;
+  }
+  showMap(false);
+  pause(true);
+  // Free play has no jobs left that save the game: it is saved when the page
+  // goes out of sight.
+  if (state.mode === 'play' && state.jobN >= MISSIONS.length) {
+    store();
   }
 });
 
@@ -6843,20 +6821,8 @@ document.addEventListener('visibilitychange', () => {
   document.addEventListener('contextmenu', e => e.preventDefault());
 }
 
-byId('start').onclick = () => start();
-byId('again').onclick = () => start();
+byId('start').onclick = byId('again').onclick = () => start();
 byId('free').onclick = freePlay;
-// Free play has no jobs left that save the game: it is saved when the page
-// goes out of sight.
-document.addEventListener('visibilitychange', () => {
-  if (
-    document.hidden &&
-    state.mode === 'play' &&
-    state.jobN >= MISSIONS.length
-  ) {
-    store();
-  }
-});
 byId('resume').onclick = () => start(load());
 byId('how').onclick = () => {
   byId('help').hidden = !byId('help').hidden;
