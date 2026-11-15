@@ -970,6 +970,7 @@ const LANDMARKS = {
   clubhouse: {plate: ['#c8201c', '#ffffff']},
   club: {wall: '#d9c9a4', roof: 'tile3'},
   lavite: {wall: '#f1ead8', roof: 'tile2'},
+  no14: {wall: '#f4f2ea', roof: 'slate'},
 };
 
 // The roof for the colour the aerial photo shows: orange, red or brown tiles,
@@ -985,13 +986,15 @@ const ROOF_BY_COLOUR = {
 };
 const FLAT_BY_COLOUR = {g: ['flat'], l: ['flatLight'], d: ['tar']};
 
-// Flo's house, Johann-Philipp-Ring 9, as the survey and the aerial photos
-// show it: a main block and a lower wing to the east. Both have a cross gable
-// to the street and one to the garden; the garden one of the main block
-// stands on a bay. In metres: u runs east along the street front from the
-// south-west corner, v north from it, z up from the ground.
-const HOME_EAVES = 5.1;
-const HOME_RIDGE = 10.7;
+// Three buildings are modelled after the real ones, face by face, from the
+// survey's roof faces and the aerial photos. In metres: u runs east along the
+// front from the south-west corner of the building, v north from it, z up
+// from the ground.
+//
+// Flo's house, Johann-Philipp-Ring 9: a main block and a lower wing to the
+// east. Both have a cross gable to the street and one to the garden; the
+// garden one of the main block stands on a bay.
+//
 // The roof slopes as corners u, v, z, and the solar panels that lie on them
 // as [u0, v0, u1, v1].
 const HOME_SLOPES = [
@@ -1062,14 +1065,216 @@ const HOME_GABLES = [
   [1, 0, [17.2, 8.26, 7, 17.2, 9.95, 7, 17.2, 9.95, 5.1]],
 ];
 
+// The town hall, Hauptstraße 23, has a mansard roof: steep from the eaves up,
+// then a hipped roof on top.
+const HALL_SLOPES = [
+  [[0, 0, 7, 21.5, 0, 7, 20.3, 1.2, 10.3, 1.2, 1.2, 10.3]],
+  [[21.5, 0, 7, 21.5, 9.3, 7, 20.3, 8.1, 10.3, 20.3, 1.2, 10.3]],
+  [[21.5, 9.3, 7, 0, 9.3, 7, 1.2, 8.1, 10.3, 20.3, 8.1, 10.3]],
+  [[0, 9.3, 7, 0, 0, 7, 1.2, 1.2, 10.3, 1.2, 8.1, 10.3]],
+  [[1.2, 1.2, 10.3, 20.3, 1.2, 10.3, 16.9, 4.65, 13.1, 4.6, 4.65, 13.1]],
+  [[20.3, 8.1, 10.3, 1.2, 8.1, 10.3, 4.6, 4.65, 13.1, 16.9, 4.65, 13.1]],
+  [[1.2, 8.1, 10.3, 1.2, 1.2, 10.3, 4.6, 4.65, 13.1]],
+  [[20.3, 1.2, 10.3, 20.3, 8.1, 10.3, 16.9, 4.65, 13.1]],
+];
+
 /**
- * Turns the description of Flo's roof into faces in the frame of his house:
+ * Scatters flowers over a bed.
+ * @param {!CanvasRenderingContext2D} g
+ * @param {!Rng} r
+ * @param {number} x The bed, in metres.
+ * @param {number} y
+ * @param {number} w
+ * @param {number} h
+ */
+function flowerBed(g, r, x, y, w, h) {
+  g.fillStyle = '#4a3a2a';
+  g.fillRect(x, y, w, h);
+  for (let i = 0; i < w * h * 5; i++) {
+    g.fillStyle = pick2(
+      ['#d83a3a', '#f2d23e', '#f4f4ef', '#c85aa8', '#e8762e', '#3c7a30'],
+      r
+    );
+    g.fillRect(x + r() * (w - 0.3), y + r() * (h - 0.3), 0.3, 0.3);
+  }
+}
+
+/**
+ * The garden of Johann-Philipp-Ring 14, between the house and the bend of the
+ * street: lawn, terrace with a pergola, a sun sail, beds, vegetables and a
+ * pond. Drawn with x east along the front of the house and y towards the
+ * street in the south.
+ * @param {!CanvasRenderingContext2D} g
+ */
+function paintGarden(g) {
+  const r = rng(14);
+  // The drive to the garage and the path to the front door
+  g.fillStyle = textures.school;
+  g.fillRect(-8.4, -11.6, 8.7, 4.7);
+  g.fillRect(0.3, -10.1, 5.2, 1.6);
+  // Lawn, mown in stripes
+  g.save();
+  g.beginPath();
+  for (const [x, y] of [
+    [5.5, -11.4],
+    [6.2, -11.4],
+    [21.5, -8.2],
+    [19.1, -3.2],
+    [-8.1, 24.6],
+    [-8.1, 2],
+    [5.5, 2],
+  ]) {
+    g.lineTo(x, y);
+  }
+  g.clip();
+  g.fillStyle = textures.resi;
+  g.fillRect(-9, -12, 32, 38);
+  g.fillStyle = 'rgba(190,255,150,.09)';
+  for (let x = -9; x < 23; x += 2.4) {
+    g.fillRect(x, -12, 1.2, 38);
+  }
+  g.restore();
+  // Terrace, with a pergola and a table under it
+  g.fillStyle = textures.school;
+  g.fillRect(0.5, 0, 9.2, 4.5);
+  g.fillRect(-7.6, 2.4, 7, 5); // and the seats under the sun sail
+  g.fillStyle = '#6b4a2a';
+  g.fillRect(4.6, 1.5, 1.9, 1);
+  g.fillStyle = '#d9d2c0';
+  for (const [x, y] of [
+    [4.9, 0.9],
+    [5.9, 0.9],
+    [4.9, 2.7],
+    [5.9, 2.7],
+  ]) {
+    g.fillRect(x, y, 0.5, 0.5);
+  }
+  g.fillStyle = 'rgba(60,40,24,.3)';
+  g.fillRect(3.9, 0.75, 3.5, 2.9);
+  g.fillStyle = '#efe9da';
+  for (let x = 3.8; x < 7.3; x += 0.6) {
+    g.fillRect(x, 0.6, 0.3, 2.9);
+  }
+  g.fillStyle = '#c85a3a'; // loungers
+  g.fillRect(-6.4, 4.2, 0.8, 2);
+  g.fillRect(-5.1, 4.2, 0.8, 2);
+  g.fillStyle = 'rgba(0,0,0,.2)';
+  g.beginPath();
+  g.moveTo(-6.6, 3.2);
+  g.lineTo(-0.8, 3.6);
+  g.lineTo(-4.1, 7.8);
+  g.fill();
+  g.fillStyle = '#f6f3ea';
+  g.beginPath();
+  g.moveTo(-7, 2.8);
+  g.lineTo(-1.2, 3.2);
+  g.lineTo(-4.5, 7.4);
+  g.fill();
+  // Beds: along the house, along the terrace, along the fence to the street
+  flowerBed(g, r, 10.4, -8.3, 1.1, 8);
+  flowerBed(g, r, 0.5, 4.5, 9.2, 0.9);
+  g.save();
+  g.translate(18.4, -2.4);
+  g.rotate(Math.atan2(27, -26.2));
+  flowerBed(g, r, 0, 0, 22, 1);
+  g.restore();
+  // Vegetables in rows
+  g.fillStyle = '#4a3a2a';
+  g.fillRect(-7.3, 11.5, 4.8, 5.6);
+  g.fillStyle = '#3c7a30';
+  for (let y = 12; y < 17; y += 1.05) {
+    g.fillRect(-7, y, 4.2, 0.45);
+  }
+  g.fillStyle = '#d83a3a';
+  for (let x = -6.8; x < -3; x += 0.7) {
+    g.fillRect(x, 13.1, 0.25, 0.25);
+  }
+  // A pond with water lilies, and stepping stones to it
+  g.fillStyle = '#8f897d';
+  g.beginPath();
+  g.ellipse(15.3, -5.6, 2, 1.4, 0.4, 0, TAU);
+  g.fill();
+  g.fillStyle = '#4a8fc4';
+  g.beginPath();
+  g.ellipse(15.3, -5.6, 1.6, 1.05, 0.4, 0, TAU);
+  g.fill();
+  g.fillStyle = '#3c7a30';
+  g.fillRect(14.6, -5.9, 0.5, 0.5);
+  g.fillRect(15.8, -5.4, 0.5, 0.5);
+  g.fillStyle = '#f4f4ef';
+  g.fillRect(14.75, -5.75, 0.2, 0.2);
+  g.fillStyle = '#b9b4a6';
+  for (let i = 0; i < 6; i++) {
+    g.beginPath();
+    g.arc(10.3 + i * 0.85, 2.6 - i * 1.25, 0.34, 0, TAU);
+    g.fill();
+  }
+}
+
+// What the three have: eaves and ridge height, roof slopes, walls above the
+// eaves, where the name goes on the roof [u, v, height of the letters], where
+// the car stands [u, v], and for the garden trees [u, v, size, height], fences
+// and hedges as lines u, v, u, v and so on, and what is painted on the ground.
+const ROOFS = {
+  hq: {
+    eaves: 5.1,
+    ridge: 10.7,
+    slopes: HOME_SLOPES,
+    gables: HOME_GABLES,
+    sign: [10.7, 7.5, 2.4], // on the garden side, where the roof is plain
+    park: [15.3, -2.6], // in front of the wing, as on the aerial photo
+    ground(g) {
+      // The paved drive runs from the wing down to the street, and a
+      // terrace lies along the front of the main block.
+      g.fillStyle = textures.school;
+      g.fillRect(10.6, -1.94, 8.4, 18);
+      g.fillRect(0.6, 0, 10, 2.6);
+    },
+  },
+  townhall: {
+    eaves: 7,
+    ridge: 13.1,
+    slopes: HALL_SLOPES,
+    gables: [],
+    sign: [10.75, 2.9, 2],
+  },
+  // Johann-Philipp-Ring 14: a plain gable roof, the garage on its west side,
+  // and the garden around it up to the pavement of the bend.
+  no14: {
+    eaves: 5.7,
+    ridge: 8.7,
+    slopes: [
+      [[0, 0, 5.7, 10.2, 0, 5.7, 10.2, 4.27, 8.7, 0, 4.27, 8.7]],
+      [[0, 8.55, 5.7, 0, 4.27, 8.7, 10.2, 4.27, 8.7, 10.2, 8.55, 5.7]],
+    ],
+    gables: [
+      [1, 0, [10.2, 0, 5.7, 10.2, 8.55, 5.7, 10.2, 4.27, 8.7]],
+      [-1, 0, [0, 8.55, 5.7, 0, 0, 5.7, 0, 4.27, 8.7]],
+    ],
+    trees: [
+      [16.4, 3.6, 1.3, 4.5],
+      [11.8, -8.5, 1.1, 4],
+      [-4.6, -19.5, 1.2, 4.2],
+    ],
+    // The fence leaves a gate open at the path to the front door.
+    fences: [
+      [5.5, 11.4, 6.2, 11.4, 21.5, 8.2, 19.1, 3.2, -8, -24.5],
+      [0.4, 11.4, 4.1, 11.4],
+    ],
+    hedges: [[-8.1, -24.2, -8.1, -2.7]],
+    ground: paintGarden,
+  },
+};
+
+/**
+ * Turns the description of a roof into faces in the frame of its building:
  * slopes and gable walls, each as corners u, v and the share k of the way
  * from the eaves up to the ridge.
  * @param {!Building} b
+ * @param {!Object} spec One of ROOFS.
  * @param {string} wall The colour of the walls.
  */
-function buildHome(b, wall) {
+function buildRoof(b, spec, wall) {
   // u and v start at the south-west corner of the outline.
   const lp = b.lp;
   let sw = 0;
@@ -1088,20 +1293,20 @@ function buildHome(b, wall) {
     let cv = 0;
     for (let i = 0; i < q.length; i += 3) {
       p.push(au + q[i], av - q[i + 1]);
-      p.push((q[i + 2] - HOME_EAVES) / (HOME_RIDGE - HOME_EAVES));
+      p.push((q[i + 2] - spec.eaves) / (spec.ridge - spec.eaves));
       cu += (au + q[i]) / (q.length / 3);
       cv += (av - q[i + 1]) / (q.length / 3);
     }
     return {p, cu, cv, d: 0, wall: '', tint: '', pin: [0, 3, 6], ...extra};
   };
-  b.planes = HOME_GABLES.map(([du, dv, q]) =>
+  b.planes = spec.gables.map(([du, dv, q]) =>
     face(q, {
       nu: du,
       nv: -dv,
       wall: shade(wall, 0.78 - 0.22 * shadow(du, -dv)),
     })
   );
-  for (const [q, ...panels] of HOME_SLOPES) {
+  for (const [q, ...panels] of spec.slopes) {
     const f = face(q, {});
     const p = f.p;
     // The three corners that span the face best fix its texture, and tell
@@ -1148,8 +1353,21 @@ function buildHome(b, wall) {
     b.planes.push(f);
   }
   b.halves = null;
-  b.h = HOME_EAVES;
-  b.rh = HOME_RIDGE - HOME_EAVES;
+  b.h = spec.eaves;
+  b.rh = spec.ridge - spec.eaves;
+}
+
+/**
+ * A point of a modelled building, given in its u and v, on the map.
+ * @param {!Building} b
+ * @param {number} u
+ * @param {number} v
+ * @return {!Array<number>} x and y.
+ */
+function fromFrame(b, u, v) {
+  const lu = b.at[0] + u;
+  const lv = b.at[1] - v;
+  return [b.mx + lu * b.ca - lv * b.sa, b.my + lu * b.sa + lv * b.ca];
 }
 
 /**
@@ -1497,6 +1715,23 @@ function prepBuilding(b, r) {
         lerp(b.v0, b.v1, 0.2 + r() * 0.6),
         1.5 + r() * 2,
       ]);
+      if (b.a > 2500) {
+        // A big hall has skylights in rows, as the roof of Murk does.
+        b.units = [];
+        for (let u = b.u0 + 7; u < b.u1; u += 14) {
+          for (let v = b.v0 + 7; v < b.v1; v += 14) {
+            b.units.push([u, v, 2.2]);
+          }
+        }
+      }
+      // Only what stands on the roof: the outline is seldom a rectangle.
+      b.units = b.units.filter(([u, v, size]) =>
+        [-1, 0, size, size + 1].every(
+          d =>
+            pip(u + d, v + d * 0.7, b.lp) &&
+            pip(u + size - d, v + d * 0.7, b.lp)
+        )
+      );
     }
   }
   b.floors = clamp(Math.round(b.h / 3), 1, 3);
@@ -1511,13 +1746,15 @@ function prepBuilding(b, r) {
     );
     b.signW = b.signH * aspect;
   }
-  if (b.poi === 'hq') {
-    buildHome(b, base);
-    // The name goes on the garden side, where the roof is plain.
-    b.signH = 2.4;
+  const spec = ROOFS[b.poi];
+  if (spec) {
+    buildRoof(b, spec, base);
+  }
+  if (spec && b.sign) {
+    b.signH = spec.sign[2];
     b.signW = b.signH * (b.sign.width / b.sign.height);
-    b.signU = b.at[0] + 10.7;
-    b.signV = b.at[1] - 7.5;
+    b.signU = b.at[0] + spec.sign[0];
+    b.signV = b.at[1] - spec.sign[1];
   }
   // For the order of drawing: a number, the buildings this one hides in the
   // current frame, and what it covers on the screen.
@@ -1750,6 +1987,13 @@ const treeGrid = grid();
       plant(a, 8, 1, 1.4, 0.2);
     }
   }
+  for (const b of BUILD) {
+    // Fruit trees in the modelled gardens
+    for (const [u, v, size, tall] of (b.planes && ROOFS[b.poi].trees) || []) {
+      const [x, y] = fromFrame(b, u, v);
+      add(x, y, size, tall, 1);
+    }
+  }
   // Every surveyed tree: x, y and its height, which decides how wide and how
   // high it is drawn. A height of 0 means nobody measured it. They stand
   // where they really stand, so they may be close to a road or a wall.
@@ -1896,15 +2140,10 @@ const NEW_HOUSES = BUILD.filter(b => b.rd && b.rd[2][6].n === NEW_ESTATE);
  * @return {{x: number, y: number, a: number}}
  */
 function driveSpot(b) {
-  if (b.at) {
-    // Flo parks in front of the wing, as on the aerial photo.
-    const u = b.at[0] + 15.3;
-    const v = b.at[1] + 2.6;
-    return {
-      x: b.mx + u * b.ca - v * b.sa,
-      y: b.my + u * b.sa + v * b.ca,
-      a: Math.atan2(b.ca, -b.sa),
-    };
+  const spec = ROOFS[b.poi];
+  if (spec && spec.park) {
+    const [x, y] = fromFrame(b, spec.park[0], spec.park[1]);
+    return {x, y, a: Math.atan2(b.ca, -b.sa)};
   }
   const [qx, qy, seg, far] = b.rd;
   const ux = (b.mx - qx) / far;
@@ -1919,6 +2158,8 @@ function driveSpot(b) {
   return {x: qx + ux * along, y: qy + uy * along, a: Math.atan2(-uy, -ux)};
 }
 const HOME = BUILD.find(b => b.poi === 'hq');
+// The modelled buildings that have a ground of their own
+const MODELLED = BUILD.filter(b => b.planes && ROOFS[b.poi].ground);
 
 /**
  * Index of the junction closest to a point.
@@ -3353,11 +3594,11 @@ function spawnPed(x, y, from, to) {
     a: rand(0, TAU),
     from,
     to,
+    next: nextWalk(from, to),
     side: pick([-1, 1]),
     sp: rand(1.1, 1.7),
     t: rand(0, 9),
     flee: 0,
-    alert: Math.random() < 0.6,
     shirt: pick(SHIRTS),
     hair: pick(HAIR),
     dead: false,
@@ -3367,7 +3608,43 @@ function spawnPed(x, y, from, to) {
 }
 
 /**
- * Walks one pedestrian along the road.
+ * Where a walker goes on from a junction: any way but back, unless it is a
+ * dead end.
+ * @param {number} from The junction they come from.
+ * @param {number} to The junction they walk to.
+ * @return {number}
+ */
+function nextWalk(from, to) {
+  const ways = NODES[to].walk.filter(n => n !== from);
+  return ways.length ? pick(ways) : from;
+}
+
+/**
+ * The point a pedestrian walks to: the corner of the pavement on their side
+ * of the road, between the stretch they are on and the one they take next.
+ * Aiming straight for the far end of every stretch took them across the
+ * carriageway at each bend.
+ * @param {!Ped} p
+ * @return {!Array<number>} x and y.
+ */
+function pedCorner(p) {
+  const a = NODES[p.from];
+  const b = NODES[p.to];
+  const c = p.next === p.from ? null : NODES[p.next];
+  const len = dist(a, b) || 1;
+  const dx = (b.x - a.x) / len;
+  const dy = (b.y - a.y) / len;
+  // At a dead end they walk on to its end and turn there.
+  const far = c ? dist(b, c) || 1 : 1;
+  const ex = c ? (c.x - b.x) / far : dx;
+  const ey = c ? (c.y - b.y) / far : dy;
+  // Half the road and half the pavement to the side, more at a sharp corner
+  const off = ((b.w / 2 + 0.9) * p.side) / Math.max(0.5, 1 + dx * ex + dy * ey);
+  return [b.x - (dy + ey) * off, b.y + (dx + ex) * off];
+}
+
+/**
+ * Walks one pedestrian along the pavement.
  * @param {!Ped} p
  * @param {number} dt
  */
@@ -3375,20 +3652,14 @@ function stepPed(p, dt) {
   let sp = p.sp;
   if (p.flee > 0) {
     p.flee -= dt;
-    sp = 5;
+    sp = 6.5;
   } else {
-    const a = NODES[p.from];
-    const b = NODES[p.to];
-    const dx = b.x - a.x;
-    const dy = b.y - a.y;
-    const len = Math.hypot(dx, dy) || 1;
-    const off = (b.w / 2 + 1) * p.side; // walk beside the road
-    const tx = b.x - (dy / len) * off;
-    const ty = b.y + (dx / len) * off;
+    const [tx, ty] = pedCorner(p);
     if (Math.hypot(tx - p.x, ty - p.y) < 0.9) {
-      const opts = b.walk.filter(n => n !== p.from);
-      // Dead end: turn around
-      [p.from, p.to] = [p.to, opts.length ? pick(opts) : p.from];
+      // Turning back at a dead end, they stay on their side of the road.
+      p.side *= p.next === p.from ? -1 : 1;
+      [p.from, p.to] = [p.to, p.next];
+      p.next = nextWalk(p.from, p.to);
     } else {
       p.a += clamp(wrap(Math.atan2(ty - p.y, tx - p.x) - p.a), -6 * dt, 6 * dt);
     }
@@ -3462,10 +3733,15 @@ function walkersVsCars() {
     y1 = Math.max(y1, p.y);
   }
   for (const c of state.cars) {
-    // Cars and pedestrians notice each other within 12 m; one more for the box
-    // keeps rounding out of it
+    const sp = Math.hypot(c.vx, c.vy);
+    // Pedestrians see a car coming a second and a half ahead, and at least
+    // within 12 m; one more for the box keeps rounding out of it
+    const reach = Math.max(12, sp * 1.5 + 4);
     const far =
-      c.x < x0 - 13 || c.x > x1 + 13 || c.y < y0 - 13 || c.y > y1 + 13;
+      c.x < x0 - reach - 1 ||
+      c.x > x1 + reach + 1 ||
+      c.y < y0 - reach - 1 ||
+      c.y > y1 + reach + 1;
     // On foot and within 12 m, more than any car is long
     const afoot =
       state.mode === 'play' &&
@@ -3476,25 +3752,23 @@ function walkersVsCars() {
     if (far && !afoot) {
       continue;
     }
-    const sp = Math.hypot(c.vx, c.vy);
     for (let i = 0; !far && i < peds.length; i++) {
       const p = peds[i];
       const dx = p.x - c.x;
       const dy = p.y - c.y;
-      if (Math.abs(dx) > 12 || Math.abs(dy) > 12) {
+      if (Math.abs(dx) > reach || Math.abs(dy) > reach) {
         continue;
       }
       // Which side of the car's path the walker is on
       const side = dx * c.vy - dy * c.vx;
       if (
-        sp > 5 &&
-        p.alert &&
+        sp > 4 &&
         p.flee <= 0 &&
         dx * c.vx + dy * c.vy > 0 &&
-        Math.abs(side) / sp < 3
+        Math.abs(side) / sp < 1.9
       ) {
-        p.flee = 1;
-        // Jump out of the way
+        p.flee = 0.8;
+        // Everybody in the way of the car jumps aside
         p.a = Math.atan2(c.vy, c.vx) + ((side > 0 ? -1 : 1) * Math.PI) / 2;
         if (c === player.car && Math.random() < 0.5) {
           audio.play('scream');
@@ -3605,12 +3879,12 @@ function populate(dt, near) {
   if (state.peds.length < 24) {
     const a = pick(spots.filter(n => n.walk.length));
     if (a) {
-      spawnPed(
-        a.x + rand(-2, 2),
-        a.y + rand(-2, 2),
-        NODES.indexOf(a),
-        pick(a.walk)
-      );
+      // On the pavement, not in the middle of the road
+      const p = spawnPed(a.x, a.y, NODES.indexOf(a), pick(a.walk));
+      const b = NODES[p.to];
+      const off = ((a.w / 2 + 0.9) * p.side) / (dist(a, b) || 1);
+      p.x -= (b.y - a.y) * off;
+      p.y += (b.x - a.x) * off;
     }
   }
 }
@@ -5200,19 +5474,22 @@ function paintGround(g, x0, y0, x1, y1) {
     g.transform(b.ca, b.sa, -b.sa, b.ca, b.mx, b.my);
     g.fillStyle = textures.constr;
     g.fillRect(b.u0 - 6, b.v0 - 6, b.u1 - b.u0 + 12, b.v1 - b.v0 + 12);
-    if (b === HOME) {
-      // Flo's paved drive runs from the wing down to the street, and a
-      // terrace lies along the front of the main block.
-      g.fillStyle = textures.school;
-      g.fillRect(b.at[0] + 10.6, b.at[1] - 1.94, 8.4, 18);
-      g.fillRect(b.at[0] + 0.6, b.at[1], 10, 2.6);
+    g.restore();
+  }
+  for (const b of MODELLED) {
+    if (b.x1 < x0 - 40 || b.x0 > x1 + 40 || b.y1 < y0 - 40 || b.y0 > y1 + 40) {
+      continue;
     }
+    g.save();
+    g.transform(b.ca, b.sa, -b.sa, b.ca, b.mx, b.my);
+    g.translate(b.at[0], b.at[1]);
+    ROOFS[b.poi].ground(g);
     g.restore();
   }
   g.lineCap = 'butt';
   g.strokeStyle = textures.school;
   for (const b of NEW_HOUSES) {
-    if (b === HOME) {
+    if (MODELLED.includes(b)) {
       continue;
     }
     g.lineWidth = 4.5;
@@ -5356,9 +5633,43 @@ function byTile(lines) {
   }
   return tiles;
 }
+/**
+ * Hedges or fences for the ground tiles: those of the map, without the ones
+ * in a modelled garden, which brings its own.
+ * @param {string} kind 'hedges' or 'fences'.
+ * @return {!Map<number, !Path2D>}
+ */
+function borderTiles(kind) {
+  let lines = MAP[kind];
+  for (const b of BUILD) {
+    const own = (b.planes && ROOFS[b.poi][kind]) || [];
+    if (!own.length) {
+      continue;
+    }
+    // All the garden's own lines, on the map, and the box around them
+    const mine = ROOFS[b.poi].fences.concat(ROOFS[b.poi].hedges).map(l => {
+      const out = [];
+      for (let i = 0; i < l.length; i += 2) {
+        out.push(...fromFrame(b, l[i], l[i + 1]));
+      }
+      return out;
+    });
+    const xs = mine.flatMap(l => l.filter((v, i) => i % 2 === 0));
+    const ys = mine.flatMap(l => l.filter((v, i) => i % 2));
+    const outside = (x, y) =>
+      x < Math.min(...xs) - 1 ||
+      x > Math.max(...xs) + 1 ||
+      y < Math.min(...ys) - 1 ||
+      y > Math.max(...ys) + 1;
+    lines = lines
+      .filter(l => l.every((v, i) => i % 2 || outside(v, l[i + 1])))
+      .concat(kind === 'fences' ? mine.slice(0, own.length) : mine.slice(-1));
+  }
+  return byTile(lines);
+}
 // Hedges and garden fences, from OpenStreetMap and along the parcel borders
-const HEDGE_TILES = byTile(MAP.hedges);
-const FENCE_TILES = byTile(MAP.fences);
+const HEDGE_TILES = borderTiles('hedges');
+const FENCE_TILES = borderTiles('fences');
 
 // Paved and gravelled ground in the village, read off the aerial photo: a
 // see-through picture with one pixel per metre. Tiles painted before it has
@@ -7293,6 +7604,7 @@ if (location.search.includes('selftest')) {
     "Flo's house has its own roof: slopes, gable walls and solar panels":
       HOME.planes.filter(f => f.wall).length === HOME_GABLES.length &&
       HOME.planes.filter(f => !f.wall).length === HOME_SLOPES.length &&
+      BUILD.filter(b => b.planes).length === Object.keys(ROOFS).length &&
       HOME.planes.every(f => f.p.every(v => v > -40 && v < 40)) &&
       HOME.planes.filter(f => f.pv && f.pv.length).length === 2,
     'the church has its surveyed tower, standing on the church': BUILD.some(
