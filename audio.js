@@ -204,6 +204,19 @@ const SFX = {
     beep(330, 0.32, 0, 0.08, 'sawtooth');
   },
   step: () => beep(1175, 0.09, 0, 0.05, 'triangle'),
+  hic: () => beep(480, 0.1, 0, 0.07, 'triangle', 900),
+  saw: () => {
+    beep(150, 0.9, 0, 0.05, 'sawtooth', 210);
+    hiss(audioCtx.currentTime, 0.9, 0.1, 'bandpass', 2400, sfx);
+  },
+  cluck: () => {
+    beep(760, 0.05, 0, 0.05, 'square', 560);
+    beep(820, 0.07, 0.09, 0.05, 'square', 600);
+  },
+  till: () => {
+    beep(1568, 0.08, 0, 0.06, 'triangle');
+    beep(2093, 0.18, 0.09, 0.06, 'triangle');
+  },
   train: () => {
     // the two-tone horn of a goods engine, a long call and a short one
     for (const [wait, d] of [
@@ -277,6 +290,8 @@ const ENGINES = {
   truck: [32, 3.6, 320],
   fire: [34, 3.8, 340],
   sport: [55, 6.5, 520],
+  v6: [30, 3.6, 230], // from the garage: a deep burble
+  turbo: [66, 8.2, 1100], // and a screaming 300 hp petrol engine
 };
 /**
  * Tunes the engine drone to the speed.

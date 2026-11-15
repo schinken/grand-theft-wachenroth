@@ -97,6 +97,9 @@ POIS = {
     'club': (49.75088, 10.71262),   # Schwallclub clubhouse, Hauptstraße 2, opposite the bakery
     'roadworks': (49.75245, 10.71595),  # Schulstraße is being rebuilt
     'drinks': (49.74719, 10.72087),  # Getränke Braun, Kleinwachenroth 25
+    'garage': (49.745715, 10.719340),  # Mechanic Monkeys, Bernhard's garage
+    'forest': (49.75695, 10.719331),  # the wood north of Johann-Philipp-Ring, at its track
+    'schul22': (49.753622, 10.714771),   # Schulstraße 22, Michi's hens
     'muehle': (49.748285, 10.720787),  # Kleinwachenrother Mühle, an inn with rooms
     # Koppel of Rock: the meadow north of its gate. The gate is where Google Maps has the festival, at 49.743891,
     # 10.7237281.

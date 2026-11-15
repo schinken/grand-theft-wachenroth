@@ -11,7 +11,10 @@
 // Options: time (seconds, runs on until the next `time`), fragile (crashes
 // break the load), tip (seconds left pay extra),
 // wanted (police heat), drop (the mission car is no longer needed), say (Flo on
-// the pager).
+// the pager), drunk (seconds of being drunk), fix (done only once the police
+// have let go), load (what the trailer carries from now on), thieves (cars that
+// ram you), doris (Mama Doris guards her hens), loose (things to collect lie
+// anywhere, not on the road). A mission with sober: true ends the drunkenness.
 
 export const PLACES = {
   hq: 'Flos Hauptquartier',
@@ -47,6 +50,9 @@ export const PLACES = {
   club: 'Schwallclub',
   roadworks: 'Baustelle Schulstraße',
   drinks: 'Getränke Braun',
+  garage: 'Mechanic Monkeys',
+  forest: 'Wald am Johann-Philipp-Ring',
+  schul22: 'Michi, Schulstraße 22',
   muehle: 'Kleinwachenrother Mühle',
   koppel: 'Koppel of Rock',
   warehouse: 'Lagerhaus',
@@ -67,6 +73,7 @@ export const SIGNS = {
   hq: 'FLO',
   school: 'SCHULE',
   warehouse: 'LAGERHAUS',
+  garage: 'MECHANIC MONKEYS',
 };
 
 export const RANKS = [
@@ -532,6 +539,131 @@ export const MISSIONS = [
       'Die erste Band steht auf der Bühne, und du hast Backstage.',
       'Bier vier Euro, die Mucke gibts dazu. Geiles Wochenende!',
     ],
+  },
+
+  {
+    id: 'wochenende',
+    title: 'Endlich Wochenende',
+    reward: 600,
+    sober: true,
+    intro: [
+      'Endlich Wochenende! Wie jeden Freitag ist Fässlafreitag in der Metzgerei.',
+      'Geh hin und trink gemütlich ein paar Seidla. Aber nur ein paar!',
+    ],
+    steps: [
+      {
+        do: 'goto',
+        to: 'butcher',
+        foot: true,
+        obj: 'Geh zum Fässlafreitag in die Metzgerei, Kellerstraße 1',
+      },
+      {
+        do: 'hold',
+        to: 'butcher',
+        r: 6,
+        secs: 8,
+        obj: 'Trink gemütlich ein paar Seidla',
+      },
+      {
+        do: 'goto',
+        to: 'garage',
+        drunk: 180,
+        wanted: 4,
+        fix: true,
+        obj: 'Fahr zum Bernhard, Mechanic Monkeys, und lass das Auto richten',
+        say: 'Ups, das war eins zu viel. Und die Grünen haben dich gesehen! Schnapp dir ein Auto und ab zum Bernhard in die Werkstatt.',
+      },
+      {
+        do: 'goto',
+        to: 'hq',
+        foot: true,
+        obj: 'Heim ins Hauptquartier und den Rausch ausschlafen',
+        say: 'Der Bernhard regelt das. Jetzt komm heim und schlaf deinen Rausch aus.',
+      },
+    ],
+    outro: ['Gut geschlafen? Montag ist auch noch ein Tag.'],
+  },
+
+  {
+    id: 'huehner',
+    title: 'Hühnerjagd',
+    reward: 500,
+    intro: [
+      'Notruf aus der Schulstraße 22: Beim Michi sind die Hühner ausgebüxt!',
+      'Fang sie ein, bevor sie unters Auto kommen. Und pass auf Mama Doris auf, die hält dich für einen Hühnerdieb.',
+    ],
+    steps: [
+      {do: 'goto', to: 'schul22', obj: 'Fahr zum Michi in die Schulstraße 22'},
+      {
+        do: 'collect',
+        n: 6,
+        near: 'schul22',
+        r: 40,
+        item: 'hen',
+        loose: true,
+        foot: true,
+        doris: true,
+        time: 180,
+        obj: 'Fang die 6 Hühner ein, zu Fuß. Vorsicht, Mama Doris!',
+        say: 'Da laufen sie! Steig aus und fang sie ein. Und lass dich nicht von Mama Doris erwischen.',
+      },
+    ],
+    outro: [
+      'Alle wieder im Stall. Der Michi gibt einen aus, und Mama Doris legt den Besen weg.',
+    ],
+  },
+
+  {
+    id: 'winter',
+    title: 'Der Winter kommt',
+    reward: 900,
+    intro: [
+      'Der Winter kommt, und im Hauptquartier ist kein Holz mehr.',
+      'Hol deine Motorsäge und ab in den Wald!',
+    ],
+    steps: [
+      {
+        do: 'goto',
+        to: 'hq',
+        foot: true,
+        obj: 'Hol deine Motorsäge aus Flos Hauptquartier',
+      },
+      {
+        do: 'collect',
+        n: 10,
+        near: 'forest',
+        r: 130,
+        item: 'tree',
+        foot: true,
+        obj: 'Säg 10 Bäume im Wald um',
+        say: 'Ab in den Wald hinterm Johann-Philipp-Ring. Zehn Bäume, dann reicht es für den Winter.',
+      },
+      {
+        do: 'steal',
+        veh: 'tractor',
+        at: 'farmyard',
+        trailer: 'cart',
+        obj: 'Hol dir den Bulldog mit Anhänger am Bauernhof',
+        say: 'Das Holz muss heim. Am Bauernhof an der alten Bahn steht ein Bulldog mit Anhänger.',
+      },
+      {
+        do: 'hold',
+        to: 'forest',
+        r: 14,
+        secs: 6,
+        veh: 'tractor',
+        obj: 'Fahr in den Wald und lad das Holz auf',
+      },
+      {
+        do: 'bring',
+        to: 'hq',
+        load: 'wood',
+        thieves: 2,
+        obj: 'Bring das Holz zu Flo. Pass auf die Holzdiebe auf!',
+        say: 'Holzdiebe! Die rammen dich, bis vom Bulldog nix mehr übrig ist. Fahr heim, so schnell er kann.',
+      },
+    ],
+    outro: ['Der Ofen bullert. Soll der Winter ruhig kommen.'],
   },
 
   {

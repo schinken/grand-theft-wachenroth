@@ -360,6 +360,57 @@
         font-size: 12vw;
         background: rgba(12, 14, 17, 0.6);
       }
+      #shop {
+        inset: 0;
+        display: grid;
+        place-content: center;
+        justify-items: center;
+        gap: 8px;
+        padding: 16px;
+        background: rgba(12, 14, 17, 0.78);
+      }
+      #shop h3 {
+        margin: 0;
+        font-size: clamp(30px, 6vw, 60px);
+        font-weight: 400;
+        color: var(--gold);
+        text-transform: uppercase;
+      }
+      #shop p,
+      #shop small {
+        margin: 0;
+        font:
+          bold 14px/1.4 'Courier New',
+          monospace;
+        text-align: center;
+      }
+      #shop ol {
+        display: grid;
+        gap: 4px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+      #shop button {
+        display: flex;
+        gap: 18px;
+        justify-content: space-between;
+        width: min(460px, 88vw);
+        padding: 6px 12px;
+        font-size: clamp(17px, 3.2vw, 25px);
+        text-align: left;
+        background: rgba(0, 0, 0, 0.5);
+        border: 3px solid #000;
+      }
+      #shop button:disabled {
+        opacity: 0.35;
+        cursor: default;
+      }
+      #shop button b {
+        font-weight: 400;
+        color: var(--gold);
+        white-space: nowrap;
+      }
       #pause small {
         font:
           bold 14px/1.4 'Courier New',
@@ -567,6 +618,14 @@
         <button id="bH">HUPE</button>
         <button id="bB">BREMSE</button>
         <button id="bA">EIN<br />AUS</button>
+      </div>
+      <div id="shop" class="out" hidden>
+        <h3></h3>
+        <p></p>
+        <ol></ol>
+        <small
+          >Zahl drücken oder antippen &nbsp;·&nbsp; ESC oder F: weiter</small
+        >
       </div>
       <div id="pause" class="out" hidden>
         PAUSE<small>Tippen oder P drücken</small>
