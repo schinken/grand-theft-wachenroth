@@ -680,13 +680,14 @@ function layOutCemetery(a) {
 
 AREAS.forEach((a, i) => {
   prepPoly(a);
-  // School grounds are lawn; the photo adds what is paved there.
+  // School grounds and playgrounds are lawn; the photo adds what is paved
+  // there, GROUNDS the sand and what children play on.
   a.fill =
     a.k === 'farm'
       ? FARM[i % 4]
       : a.k === 'pitch'
         ? null
-        : textures[a.k === 'school' ? 'resi' : a.k];
+        : textures[a.k === 'school' || a.k === 'play' ? 'resi' : a.k];
   a.lpath = new Path2D(`M${a.lp.join(' ')}Z`);
   if (a.k === 'cem') {
     layOutCemetery(a);
@@ -1938,6 +1939,164 @@ function paintButcher(g, b) {
     g.stroke();
   }
 }
+
+/**
+ * A patch of sand, an ellipse turned by a.
+ * @param {!CanvasRenderingContext2D} g
+ * @param {number} x
+ * @param {number} y
+ * @param {number} rx
+ * @param {number} ry
+ * @param {number} a
+ */
+function sand(g, x, y, rx, ry, a) {
+  g.fillStyle = '#c9b27a';
+  g.beginPath();
+  g.ellipse(x, y, rx + 0.3, ry + 0.3, a, 0, TAU);
+  g.fill();
+  g.fillStyle = '#e0cc94';
+  g.beginPath();
+  g.ellipse(x, y, rx, ry, a, 0, TAU);
+  g.fill();
+}
+
+/**
+ * A wooden climbing tower with its slide running off along a.
+ * @param {!CanvasRenderingContext2D} g
+ * @param {number} x
+ * @param {number} y
+ * @param {number} a
+ * @param {string} slide
+ */
+function tower(g, x, y, a, slide) {
+  box(
+    g,
+    x + 1.6 * Math.cos(a) + 0.3,
+    y + 1.6 * Math.sin(a) + 0.3,
+    3.4,
+    0.8,
+    a,
+    'rgba(0,0,0,.2)'
+  );
+  box(g, x + 1.9 * Math.cos(a), y + 1.9 * Math.sin(a), 3.4, 0.8, a, slide);
+  box(g, x + 0.4, y + 0.4, 2.4, 2.4, a, 'rgba(0,0,0,.25)');
+  box(g, x, y, 2.4, 2.4, a, '#7a5634');
+  box(g, x, y, 1.8, 1.8, a, '#a8784a');
+  box(g, x, y, 0.5, 1.8, a + Math.PI / 2, '#d83a3a'); // the roof's ridge
+}
+
+/**
+ * A swing frame: the beam along a on its legs, and two seats.
+ * @param {!CanvasRenderingContext2D} g
+ * @param {number} x
+ * @param {number} y
+ * @param {number} a
+ */
+function swings(g, x, y, a) {
+  box(g, x, y, 5, 0.3, a, '#6b4a2a');
+  for (const end of [-2.4, 2.4]) {
+    box(
+      g,
+      x + end * Math.cos(a),
+      y + end * Math.sin(a),
+      0.25,
+      1.8,
+      a,
+      '#6b4a2a'
+    );
+  }
+  for (const seat of [-1, 1]) {
+    box(
+      g,
+      x + seat * Math.cos(a),
+      y + seat * Math.sin(a),
+      0.7,
+      0.3,
+      a,
+      '#2b2f36'
+    );
+  }
+}
+
+/**
+ * The playground, as the aerial photos show it: the sand pit with the play
+ * ship, the gravel square with the climbing tower, the swings, a carousel,
+ * the round seating place with its table, and benches along the fence.
+ * Drawn on the map.
+ * @param {!CanvasRenderingContext2D} g
+ */
+function paintPlayground(g) {
+  sand(g, 1134.4, 750.9, 4.4, 4.6, 0.35);
+  // the ship in the sand, bow to the west
+  fillPoly(
+    g,
+    '#7a5634',
+    [1130.6, 752.2, 1132.6, 749.4, 1137.6, 748.6, 1137.9, 751.8, 1133.1, 753.3]
+  );
+  fillPoly(
+    g,
+    '#a8784a',
+    [1131.6, 751.9, 1133, 749.9, 1137, 749.3, 1137.2, 751.3, 1133.3, 752.6]
+  );
+  g.fillStyle = '#5a3a1e';
+  g.beginPath();
+  g.arc(1134.8, 751, 0.3, 0, TAU);
+  g.fill();
+  box(g, 1137.3, 739, 5.4, 9.6, 0.2, '#b9b19c');
+  tower(g, 1137.1, 736.6, Math.PI / 2 + 0.2, '#2b62c8');
+  box(g, 1153, 743.9, 6, 3, 1.03, '#c9b27a');
+  swings(g, 1153, 743.9, 1.03);
+  sand(g, 1160, 750.5, 2.2, 2.2, 0);
+  for (let k = 0; k < 4; k++) {
+    // the carousel, red and yellow
+    g.fillStyle = k % 2 ? '#e8c21c' : '#d83a3a';
+    g.beginPath();
+    g.moveTo(1160, 750.5);
+    g.arc(1160, 750.5, 1.5, (k * TAU) / 4, ((k + 1) * TAU) / 4);
+    g.fill();
+  }
+  g.fillStyle = '#9a9da3';
+  g.beginPath();
+  g.ellipse(1152.5, 767, 4.4, 6, 0.4, 0, TAU);
+  g.fill();
+  box(g, 1152.5, 767, 0.8, 2.2, 0.4, '#8a5a2a');
+  for (const side of [-0.65, 0.65]) {
+    box(
+      g,
+      1152.5 + side * Math.cos(0.4),
+      767 + side * Math.sin(0.4),
+      0.3,
+      2.2,
+      0.4,
+      '#6b4a2a'
+    );
+  }
+  for (const [x, y] of [
+    [1131.7, 723.8],
+    [1143.3, 728.8],
+    [1155, 733.8],
+  ]) {
+    box(g, x, y, 1.8, 0.5, 0.43, '#8a5a2a');
+  }
+}
+
+/**
+ * The yard of Kita Villa Kunterbunt, as the aerial photos show it: sand
+ * under the trees, a sandbox, and a wooden play tower with a slide. Drawn on
+ * the map.
+ * @param {!CanvasRenderingContext2D} g
+ */
+function paintKita(g) {
+  sand(g, 1436, 775.5, 11, 6, 0.05);
+  sand(g, 1448.5, 772, 6, 5, 0);
+  box(g, 1427, 778, 3.8, 3.3, 0.05, '#8a5a2a');
+  box(g, 1427, 778, 3.2, 2.7, 0.05, '#e0cc94');
+  tower(g, 1418.6, 787, 0, '#d83a3a');
+}
+
+// Places without a building of their own that are painted on the map:
+// the playgrounds.
+const GROUNDS = {playground: paintPlayground, kindergarten: paintKita};
 
 /**
  * The plot of Pizzeria La Vite, as the aerial photos show it: the terrace
@@ -7319,6 +7478,14 @@ function paintGround(g, x0, y0, x1, y1) {
     g.translate(b.at[0], b.at[1]);
     ROOFS[b.poi].ground(g, b);
     g.restore();
+  }
+  for (const [key, paint] of Object.entries(GROUNDS)) {
+    const [px, py] = MAP.pois[key];
+    if (px > x0 - 60 && px < x1 + 60 && py > y0 - 60 && py < y1 + 60) {
+      g.save();
+      paint(g);
+      g.restore();
+    }
   }
   g.lineCap = 'butt';
   g.strokeStyle = textures.school;
