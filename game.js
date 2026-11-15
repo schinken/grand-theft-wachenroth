@@ -5782,10 +5782,12 @@ function controlPlayer(dt) {
       (c.kind === 'police' || c.kind === 'fire') && (keys.KeyH || pad.horn);
     return;
   }
-  let sp = thr * (thr > 0 ? 4.5 : 2);
+  // Shift, or the brake button on a phone, makes you run
+  const run = keys.ShiftLeft || keys.ShiftRight || pad.brake ? 1.7 : 1;
+  let sp = thr * (thr > 0 ? 4.5 * run : 2);
   if (stick > 0.15) {
     player.a = Math.atan2(pad.y, pad.x);
-    sp = Math.min(1, stick * 1.3) * 4.5;
+    sp = Math.min(1, stick * 1.3) * 4.5 * run;
   } else {
     player.a += steer * 3.5 * dt;
   }
@@ -6120,6 +6122,7 @@ function hud(dt) {
     byId('heat').classList.toggle('hot', hot);
   }
   if (changed('onFoot', !c)) {
+    byId('bB').textContent = c ? 'BREMSE' : 'RENNEN';
     byId('dmg').hidden = !c;
   }
   const health = c ? Math.round(clamp(c.hp / c.type.hp, 0, 1) * 100) : -1;
