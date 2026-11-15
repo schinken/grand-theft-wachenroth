@@ -48,8 +48,9 @@ let Ped;
 
 /**
  * A building from the map: outline p, wall height h, kind k, and where it was
- * surveyed the roof shape r: 'f' flat, 'g' gable, 'p' hip. The roof colour c
- * is read off the aerial photo.
+ * surveyed the roof shape r: 'f' flat, 'g' gable, 'p' hip, how far the ridge
+ * (or a spire) rises above the walls t, and the direction dir the ridge runs
+ * in. The roof colour c is read off the aerial photo.
  * @typedef {!Object}
  */
 let Building;
@@ -575,8 +576,11 @@ const CANOPY = [
  * Adds what drawing and collisions need to a polygon: path, bounding box, area
  * and a local frame along its longest edge.
  * @param {!Object} o An area or building with its outline in `p`.
+ * @param {number=} ridge For a roof whose ridge was surveyed: the direction
+ *     it runs in, in degrees. The frame follows it, also across the longest
+ *     edge.
  */
-function prepPoly(o) {
+function prepPoly(o, ridge) {
   const p = o.p;
   o.path = new Path2D();
   o.x0 = o.y0 = 1e9;
@@ -607,9 +611,12 @@ function prepPoly(o) {
   o.path.closePath();
   o.mx = (o.x0 + o.x1) / 2;
   o.my = (o.y0 + o.y1) / 2;
-  // a local frame along the longest edge, text in it reads upright
-  const a =
-    Math.abs(o.ang) > Math.PI / 2 ? o.ang - Math.sign(o.ang) * Math.PI : o.ang;
+  // a local frame along the longest edge, or across it where the ridge runs
+  // that way; text in it reads upright
+  const across =
+    ridge !== undefined &&
+    Math.abs(Math.sin((ridge * Math.PI) / 180 - o.ang)) > Math.SQRT1_2;
+  const a = Math.atan(Math.tan(o.ang + (across ? Math.PI / 2 : 0)));
   o.ca = Math.cos(a);
   o.sa = Math.sin(a);
   o.lp = [];
@@ -1171,8 +1178,11 @@ function addWindows(b, look) {
  * @param {!Rng} r
  */
 function prepBuilding(b, r) {
-  prepPoly(b);
+  // A sign needs the long side of the roof, whichever way the ridge runs.
+  prepPoly(b, b.label ? undefined : b.dir);
   const k = b.k;
+  // The surveyed height of the ridge or the spire above the walls, or 0.
+  const lift = b.t || 0;
   const fresh = k === 'h' && !!b.rd && b.rd[2][6].n === NEW_ESTATE;
   const look = b.look || LANDMARKS[b.poi] || {};
   let base = pick2(WALLS[k] || WALLS.h, r);
@@ -1202,7 +1212,7 @@ function prepBuilding(b, r) {
   const simple = b.p.length <= 28 && wide > 2.5;
   let gable = simple;
   if (k === 's' || k === 't') {
-    b.apex = k === 's' ? 2 : b.a < 20 ? 2.6 : 9;
+    b.apex = lift || (k === 's' ? 2 : b.a < 20 ? 2.6 : 9);
     gable = false;
   } else if (k === 'w') {
     b.roof = textures.metalRed;
@@ -1277,11 +1287,11 @@ function prepBuilding(b, r) {
   }
   const metal = b.roof === textures.metal || b.roof === textures.metalRed;
   if (gable) {
-    const rise =
+    const guess =
       k === 'c'
         ? clamp(wide * 0.45, 2, 6)
         : clamp(wide * (metal ? 0.14 : 0.27), 0.7, 3.4);
-    ridge(b, rise, fresh || !!look.hip || b.r === 'p');
+    ridge(b, lift || guess, fresh || !!look.hip || b.r === 'p');
   }
   if (b.halves && b.gables.length < 2) {
     b.halves = null;
@@ -1464,27 +1474,8 @@ const pick2 = (a, r) => a[(r() * a.length) | 0];
 }
 {
   const r = rng(42);
-  for (const b of [...BUILD]) {
+  for (const b of BUILD) {
     prepBuilding(b, r);
-    if (b.k !== 'c' || b.a < 250) {
-      continue;
-    }
-    // every church gets a tower at its western end
-    const west = b.ca > 0 ? b.u0 + 3.4 : b.u1 - 3.4;
-    const cx = b.mx + west * b.ca;
-    const cy = b.my + west * b.sa;
-    const q = [];
-    for (const [u, v] of [
-      [-3.4, -3.4],
-      [3.4, -3.4],
-      [3.4, 3.4],
-      [-3.4, 3.4],
-    ]) {
-      q.push(cx + u * b.ca - v * b.sa, cy + u * b.sa + v * b.ca);
-    }
-    const t = {p: q, h: 15, a: 46, k: 't'};
-    BUILD.push(t);
-    prepBuilding(t, r);
   }
   // A square tower on a building, given in the building's own frame.
   const tower = (b, u, v, half, h, k) => {
@@ -1509,12 +1500,14 @@ const pick2 = (a, r) => a[(r() * a.length) | 0];
       const street = (b.rd[1] - b.my) * b.ca - (b.rd[0] - b.mx) * b.sa;
       tower(b, b.u1 - 2.2, street > 0 ? b.v0 + 2.2 : b.v1 - 2.2, 1.8, 14, 'w');
     }
-    if (b.poi === 'townhall' && b.halves) {
-      // The little bell turret, at one end of the ridge so the sign stays
-      // readable
-      tower(b, b.rx0 + 1.4, b.ry, 1.2, b.h + b.rh + 0.3, 't');
-    }
   }
+}
+// A tower stands on a building: it is drawn right after it, whichever of the
+// two the camera is closer to.
+for (const b of BUILD) {
+  b.on = at(buildingGrid, b.mx, b.my).find(
+    o => o !== b && o.a > b.a * 2 && pip(b.mx, b.my, o.p)
+  );
 }
 const OPEN_ROOFS = BUILD.filter(b => b.k === 'o');
 
@@ -5438,6 +5431,11 @@ function drawWalls(b, cx, cy, hc, h, s) {
     ctx.stroke();
     return;
   }
+  // The walls of a tower start on the roof it stands on, not on the ground.
+  const under = b.on ? Math.min(b.on.h + (b.on.rh || 0), h) : 0;
+  const s0 = hc / (hc - under);
+  const px = cx * (1 - s0);
+  const py = cy * (1 - s0);
   visibleWalls.length = 0;
   ctx.lineWidth = 0.15;
   for (let i = 0, k = 0; i < n; i += 2, k++) {
@@ -5451,8 +5449,8 @@ function drawWalls(b, cx, cy, hc, h, s) {
     const by = p[j + 1];
     ctx.fillStyle = ctx.strokeStyle = b.wall[k];
     ctx.beginPath();
-    ctx.moveTo(ax, ay);
-    ctx.lineTo(bx, by);
+    ctx.moveTo(ax * s0 + px, ay * s0 + py);
+    ctx.lineTo(bx * s0 + px, by * s0 + py);
     ctx.lineTo(bx * s + ox, by * s + oy);
     ctx.lineTo(ax * s + ox, ay * s + oy);
     ctx.closePath();
@@ -5460,8 +5458,8 @@ function drawWalls(b, cx, cy, hc, h, s) {
     ctx.stroke();
     visibleWalls.push(i);
   }
-  if (!visibleWalls.length) {
-    return;
+  if (!visibleWalls.length || under) {
+    return; // no plinth, windows or doors up on a roof
   }
   // The plinth of all walls in one stroke
   ctx.lineCap = 'butt';
@@ -5745,7 +5743,8 @@ function drawBuildings(builds, cx, cy, hc, x0, y0, x1, y1) {
   const base = ctx.getTransform();
   const z = base.a;
   for (const b of builds) {
-    b.d = (b.mx - cx) ** 2 + (b.my - cy) ** 2;
+    const o = b.on || b;
+    b.d = (o.mx - cx) ** 2 + (o.my - cy) ** 2 - (b.on ? 1 : 0);
   }
   builds.sort(byDistance);
   for (const b of builds) {
@@ -6810,6 +6809,9 @@ if (location.search.includes('selftest')) {
       TREES.length > 4000 &&
       BUILD.filter(b => b.c).length > 1000 &&
       MAP.yards.length > 1000,
+    'the church has its surveyed tower, standing on the church': BUILD.some(
+      b => b.k === 't' && b.apex > 10 && b.on && b.on.k === 'c'
+    ),
     'every mission place exists': [...used].every(
       k => SPOT[k] || console.error('unknown place', k)
     ),

@@ -6,7 +6,8 @@ Usage: python3 tools/osm2map.py [cached-overpass.json [more files ...]] > map.js
 More files add what OSM does not know. All of them are open data of the Bayerische Vermessungsverwaltung
 (www.geodaten.bayern.de, CC BY 4.0) and are told apart by their ending:
 
-  *.gml   3D building tiles: more buildings than OSM has, each with a measured height and roof shape. Wachenroth is on
+  *.gml   3D building tiles: more buildings than OSM has, each with its measured heights, the shape of its roof and
+          the way the ridge runs, and towers as buildings of their own. Wachenroth is on
           622_5510, 624_5510, 622_5512 and 624_5512 of https://download1.bayernwolke.de/a/lod2/citygml/<tile>.gml
   *.gpkg  single trees with their height: https://geodaten.bayern.de/odd/m/8/baeume3d/data/125021_baeume.gpkg
   *.png   the aerial photo of exactly the map, one pixel per metre: roof colours and paved yards. From
@@ -14,6 +15,7 @@ More files add what OSM does not know. All of them are open data of the Bayerisc
           &STYLES=&SRS=EPSG:4326&BBOX=10.6950,49.7440,10.7300,49.7590&WIDTH=2517&HEIGHT=1668&FORMAT=image/png
 """
 import base64
+import cmath
 import itertools
 import json
 import math
@@ -195,8 +197,29 @@ def tidy(pts, tol=0.3):
     return pts
 
 
+def hull(pts):
+    """The convex outline around some points (Andrew's monotone chain), in the turning sense ring() gives."""
+    def half(seq):
+        out = []
+        for p in seq:
+            while len(out) > 1 and (out[-1][0] - out[-2][0]) * (p[1] - out[-2][1]) \
+                    <= (out[-1][1] - out[-2][1]) * (p[0] - out[-2][0]):
+                out.pop()
+            out.append(p)
+        return out[:-1]
+    pts = sorted(set(pts))
+    return half(pts) + half(pts[::-1])
+
+
+assert hull([(0, 0), (2, 0), (2, 2), (0, 2), (1, 1), (1, 0)]) == [(0, 0), (2, 0), (2, 2), (0, 2)]
+
+
 def lod2(paths):
-    """The state's 3D buildings (CityGML LoD2) as building entries: outline, wall height, roof shape, kind."""
+    """The state's 3D buildings (CityGML LoD2) as building entries.
+
+    Each has its outline p, kind k and wall height h, and where the roof was surveyed its shape r, the height t of
+    the ridge above the eaves, and the direction dir the ridge runs in: degrees from east towards south, 0 to 179.
+    """
     ns = {'b': 'http://www.opengis.net/citygml/building/1.0', 'g': 'http://www.opengis.net/gml',
           'n': 'http://www.opengis.net/citygml/generics/1.0', 'x': 'urn:oasis:names:tc:ciq:xsdschema:xAL:2.0'}
     out = []
@@ -211,22 +234,53 @@ def lod2(paths):
             a = shoelace(pts)
             if a < 6 or not any(inside(p, 20) for p in pts):
                 continue
-            # Walls end at the eaves: the low edge of the roof faces above the ground, big faces counting most.
-            faces = [{at.get('name'): float(at.findtext('n:value', '0', ns))
-                      for at in f.iterfind('n:stringAttribute', ns)} for f in el.iterfind('.//b:RoofSurface', ns)]
-            size = sum(f.get('Flaeche', 0) for f in faces)
-            eaves = sum(f.get('Flaeche', 0) * f.get('Z_MIN', 0) for f in faces) / size if size \
-                else float(el.findtext('b:measuredHeight', '3', ns))
+            # Every roof face knows its size, its lowest and highest point above the ground and where it looks.
+            faces = []
+            for f in el.iterfind('.//b:RoofSurface', ns):
+                face = {at.get('name'): float(at.findtext('n:value', '0', ns))
+                        for at in f.iterfind('n:stringAttribute', ns)}
+                if face.get('Flaeche', 0) > 0:
+                    faces.append((face['Flaeche'], face['Z_MIN'], face['Z_MAX'], face['Dachorientierung'], f))
+            if not faces:
+                faces = [(a, top := float(el.findtext('b:measuredHeight', '3', ns)), top, -1, None)]
+            mean = lambda of, part: sum(f[0] * of(f) for f in part) / sum(f[0] for f in part)
+            # A few faces high above the rest are a tower: a building of its own, on top of this one.
+            high = [f for f in faces if f[1] >= mean(lambda f: f[1], faces) + 6]
+            if high and sum(f[0] for f in high) < sum(f[0] for f in faces) / 3:
+                faces = [f for f in faces if f not in high]
+            else:
+                high = []
+            # Walls end at the eaves, the low edge of the faces, and the ridge rises above them by what a face climbs:
+            # big faces count most.
+            eaves, rise = mean(lambda f: f[1], faces), mean(lambda f: f[2] - f[1], faces)
             # A house is what people live in, what has an address, or what serves the public; the rest are barns
             # and sheds.
             main = use[6:7] in '13' or el.find('.//x:ThoroughfareName', ns) is not None
             k = 'o' if use[0] == '5' else 'c' if use == '31001_3041' else 'g' if use in GARAGE \
                 else 'h' if main else 'd' if a < 30 else 'y'
-            b = {'p': flat(pts), 'h': round(max(eaves, 2.2), 1), 'a': round(a), 'k': k}
-            roof = ROOF.get(el.findtext('b:roofType', '', ns))
-            if roof and k != 'o':
+            roof = ROOF.get(el.findtext('b:roofType', '', ns)) if k != 'o' else None
+            # A roof drawn flat lies at its middle height: a lean-to has no ridge.
+            wall = eaves + (rise / 2 if roof == 'f' else 0)
+            b = {'p': flat(pts), 'h': round(max(wall, 2.2), 1), 'a': round(a), 'k': k}
+            if roof:
                 b['r'] = roof
+            if roof != 'f' and k != 'o' and rise >= .5:
+                b['t'] = round(rise, 1)
+                # Faces look across the ridge. Opposite faces must add up, so the angles are doubled; a tent roof
+                # looks every way and has no ridge to speak of.
+                look = sum(f[0] * cmath.exp(2j * math.radians(f[3])) for f in faces if f[3] >= 0)
+                if abs(look) > sum(f[0] for f in faces) * .3:
+                    b['dir'] = round(math.degrees(cmath.phase(look)) / 2) % 180
             out.append(b)
+            if high:
+                v = [float(c) for f in high for c in f[4].find('.//g:posList', ns).text.split()]
+                top = hull(ring([latlon(x, y) for x, y in zip(v[::3], v[1::3])]))
+                foot, tip = min(f[1] for f in high), max(f[2] for f in high)
+                # ponytail: two things far apart on one roof would be hulled into one block, so those are left out.
+                if 6 < shoelace(top) < sum(f[0] for f in high) * 1.5:
+                    spire = {'k': 't', 't': round(tip - foot, 1)} if k == 'c' else {'k': k, 'r': 'f'}
+                    out.append({'p': flat(top), 'h': round(foot if k == 'c' else (foot + tip) / 2, 1),
+                                'a': round(shoelace(top)), **spire})
     return out
 
 
@@ -299,7 +353,7 @@ def roofs(buildings, photo):
         rows = range(max(0, int(min(p[1] for p in pts))), min(h, int(max(p[1] for p in pts)) + 1))
         seen = [px[(y * w + x) * n:(y * w + x) * n + 3]
                 for y in rows for x0, x1 in spans(pts, y) for x in range(x0, x1)]
-        if len(seen) < 6 or b['k'] in 'os':
+        if len(seen) < 6 or b['k'] in 'ost':
             continue
         seen.sort(key=sum)
         r, g, bl = seen[len(seen) // 2]
@@ -468,8 +522,9 @@ if tiles:
             buildings.append(b)
             b['osm'] = 1
         for o in hits if b['k'] in 'cgo' else []:
-            o['k'] = b['k']
-            o.pop('r', None) if b['k'] == 'o' else None
+            if o['k'] != 't':
+                o['k'] = b['k']
+                o.pop('r', None) if b['k'] == 'o' else None
     lone = sum(b.pop('osm', 0) for b in buildings)
     assert lone < len(drawn) / 5, f'{lone} OSM buildings have no state building: do the tiles line up?'
     print(f'{len(buildings)} buildings: {lone} only in OSM, {len(drawn)} drawn in OSM', file=sys.stderr)
