@@ -8610,9 +8610,11 @@ function drawHammer(p) {
 let festival = null;
 
 /**
- * The Koppel of Rock: a stage with its lights, the crowd in front of it, a
- * beer stand, and the tents of those who stay the night.
- * @param {number} x The middle of the ground.
+ * The Koppel of Rock at its crossroads: a stage with its lights in the
+ * meadow to the north-east, the crowd in front of it and a beer stand, and
+ * across the crossroads to the south-west the tents of those who stay the
+ * night.
+ * @param {number} x The crossroads.
  * @param {number} y
  */
 function drawFestival(x, y) {
@@ -8621,21 +8623,21 @@ function drawFestival(x, y) {
     festival = {
       banner: makeSign('KOPPEL OF ROCK', ['#15151a', '#e8c21c']),
       crowd: Array.from({length: 46}, () => [
-        -8 + r() * 16,
-        -19 + r() * r() * 12,
+        6 + r() * 16,
+        -21 + r() * r() * 12,
         pick2(SHIRTS, r),
         r() * TAU,
       ]),
-      tents: Array.from({length: 14}, (v, i) => [
-        -31 + (i % 7) * 4.6 + r(),
-        -58 + ((i / 7) | 0) * 6 + r(),
+      tents: Array.from({length: 21}, (v, i) => [
+        -51 + (i % 7) * 5.5 + r(),
+        14 + ((i / 7) | 0) * 6 + r(),
         pick2(['#d86a2a', '#2f5fa8', '#3c7a30', '#c8201c', '#e8c21c'], r),
       ]),
     };
   }
   ctx.save();
   ctx.translate(x, y);
-  // Tents, north of the stage
+  // The campground
   for (const [tx, ty, col] of festival.tents) {
     ctx.fillStyle = col;
     ctx.fillRect(tx, ty, 3, 2.4);
@@ -8646,10 +8648,10 @@ function drawFestival(x, y) {
   }
   // The beer stand
   ctx.fillStyle = '#6b4a2a';
-  ctx.fillRect(13, -14, 6, 3);
+  ctx.fillRect(27, -16, 6, 3);
   for (let i = 0; i < 4; i++) {
     ctx.fillStyle = i % 2 ? '#f4f4ef' : '#c8201c';
-    ctx.fillRect(13 + i * 1.5, -15.5, 1.5, 1.5);
+    ctx.fillRect(27 + i * 1.5, -17.5, 1.5, 1.5);
   }
   // The crowd jumps to the beat
   for (const [cx, cy, col, phase] of festival.crowd) {
@@ -8659,6 +8661,8 @@ function drawFestival(x, y) {
     ctx.fillStyle = '#e6c79c';
     ctx.fillRect(cx - 0.2, cy - 0.2 - hop, 0.4, 0.4);
   }
+  ctx.save();
+  ctx.translate(14, -2); // the stage, at the corner of the meadow
   // The stage: boards, the boxes left and right, lights that change colour
   ctx.fillStyle = 'rgba(0,0,0,.3)';
   ctx.fillRect(-8.4, -29.4, 18, 8);
@@ -8692,6 +8696,7 @@ function drawFestival(x, y) {
     (wide * festival.banner.height) / festival.banner.width
   );
   ctx.imageSmoothingEnabled = false;
+  ctx.restore();
   ctx.restore();
 }
 
