@@ -3412,6 +3412,15 @@ const TYPES = {
     hp: 250,
     mass: 3.2,
   },
+  tanker: {
+    name: ['Heizöl-Laster'],
+    length: 7.6,
+    width: 2.5,
+    max: 26,
+    acc: 9,
+    hp: 240,
+    mass: 3.4,
+  },
   mixer: {
     name: ['Betonmischer'],
     length: 7.8,
@@ -3456,6 +3465,7 @@ const PAINT = {
   truck: '#2b62c8',
   tipper: '#284d98',
   mixer: '#284d98',
+  tanker: '#c8201c',
   fire: '#c8201c',
   van: '#eeeee8',
 };
@@ -3587,6 +3597,22 @@ function carSprite(kind, col, frame = 0, extras = '') {
           ['#6f6a60', '#a59e90', '#b56a4a', '#c9c5b9'][i % 4]
         );
       }
+    }
+    cab(15);
+  } else if (kind === 'tanker') {
+    // a silver tank with ribs and a red stripe behind the cab
+    const tw = w - 17;
+    const tank = paint('#d6d8dc');
+    rect(2, 2, tw, h - 4, '#0b0b0d');
+    rect(3, 1, tw - 2, h - 2, '#0b0b0d');
+    rect(3, 2, tw - 2, h - 4, tank);
+    rect(4, 3, tw - 4, 2, shade(tank, 1.15));
+    rect(4, h - 5, tw - 4, 2, shade(tank, 0.8));
+    if (!wreck) {
+      for (let x = 9; x < tw - 2; x += 10) {
+        rect(x, 2, 1, h - 4, shade(tank, 0.75));
+      }
+      rect(3, mid - 1, tw - 2, 2, '#c8201c');
     }
     cab(15);
   } else if (kind === 'mixer') {
@@ -5480,6 +5506,21 @@ function kerbSpot(c, r, ok) {
 }
 
 /**
+ * A customer's house somewhere in the village, not next door: where a
+ * delivery stands on its drive, and the name of its street.
+ * @param {!Point} from
+ * @return {!Object}
+ */
+function houseSpot(from) {
+  const homes = BUILD.filter(b => {
+    const d = Math.hypot(b.mx - from.x, b.my - from.y);
+    return b.rd && b.k === 'h' && b !== HOME && d > 150 && d < 600;
+  });
+  const b = homes[(Math.random() * homes.length) | 0] || HOME;
+  return {...driveSpot(b), name: b.rd[2][6].n || 'Kunde'};
+}
+
+/**
  * Wood thieves: cars that come for you and ram you.
  * @param {number} n
  * @return {!Array<!Car>}
@@ -5622,7 +5663,8 @@ function nextStep() {
   j.hold = 0;
   j.need = 0; // only a collect step counts things
   j.told = false;
-  j.to = st.to ? SPOT[st.to] : null;
+  j.to = st.to ? SPOT[st.to] : st.house ? houseSpot(state.player) : null;
+  const fill = text => text.replace('{street}', j.to && j.to.name);
   if (st.time) {
     j.left = st.time;
     j.timed = true;
@@ -5658,9 +5700,9 @@ function nextStep() {
     j.doris = {x: home.x, y: home.y, a: 0, t: 0, rest: 4};
   }
   if (st.say) {
-    page(st.say);
+    page(fill(st.say));
   }
-  state.pager.idle = st.obj;
+  state.pager.idle = fill(st.obj);
   if (st.do === 'steal') {
     j.veh = spawnAt(st.veh, st.at, st.trailer);
     j.to = j.veh;
