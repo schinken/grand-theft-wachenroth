@@ -5462,6 +5462,7 @@ function nextStep() {
   }
   j.step = st;
   j.hold = 0;
+  j.need = 0; // only a collect step counts things
   j.told = false;
   j.to = st.to ? SPOT[st.to] : null;
   if (st.time) {
