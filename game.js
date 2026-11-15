@@ -8238,6 +8238,8 @@ function drawBuilding(b, cx, cy, hc, base) {
   const top = Math.min(h + (b.rh || b.apex || 0), hc * 0.62);
   const s = hc / (hc - h);
   drawWalls(b, cx, cy, hc, h, s);
+  // The canvas would carry the windows' path through the new transform.
+  ctx.beginPath();
   ctx.setTransform(
     z * b.ca,
     z * b.sa,
