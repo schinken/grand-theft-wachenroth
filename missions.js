@@ -1,25 +1,43 @@
 // Flo's jobs. Place keys come from the POIS table in tools/osm2map.py.
 //
-// Step kinds:
-// goto reach a place (foot: true = walk in) steal take the car that waits at a
-// place
-// bring park the mission car at a place collect pick up n things scattered near
-// a place
-// hold stay at a place for some seconds chase ram the getaway car until it
-// gives up
-// take get into the car you just stopped lose shake off the police
-// Options: time (seconds, runs on until the next `time`), fragile (crashes
-// break the load), tip (seconds left pay extra),
-// wanted (police heat), drop (the mission car is no longer needed), say (Flo on
-// the pager), drunk (seconds of being drunk), fix (done only once the police
-// have let go), load (what the trailer carries from now on), thieves (cars that
-// ram you), logs (rams by the thieves the wood on the cart takes), doris (Mama
-// Doris guards her hens), loose (things to collect lie anywhere, not on the
-// road), kerb (they stand at the kerb in front of houses), db (the noise the
-// rockers make: 10 dB less for each one met), got (what you call out once the
-// step is done).
-// A mission with sober: true ends the drunkenness; one with drunk: n leaves you
-// drunk for n seconds.
+// A mission: id (for ?job=), title, reward, intro and outro (Flo on the
+// pager), steps, and maybe props (scenery, see below), sober: true (ends the
+// drunkenness) or drunk: n (leaves you drunk for n seconds).
+//
+// A step: do (its kind), obj (the task, on the pager), say (Flo's message as
+// it starts), and what its kind needs:
+//   goto     reach place `to`: foot = walk in, else within r (7 m); fix = done
+//            only once the police have let go
+//   steal    get into vehicle `veh` (with `trailer`) waiting at place `at`
+//   bring    park the mission vehicle at place `to`
+//   collect  pick up n things of kind `item` within r of place `near`: on the
+//            roads, or anywhere off them (loose), or at the kerb in front of
+//            houses (kerb); trees to cut stand where they grow. foot = on foot
+//            only, veh = with the mission vehicle only, doris = Mama Doris
+//            guards her hens, db = the noise the rockers make (10 dB less for
+//            each one met)
+//   hold     stay within r (10 m) of place `to` for secs seconds: veh = in the
+//            mission vehicle, fx = what it sprays ('water' or 'spread')
+//   chase    ram the getaway `veh` (with `trailer`), which sets off near place
+//            `at`, `hits` times or until it is badly dented
+//   take     get into the car you just stopped
+//   lose     shake off the police
+// Any step may also have:
+//   time     seconds to do it in; the clock runs on until the next `time`, and
+//            0 stops it
+//   tip      the seconds left pay extra
+//   fragile  crashes break the load from now on (false: no more)
+//   wanted   police heat
+//   drop     the mission vehicle is no longer needed
+//   drunk    seconds of being drunk
+//   load     what the trailer carries from now on
+//   thieves  cars that ram you
+//   logs     rams by the thieves the wood on the cart takes
+//   got      what you call out once the step is done
+//
+// Props: k ('fire', 'tent', 'stage', or 'person' with shirt colour col) at
+// place `at`, dx and dy metres off it, shown from step `from` until before
+// step `until`.
 
 export const PLACES = {
   hq: 'Flos Hauptquartier',
@@ -750,6 +768,7 @@ export const MISSIONS = [
         r: 230,
         item: 'xmas',
         kerb: true,
+        veh: true,
         obj: 'Sammle 8 Christbäume vor den Haustüren ein, mit dem Bulldog',
         say: 'An jedem Baum hängt ein Kuvert mit 20 € Spende. Fahr die Straßen ab und lad alles auf den Hänger!',
       },
