@@ -3479,8 +3479,10 @@ function explode(c) {
     }
   }
   for (const p of state.peds) {
-    if (dist(p, c) < 8) {
-      killPed(p);
+    const d = dist(p, c);
+    if (d < 8) {
+      // The blast throws people off their feet, away from it
+      knockPed(p, ((p.x - c.x) / (d || 1)) * 9, ((p.y - c.y) / (d || 1)) * 9);
     }
   }
   if (player.car === c || (!player.car && far < 7)) {
@@ -4049,9 +4051,16 @@ function spawnPed(x, y, from, to) {
     sp: rand(1.1, 1.7),
     t: rand(0, 9),
     flee: 0,
+    // While knocked over: seconds left in the air, of how many, the push and
+    // how fast they turn over
+    fly: 0,
+    flyT: 1,
+    vx: 0,
+    vy: 0,
+    spin: 0,
+    spinV: 0,
     shirt: pick(SHIRTS),
     hair: pick(HAIR),
-    dead: false,
   };
   state.peds.push(p);
   return p;
@@ -4099,6 +4108,24 @@ function pedCorner(p) {
  * @param {number} dt
  */
 function stepPed(p, dt) {
+  if (p.fly > 0) {
+    // Knocked over: thrown through the air, turning over, slowing down
+    p.fly -= dt;
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    const drag = Math.exp(-dt * 2.5);
+    p.vx *= drag;
+    p.vy *= drag;
+    p.spin += p.spinV * dt;
+    shove(p, 0.35);
+    if (p.fly <= 0) {
+      // Back on their feet, and off, the way they flew
+      p.flee = 2.5;
+      p.a = Math.atan2(p.vy, p.vx);
+      p.spin = 0;
+    }
+    return;
+  }
   let sp = p.sp;
   if (p.flee > 0) {
     p.flee -= dt;
@@ -4121,26 +4148,29 @@ function stepPed(p, dt) {
 }
 
 /**
- * Runs a pedestrian over.
+ * Knocks a pedestrian over: they fly a few metres, land, get up and run
+ * away. Nobody gets run over in Wachenroth.
  * @param {!Ped} p
+ * @param {number} vx The push, in metres a second.
+ * @param {number} vy
  * @param {boolean=} byPlayer
  */
-function killPed(p, byPlayer) {
-  if (p.dead) {
+function knockPed(p, vx, vy, byPlayer) {
+  if (p.fly > 0) {
     return;
   }
-  p.dead = true;
-  decal(p.x, p.y, 'blood');
-  for (let i = 0; i < 10; i++) {
-    puff(p.x, p.y, 'blood');
-  }
+  p.flyT = p.fly = clamp(0.3 + Math.hypot(vx, vy) * 0.025, 0.5, 0.85);
+  p.vx = vx;
+  p.vy = vy;
+  p.spinV = rand(-1, 1) * 14;
+  p.flee = 0;
   if (dist(p, state.player) < 80) {
-    audio.play('splat');
+    audio.play('scream');
   }
   if (byPlayer) {
     state.stats.peds++;
-    float(p, 'BATSCH!', '#ff5a1f');
-    crime(0.6);
+    float(p, pick(['HOPPLA!', 'AUTSCH!', 'HEY!', 'SPINNST DU?']), '#ff5a1f');
+    crime(0.3);
   }
 }
 
@@ -4228,9 +4258,17 @@ function walkersVsCars() {
         continue;
       }
       if (sp > 3) {
-        killPed(p, c === player.car);
-        c.vx *= 0.96;
-        c.vy *= 0.96;
+        // Thrown ahead of the car, faster than it, and to the side the walker
+        // stood on, so it does not run them over in the air
+        const side = Math.sign(dx * -c.vy + dy * c.vx) || 1;
+        knockPed(
+          p,
+          c.vx * 1.15 - (c.vy / sp) * side * 9,
+          c.vy * 1.15 + (c.vx / sp) * side * 9,
+          c === player.car
+        );
+        c.vx *= 0.92; // the bump is felt
+        c.vy *= 0.92;
       } else {
         const d = Math.hypot(dx, dy) || 1;
         p.x += (dx / d) * 0.2;
@@ -4284,7 +4322,7 @@ function populate(dt, near) {
   const peds = state.peds;
   n = 0;
   for (const p of peds) {
-    if (!p.dead && dist(p, f) < 230) {
+    if (dist(p, f) < 230) {
       peds[n++] = p;
     }
   }
@@ -4838,7 +4876,7 @@ function finish() {
     ...[
       `Rang: ${rank}`,
       `Aufträge für Flo: ${st.missions} · Autos geklaut: ${st.stolen}`,
-      `Schrottkarren: ${st.wrecks} · Umgefahren: ${st.peds} · Erwischt: ${st.busted} · Erledigt: ${st.wasted}`,
+      `Schrottkarren: ${st.wrecks} · Angefahren: ${st.peds} · Erwischt: ${st.busted} · Erledigt: ${st.wasted}`,
     ].map(t => Object.assign(document.createElement('li'), {textContent: t}))
   );
   audio.play('win');
@@ -7108,10 +7146,18 @@ function drawPerson(p, shirt, hair) {
     ctx.fillStyle = f;
     ctx.fillRect(x, y, w, h);
   };
+  // Knocked over: how high in the air, 0 to 1
+  const up = p.fly > 0 ? Math.sin(Math.PI * (1 - p.fly / p.flyT)) : 0;
+  if (up) {
+    ctx.fillStyle = 'rgba(0,0,0,.3)';
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 0.55, 0, TAU);
+    ctx.fill();
+  }
   ctx.save();
-  ctx.translate(p.x, p.y);
-  ctx.rotate(p.a);
-  ctx.scale(1.3, 1.3); // a bit larger than life, to be seen
+  ctx.translate(p.x, p.y - up * 0.9);
+  ctx.rotate(p.a + (p.spin || 0));
+  ctx.scale(1.3 + up * 0.6, 1.3 + up * 0.6); // a bit larger than life
   rect(-0.15 + sw, -0.34, 0.34, 0.22, '#1c1c22');
   rect(-0.15 - sw, 0.12, 0.34, 0.22, '#1c1c22'); // feet
   rect(-0.08 - sw, -0.6, 0.3, 0.16, '#e0b08a');
@@ -7314,7 +7360,7 @@ function drawSprites(x0, y0, x1, y1) {
     drawPerson(player, '#19c2bd', '#3a2a1a');
   }
   for (const p of state.peds) {
-    if (seen(p)) {
+    if (seen(p) && !(p.fly > 0)) {
       drawPerson(p, p.shirt, p.hair);
     }
   }
@@ -7385,6 +7431,11 @@ function drawSprites(x0, y0, x1, y1) {
     }
   }
   drawTrain(x0, y0, x1, y1);
+  for (const p of state.peds) {
+    if (seen(p) && p.fly > 0) {
+      drawPerson(p, p.shirt, p.hair); // up in the air, above the cars
+    }
+  }
 }
 
 /**
@@ -8177,6 +8228,16 @@ if (location.search.includes('selftest')) {
       ROADS.lane.length === 1 &&
       HOME.planes.every(f => f.p.every(v => v > -40 && v < 40)) &&
       HOME.planes.filter(f => f.pv && f.pv.length).length === 2,
+    'a pedestrian who is hit flies, lands and runs off, unhurt': (() => {
+      const p = {x: 50, y: 50, a: 0, fly: 0, flyT: 1, vx: 0, vy: 0};
+      Object.assign(p, {spin: 0, spinV: 0, flee: 0, t: 0});
+      knockPed(p, 10, 0);
+      const flying = p.fly > 0;
+      for (let i = 0; i < 90; i++) {
+        stepPed(p, 1 / 60);
+      }
+      return flying && p.fly <= 0 && p.flee > 0 && p.x > 53;
+    })(),
     'the steel train runs the whole rail, and comes once a day': (() => {
       const away = placeTrain(TRAIN_DUE - 10) < 0;
       const under = placeTrain(TRAIN_DUE + 200) > 0 && TRAIN.every(v => v.on);
