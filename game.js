@@ -2348,7 +2348,9 @@ function icon(kind) {
 // ---------- state
 
 let state;
-const fmt = v => `${Math.round(v).toLocaleString('de-DE')} €`;
+// One formatter for every sum: toLocaleString() sets up a new one per call
+const EURO = new Intl.NumberFormat('de-DE');
+const fmt = v => `${EURO.format(Math.round(v))} €`;
 const SAVE_KEY = 'gtw-save';
 /**
  * Reads the saved game.
@@ -2475,6 +2477,8 @@ function makeCar(x, y, a, kind, col = PAINT[kind] || pick(COLORS)) {
     burn: 0,
     dead: false,
     ai: null,
+    // How many more rounds collideCars() looks at it; see there
+    awake: 2,
     radio:
       kind === 'tractor'
         ? 1
@@ -2851,13 +2855,46 @@ function stepCar(c, dt) {
   }
 }
 
-/** Vehicle against vehicle. */
+// Where in state.cars the cars are that collideCars() has to look at, in
+// ascending order. Kept between rounds, to save the allocation.
+const awakeCars = [];
+
+/**
+ * Vehicle against vehicle. Cars that have not moved cannot run into each
+ * other, and most cars are parked: a pair is only tested when one of the two
+ * is awake. That is a car update() has moved in this round or the one before,
+ * a new one, and one that got shoved, by another car, in this round or the one
+ * before. The pairs come in the same order as in a loop over all of them, so
+ * the outcome is the same.
+ */
 function collideCars() {
   const cs = state.cars;
   const player = state.player;
+  const awake = awakeCars;
+  awake.length = 0;
   for (let i = 0; i < cs.length; i++) {
+    if (cs[i].awake) {
+      awake.push(i);
+    }
+  }
+  let next = 0; // awake[next] is the first car awake behind car i
+  for (let i = 0; i < cs.length; i++) {
+    const a = cs[i];
+    while (next < awake.length && awake[next] <= i) {
+      next++;
+    }
+    let k = next;
     for (let j = i + 1; j < cs.length; j++) {
-      const a = cs[i];
+      if (!a.awake) {
+        // Skip the cars at rest, up to the next one that is awake
+        while (k < awake.length && awake[k] < j) {
+          k++;
+        }
+        if (k === awake.length) {
+          break;
+        }
+        j = awake[k];
+      }
       const b = cs[j];
       if (Math.abs(a.x - b.x) > 12 || Math.abs(a.y - b.y) > 12) {
         continue;
@@ -2873,6 +2910,12 @@ function collideCars() {
           if (!d || d >= min) {
             continue;
           }
+          if (!b.awake) {
+            // Shoved out of its sleep: the cars behind have to look at it too
+            awake.push(j);
+            awake.sort((m, n) => m - n);
+          }
+          a.awake = b.awake = 2;
           const nx = dx / d;
           const ny = dy / d;
           const pen = min - d;
@@ -2909,6 +2952,11 @@ function collideCars() {
           }
         }
       }
+    }
+  }
+  for (const c of cs) {
+    if (c.awake) {
+      c.awake--;
     }
   }
 }
@@ -3076,8 +3124,14 @@ function crime(heat) {
  */
 function police(dt) {
   const player = state.player;
-  const cops = state.cars.filter(c => c.ai && c.ai.cop && !c.dead);
-  const close = cops.reduce((m, c) => Math.min(m, dist(c, player)), 1e9);
+  let cops = 0; // patrol cars on duty
+  let close = 1e9; // and how far away the nearest one is
+  for (const c of state.cars) {
+    if (c.ai && c.ai.cop && !c.dead) {
+      cops++;
+      close = Math.min(close, dist(c, player));
+    }
+  }
   if (state.wanted > 0) {
     state.seen -= dt;
     state.wanted = Math.max(
@@ -3085,10 +3139,12 @@ function police(dt) {
       state.wanted - dt * (close < 90 ? 0.012 : state.seen > 0 ? 0.04 : 0.14)
     ); // heat cools off once nobody is looking
   }
-  if (state.wanted < 1) {
-    for (const c of cops) {
-      c.ai.cop = false;
-      c.siren = false;
+  if (cops && state.wanted < 1) {
+    for (const c of state.cars) {
+      if (c.ai && c.ai.cop && !c.dead) {
+        c.ai.cop = false;
+        c.siren = false;
+      }
     }
   } // off duty: back to normal traffic
   audio.siren(
@@ -3103,7 +3159,7 @@ function police(dt) {
     state.copF = field(player);
   }
   if (
-    cops.length < Math.min(3, Math.floor(state.wanted)) &&
+    cops < Math.min(3, Math.floor(state.wanted)) &&
     Math.random() < dt * 1.2
   ) {
     const spots = NODES.filter(n => {
@@ -3299,9 +3355,37 @@ function touching(o, c, r) {
 /** Pedestrians and the player on foot against cars. */
 function walkersVsCars() {
   const player = state.player;
+  const peds = state.peds;
+  // The box around all pedestrians: most cars are far away from it and have
+  // nothing to do here
+  let x0 = Infinity;
+  let y0 = Infinity;
+  let x1 = -Infinity;
+  let y1 = -Infinity;
+  for (const p of peds) {
+    x0 = Math.min(x0, p.x);
+    y0 = Math.min(y0, p.y);
+    x1 = Math.max(x1, p.x);
+    y1 = Math.max(y1, p.y);
+  }
   for (const c of state.cars) {
+    // Cars and pedestrians notice each other within 12 m; one more for the box
+    // keeps rounding out of it
+    const far =
+      c.x < x0 - 13 || c.x > x1 + 13 || c.y < y0 - 13 || c.y > y1 + 13;
+    // On foot and within 12 m, more than any car is long
+    const afoot =
+      state.mode === 'play' &&
+      !player.car &&
+      !state.wasted &&
+      Math.abs(player.x - c.x) < 12 &&
+      Math.abs(player.y - c.y) < 12;
+    if (far && !afoot) {
+      continue;
+    }
     const sp = Math.hypot(c.vx, c.vy);
-    for (const p of state.peds) {
+    for (let i = 0; !far && i < peds.length; i++) {
+      const p = peds[i];
       const dx = p.x - c.x;
       const dy = p.y - c.y;
       if (Math.abs(dx) > 12 || Math.abs(dy) > 12) {
@@ -3334,14 +3418,14 @@ function walkersVsCars() {
         const d = Math.hypot(dx, dy) || 1;
         p.x += (dx / d) * 0.2;
         p.y += (dy / d) * 0.2;
+        // It was pushed, maybe out of the box
+        x0 = Math.min(x0, p.x);
+        y0 = Math.min(y0, p.y);
+        x1 = Math.max(x1, p.x);
+        y1 = Math.max(y1, p.y);
       }
     }
-    if (
-      state.mode === 'play' &&
-      !player.car &&
-      !state.wasted &&
-      touching(player, c, 0.35)
-    ) {
+    if (afoot && touching(player, c, 0.35)) {
       if (sp > 4) {
         waste();
       } else {
@@ -3362,17 +3446,32 @@ function populate(dt, near) {
   const player = state.player;
   const f = state.mode === 'play' ? player : state.cam;
   const j = state.job;
-  const keep = c => c === player.car || (j && (c === j.veh || c === j.prey));
-  state.cars = state.cars.filter(
-    c =>
-      (keep(c) && !c.gone) ||
+  // Both lists are thinned out in place, in order, without a new list each
+  // update
+  const cars = state.cars;
+  let n = 0;
+  for (const c of cars) {
+    const keep = c === player.car || (j && (c === j.veh || c === j.prey));
+    if (
+      (keep && !c.gone) ||
       !(
         c.gone ||
         ((c.ai || c.dead) && dist(c, f) > 300) ||
         (c.ai && c.ai.jams > 4 && dist(c, f) > 110)
       )
-  );
-  state.peds = state.peds.filter(p => !p.dead && dist(p, f) < 230);
+    ) {
+      cars[n++] = c;
+    }
+  }
+  cars.length = n;
+  const peds = state.peds;
+  n = 0;
+  for (const p of peds) {
+    if (!p.dead && dist(p, f) < 230) {
+      peds[n++] = p;
+    }
+  }
+  peds.length = n;
   if ((state.spawnT -= dt) > 0) {
     return;
   }
@@ -4188,6 +4287,7 @@ function update(dt) {
     } else if (c !== player.car && !c.burn && !c.vx && !c.vy && !c.spin) {
       continue;
     } // parked and at rest
+    c.awake = 2; // it may move, so collideCars() has to look at it
     stepCar(c, dt);
   }
   collideCars();
@@ -4214,6 +4314,9 @@ function update(dt) {
     o.y = clamp(o.y, 6, WORLD_H - 6);
     o.vy = 0;
   }
+  // What has run its time is dropped from the lists in place: a new list on
+  // every update is work for the garbage collector
+  let n = 0;
   for (const sp of state.sprays) {
     // broken hydrants are fountains for a while
     sp.t -= dt;
@@ -4222,19 +4325,30 @@ function update(dt) {
         puff(sp.x + rand(-0.3, 0.3), sp.y + rand(-0.3, 0.3), 'water');
       }
     }
+    if (sp.t > 0) {
+      state.sprays[n++] = sp;
+    }
   }
-  state.sprays = state.sprays.filter(sp => sp.t > 0);
+  state.sprays.length = n;
+  n = 0;
   for (const p of state.parts) {
     p.x += p.vx * dt;
     p.y += p.vy * dt;
     p.life += dt;
+    if (p.life < p.max) {
+      state.parts[n++] = p;
+    }
   }
-  state.parts = state.parts.filter(p => p.life < p.max);
+  state.parts.length = n;
+  n = 0;
   for (const t of state.texts) {
     t.y -= 3 * dt;
     t.life -= dt;
+    if (t.life > 0) {
+      state.texts[n++] = t;
+    }
   }
-  state.texts = state.texts.filter(t => t.life > 0);
+  state.texts.length = n;
   camera(dt);
 }
 
@@ -4263,6 +4377,25 @@ function guide(dt) {
   state.gps.far = pathLength(routeLine(state.gps.f, player, to));
 }
 
+// The HUD is ordinary HTML, and writing to it makes the browser lay the page
+// out again even when the value is the same. So what is on show is
+// remembered, and only changes are written.
+const onShow = new Map();
+
+/**
+ * Whether a HUD value differs from what is on show; remembers the new one.
+ * @param {string} key
+ * @param {(string|number|boolean)} value
+ * @return {boolean}
+ */
+function changed(key, value) {
+  if (onShow.get(key) === value) {
+    return false;
+  }
+  onShow.set(key, value);
+  return true;
+}
+
 /**
  * Refreshes money, pager, mission bar and the engine sound.
  * @param {number} dt
@@ -4276,15 +4409,26 @@ function hud(dt) {
     Math.abs(state.money - state.shown) < 1
       ? state.money
       : lerp(state.shown, state.money, Math.min(1, dt * 8));
-  byId('money').textContent = fmt(state.shown);
-  byId('heat').textContent = '★'.repeat(Math.floor(state.wanted));
-  byId('heat').classList.toggle('hot', state.bust > 0.3);
-  byId('dmg').hidden = !c;
-  if (c) {
-    const k = clamp(c.hp / c.type.hp, 0, 1);
+  const money = Math.round(state.shown);
+  if (changed('money', money)) {
+    byId('money').textContent = fmt(money);
+  }
+  const stars = Math.floor(state.wanted);
+  if (changed('stars', stars)) {
+    byId('heat').textContent = '★'.repeat(stars);
+  }
+  const hot = state.bust > 0.3;
+  if (changed('hot', hot)) {
+    byId('heat').classList.toggle('hot', hot);
+  }
+  if (changed('onFoot', !c)) {
+    byId('dmg').hidden = !c;
+  }
+  const health = c ? Math.round(clamp(c.hp / c.type.hp, 0, 1) * 100) : -1;
+  if (c && changed('health', health)) {
     const bar = byId('dmg').querySelector('i');
-    bar.style.width = `${k * 100}%`;
-    bar.style.background = k < 0.3 ? 'var(--hot)' : '';
+    bar.style.width = `${health}%`;
+    bar.style.background = health < 30 ? 'var(--hot)' : '';
   }
   // the pager types out Flo's messages one after the other, then shows what to
   // do
@@ -4298,7 +4442,10 @@ function hud(dt) {
     if (pg.n < pg.cur.length) {
       pg.n += dt * 46;
       const n = Math.min(pg.cur.length, pg.n | 0);
-      byId('lcd').textContent = `FLO: ${pg.cur.slice(0, n)}`;
+      const typed = `FLO: ${pg.cur.slice(0, n)}`;
+      if (changed('lcd', typed)) {
+        byId('lcd').textContent = typed;
+      }
       if (n - pg.said >= 3) {
         pg.said = n;
         if (/\w/.test(pg.cur[n - 1] || '')) {
@@ -4312,13 +4459,16 @@ function hud(dt) {
       }
     }
   } else {
-    byId('lcd').textContent = pg.idle
+    const idle = pg.idle
       ? `» ${pg.idle}`
       : state.jobN >= MISSIONS.length
         ? 'Wachenroth gehört dir.'
         : '...';
+    if (changed('lcd', idle)) {
+      byId('lcd').textContent = idle;
+    }
   }
-  byId('mission').hidden =
+  const noBar =
     !j ||
     !(
       j.timed ||
@@ -4327,7 +4477,10 @@ function hud(dt) {
       j.step.do === 'hold' ||
       j.step.do === 'chase'
     );
-  if (j && !byId('mission').hidden) {
+  if (changed('noBar', noBar)) {
+    byId('mission').hidden = noBar;
+  }
+  if (j && !noBar) {
     const el = byId('mission');
     const secs = Math.max(0, Math.ceil(j.left));
     const st = j.step;
@@ -4344,7 +4497,10 @@ function hud(dt) {
     if (j.fragile) {
       bits.push('Ladung');
     }
-    el.firstElementChild.textContent = bits.join('  ·  ');
+    const line = bits.join('  ·  ');
+    if (changed('missionLine', line)) {
+      el.firstElementChild.textContent = line;
+    }
     const bar = j.fragile
       ? j.cargo
       : st.do === 'hold'
@@ -4354,13 +4510,18 @@ function hud(dt) {
           : j.timed
             ? j.left / (st.time || j.left)
             : 0;
-    el.lastElementChild.hidden = !(
-      j.fragile ||
-      st.do === 'hold' ||
-      st.do === 'collect'
-    );
-    el.querySelector('i').style.width = `${clamp(bar, 0, 1) * 100}%`;
-    el.classList.toggle('hurry', j.timed && secs <= 15);
+    const noGauge = !(j.fragile || st.do === 'hold' || st.do === 'collect');
+    if (changed('noGauge', noGauge)) {
+      el.lastElementChild.hidden = noGauge;
+    }
+    const gauge = Math.round(clamp(bar, 0, 1) * 100);
+    if (changed('gauge', gauge)) {
+      el.querySelector('i').style.width = `${gauge}%`;
+    }
+    const hurry = j.timed && secs <= 15;
+    if (changed('hurry', hurry)) {
+      el.classList.toggle('hurry', hurry);
+    }
   }
   if ((state.whereT -= dt) <= 0) {
     // where am I?
@@ -4391,7 +4552,9 @@ function hud(dt) {
         }
       }
     }
-    byId('where').textContent = name;
+    if (changed('where', name)) {
+      byId('where').textContent = name;
+    }
   }
   audio.engine(
     c ? c.vf : 0,
@@ -4410,6 +4573,7 @@ function start(save) {
   byId('menu').hidden = byId('end').hidden = true;
   byId('hud').hidden = false;
   byId('lcd').textContent = '';
+  onShow.clear(); // the page was just reset by hand: write everything afresh
   for (const id of ['flash', 'mission', 'pause', 'info', 'map']) {
     byId(id).hidden = true;
   }
