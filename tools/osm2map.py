@@ -101,9 +101,9 @@ POIS = {
     'forest': (49.75695, 10.719331),  # the wood north of Johann-Philipp-Ring, at its track
     'schul22': (49.753622, 10.714771),   # Schulstraße 22: Michi's hens, the house modelled with its garden
     'muehle': (49.748285, 10.720787),  # Kleinwachenrother Mühle, an inn with rooms
-    # Koppel of Rock: the meadow north of its gate. The gate is where Google Maps has the festival, at 49.743891,
-    # 10.7237281.
-    'koppel': (49.744180, 10.723945),
+    # Koppel of Rock: the crossroads where Google Maps has it. The stage stands in the meadow north-east of it, the
+    # campground in the one south-west.
+    'koppel': (49.743891, 10.7237281),
     'warehouse': (49.75125, 10.71829),  # Lagerhaus, Am Graben 9
     'fairground': (49.7503858, 10.7130321),  # the Kerwa ground behind the parish office, where Google Maps has it
     'linsner': (49.75086, 10.71445),   # Gasthof Linsner, Hauptstraße 7
@@ -200,10 +200,11 @@ SHEDS = [
 POOLS = [(49.75277, 10.714879, 4.0, 7.0), (49.752167, 10.719626, 7.0, 4.0),
          (49.753636, 10.721236, 5.5, 3.5), (49.755039, 10.7105, 6.0, 4.5)]
 
-# Areas OSM lacks, read off the same photo: their kind and their corners as lat/lon. The meadow of the Koppel of Rock
-# and the orchard meadow north-east of the sports ground are mapped as parts of big fields; the orchard's trees are in
-# the tree survey.
+# Areas OSM lacks, read off the same photo: their kind and their corners as lat/lon. The two meadows of the Koppel of
+# Rock (the stage's and the campground's) and the orchard meadow north-east of the sports ground are mapped as parts of
+# big fields; the orchard's trees are in the tree survey.
 PATCHES = [
+    ('meadow', [(49.743811, 10.722821), (49.743838, 10.723641), (49.743038, 10.723655), (49.743038, 10.722821)]),
     ('meadow', [(49.74614, 10.723502), (49.746158, 10.723697), (49.745583, 10.72442),
                 (49.745511, 10.724462), (49.743991, 10.724573), (49.743955, 10.723613)]),
     ('meadow', [(49.755407, 10.704133), (49.755442, 10.704525), (49.755526, 10.704890), (49.755594, 10.705308),
