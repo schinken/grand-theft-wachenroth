@@ -48,7 +48,8 @@ let Ped;
 
 /**
  * A building from the map: outline p, wall height h, kind k, and where it was
- * surveyed the roof shape r: 'f' flat, 'g' gable, 'p' hip.
+ * surveyed the roof shape r: 'f' flat, 'g' gable, 'p' hip. The roof colour c
+ * is read off the aerial photo.
  * @typedef {!Object}
  */
 let Building;
@@ -498,10 +499,15 @@ const textures = {
   gravel: tex('#7d776c', (g, r) =>
     dots(g, r, 600, ['#6c675d', '#8f897d', '#5f5a51'])
   ),
+  yard: tex('#a8a190', (g, r) =>
+    dots(g, r, 600, ['#9a9383', '#b5ae9d', '#8f8878'])
+  ),
   tile1: tiles('#a5432b', '#8a3421', '#b8553a'),
   tile2: tiles('#b5622f', '#964c20', '#c8773f'),
   tile3: tiles('#7c3c2b', '#652e20', '#8f4a36'),
   tile4: tiles('#93382a', '#7a2b1f', '#a84a38'),
+  tile5: tiles('#8b776a', '#75635a', '#9d897b'), // weathered to grey-brown
+  tile6: tiles('#7c7d7f', '#68696c', '#8e8f92'), // grey concrete tiles
   slate: tiles('#4a4e57', '#3c4048', '#5a5e68'),
   metal: sheet('#9aa0a6', '#858b92', 4),
   metalRed: sheet('#8a4a3c', '#753c30', 4),
@@ -958,6 +964,19 @@ const LANDMARKS = {
   lavite: {wall: '#f1ead8', roof: 'tile2'},
 };
 
+// The roof for the colour the aerial photo shows: orange, red or brown tiles,
+// weathered tiles, grey, light, dark. Grey roofs differ when they are flat.
+const ROOF_BY_COLOUR = {
+  o: ['tile2'],
+  r: ['tile1', 'tile4'],
+  b: ['tile3'],
+  w: ['tile5'],
+  g: ['tile6'],
+  l: ['metal'],
+  d: ['slate'],
+};
+const FLAT_BY_COLOUR = {g: ['flat'], l: ['flatLight'], d: ['tar']};
+
 /**
  * The veil over a roof face: dark where it is turned away from the sun.
  * @param {number} shadow How much the face is turned south-east, -1 to 1.
@@ -1235,28 +1254,20 @@ function prepBuilding(b, r) {
             textures.slate,
           ][(v * 6) | 0];
   }
-  if (b.r && !'stwxo'.includes(k)) {
-    // The surveyed roof shape beats the guess. Tiles never lie flat, and a
-    // ridge never carries roofing felt.
+  const real = !'stwxo'.includes(k); // towers, silos and the like are made up
+  if (b.r && real) {
+    // The surveyed roof shape beats the guess.
     gable = simple && b.r !== 'f';
-    const tiles = [
-      textures.tile1,
-      textures.tile2,
-      textures.tile3,
-      textures.tile4,
-      textures.slate,
-    ];
-    if (b.r === 'f' && tiles.includes(b.roof)) {
-      b.roof = b.a > 150 ? textures.flat : textures.tar;
-    } else if (
-      b.r !== 'f' &&
-      [textures.flat, textures.flatLight].includes(b.roof)
-    ) {
-      b.roof = textures.metal;
-    }
   }
   if (fresh) {
     b.roof = gable ? textures.slate : textures.solar;
+  } else if (b.c && real) {
+    // And the photo knows the colour. A lean-to roof is drawn flat, but may
+    // well be tiled. A light roof is sheet metal, except on a house.
+    const colour = b.c === 'l' && k === 'h' ? 'g' : b.c;
+    const names =
+      (b.r === 'f' && FLAT_BY_COLOUR[colour]) || ROOF_BY_COLOUR[colour];
+    b.roof = textures[pick2(names, r)];
   }
   if (look.roof) {
     b.roof = textures[look.roof];
@@ -1511,26 +1522,27 @@ const TREES = [];
 const treeGrid = grid();
 {
   const r = rng(3);
-  const add = (tx, ty, size) => {
+  // `gap` is how far a trunk keeps from roads, water and walls.
+  const add = (tx, ty, size, tall = 4 + r() * 5, gap = 3) => {
     if (
       [
         [0, 0],
-        [3, 0],
-        [-3, 0],
-        [0, 3],
-        [0, -3],
+        [gap, 0],
+        [-gap, 0],
+        [0, gap],
+        [0, -gap],
       ].some(o => surfAt(tx + o[0], ty + o[1]))
     ) {
       return;
     }
-    if (at(buildingGrid, tx, ty).some(b => pushOut(tx, ty, 3, b.p))) {
+    if (at(buildingGrid, tx, ty).some(b => pushOut(tx, ty, gap, b.p))) {
       return;
     }
     const t = {
       x: tx,
       y: ty,
       r: size + r() * 1.8,
-      h: 4 + r() * 5,
+      h: tall,
       s: (r() * 3) | 0,
     };
     TREES.push(t);
@@ -1556,27 +1568,26 @@ const treeGrid = grid();
     }
   };
   for (const a of AREAS) {
-    if (a.k === 'forest') {
-      plant(a, 9, 0.85, 2.4);
-    }
+    // Bushes and fruit trees are too low for the tree survey: made up.
     if (a.k === 'scrub') {
       plant(a, 11, 0.6, 1.6);
-    }
-    if (a.k === 'resi') {
-      plant(a, 24, 0.45, 2);
-    }
-    if (a.k === 'meadow') {
-      plant(a, 38, 0.25, 2.2);
     }
     if (a.k === 'orchard') {
       plant(a, 8, 1, 1.4, 0.2);
     }
-    if (a.k === 'cem') {
-      plant(a, 26, 0.3, 1.6);
-    }
   }
-  for (let i = 0; i < MAP.trees.length; i += 2) {
-    add(MAP.trees[i], MAP.trees[i + 1], 2.4);
+  // Every surveyed tree: x, y and its height, which decides how wide and how
+  // high it is drawn. A height of 0 means nobody measured it. They stand
+  // where they really stand, so they may be close to a road or a wall.
+  for (let i = 0; i < MAP.trees.length; i += 3) {
+    const tall = MAP.trees[i + 2] || 12;
+    add(
+      MAP.trees[i],
+      MAP.trees[i + 1],
+      clamp(tall * 0.12, 1, 3),
+      clamp(tall * 0.35, 3.5, 9.5),
+      1.5
+    );
   }
 }
 const HEDGES = new Path2D();
@@ -5054,6 +5065,7 @@ function paintGround(g, x0, y0, x1, y1) {
       }
     }
   }
+  paintYards(g, x0, y0);
   for (const a of AREAS) {
     if (seen(a) && a.k === 'pitch') {
       drawPitch(g, a);
@@ -5169,6 +5181,41 @@ const TILE_LIMIT = 40;
 
 // Tile canvases by position, least recently used first.
 const groundTiles = new Map();
+
+// Paved and gravelled ground in the village, read off the aerial photo: a
+// see-through picture with one pixel per metre. Tiles painted before it has
+// loaded are painted again.
+const yardMask = new Image();
+yardMask.onload = () => groundTiles.clear();
+yardMask.src = MAP.yards;
+const yardTile = canvas(TILE_PX, TILE_PX);
+
+/**
+ * Paints the yards of one ground tile: the picture cuts their shape out of
+ * the paving.
+ * @param {!CanvasRenderingContext2D} g
+ * @param {number} x0 The tile's corner, in metres.
+ * @param {number} y0
+ */
+function paintYards(g, x0, y0) {
+  if (!yardMask.naturalWidth) {
+    return;
+  }
+  const y = yardTile.getContext('2d');
+  y.setTransform(1, 0, 0, 1, 0, 0);
+  y.globalCompositeOperation = 'source-over';
+  y.clearRect(0, 0, TILE_PX, TILE_PX);
+  y.drawImage(yardMask, x0, y0, TILE_M, TILE_M, 0, 0, TILE_PX, TILE_PX);
+  // Scaling up leaves a soft rim a metre wide; laying the picture over
+  // itself twice makes it crisp.
+  y.drawImage(yardTile, 0, 0);
+  y.drawImage(yardTile, 0, 0);
+  y.globalCompositeOperation = 'source-in';
+  y.setTransform(PX_PER_M, 0, 0, PX_PER_M, -x0 * PX_PER_M, -y0 * PX_PER_M);
+  y.fillStyle = textures.yard;
+  y.fillRect(x0, y0, TILE_M, TILE_M);
+  g.drawImage(yardTile, x0, y0, TILE_M, TILE_M);
+}
 
 /**
  * The ground tile at a tile position, painted on first use.
@@ -6686,6 +6733,7 @@ window.GTW = {
   AREAS,
   BUILD,
   PROPS: streetProps,
+  TREES,
   TYPES,
   pad,
   audio,
@@ -6758,6 +6806,10 @@ if (location.search.includes('selftest')) {
       a && a[0] === 1 && Math.abs(a[2] - 0.5) < 1e-9,
     'inside a building: pushed out through the nearest wall':
       b && b[0] === 1 && Math.abs(b[2] - 2) < 1e-9,
+    'the map has its surveyed trees, roof colours and yards':
+      TREES.length > 4000 &&
+      BUILD.filter(b => b.c).length > 1000 &&
+      MAP.yards.length > 1000,
     'every mission place exists': [...used].every(
       k => SPOT[k] || console.error('unknown place', k)
     ),

@@ -1,18 +1,29 @@
 #!/usr/bin/env python3
 """Bake OpenStreetMap data for Wachenroth into map.js.
 
-Usage: python3 tools/osm2map.py [cached-overpass.json [lod2-tile.gml ...]] > map.js
+Usage: python3 tools/osm2map.py [cached-overpass.json [more files ...]] > map.js
 
-The buildings come from the state's 3D building model when its tiles are given: more buildings than OSM has, each
-with a measured height and roof shape. The four tiles for Wachenroth are 622_5510, 624_5510, 622_5512 and 624_5512
-from https://download1.bayernwolke.de/a/lod2/citygml/<tile>.gml (Bayerische Vermessungsverwaltung, CC BY 4.0).
+More files add what OSM does not know. All of them are open data of the Bayerische Vermessungsverwaltung
+(www.geodaten.bayern.de, CC BY 4.0) and are told apart by their ending:
+
+  *.gml   3D building tiles: more buildings than OSM has, each with a measured height and roof shape. Wachenroth is on
+          622_5510, 624_5510, 622_5512 and 624_5512 of https://download1.bayernwolke.de/a/lod2/citygml/<tile>.gml
+  *.gpkg  single trees with their height: https://geodaten.bayern.de/odd/m/8/baeume3d/data/125021_baeume.gpkg
+  *.png   the aerial photo of exactly the map, one pixel per metre: roof colours and paved yards. From
+          https://geoservices.bayern.de/od/wms/dop/v1/dop20?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&LAYERS=by_dop20c
+          &STYLES=&SRS=EPSG:4326&BBOX=10.6950,49.7440,10.7300,49.7590&WIDTH=2517&HEIGHT=1668&FORMAT=image/png
 """
+import base64
+import itertools
 import json
 import math
+import sqlite3
+import struct
 import sys
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
+import zlib
 
 S, W, N, E = 49.7440, 10.6950, 49.7590, 10.7300
 MARGIN = 80  # metres of road kept outside the playable world
@@ -37,6 +48,8 @@ ZONE = {'ind': 'i', 'com': 'm', 'yard': 'y'}  # land use -> kind of the building
 # ALKIS roof codes -> flat, gable or hip. A lean-to roof reads as flat from above; mixed forms are left to the game.
 ROOF = {'1000': 'f', '2100': 'f', '2200': 'f', '3100': 'g', '3200': 'p', '3300': 'p', '3400': 'p', '3500': 'p'}
 GARAGE = ('31001_2463', '31001_2523')  # garages and transformer houses
+UTM = (621900, 624800, 5511300, 5513500)  # the map with a margin, in UTM32: west, east, south, north
+PAVED = ('resi', 'yard')  # where the photo decides between lawn and paved ground
 
 # Places the missions use, as lat/lon read off OpenStreetMap (name tags, house numbers).
 POIS = {
@@ -77,6 +90,19 @@ POIS = {
     'fairground': (49.74950, 10.71430),  # Kerwa tent in the Frühmessgarten off Kirchstraße
     'linsner': (49.75086, 10.71445),   # Gasthof Linsner, Hauptstraße 7
 }
+
+# Read off the state's aerial photo, as lat/lon, because no map has them: the five grain silos of the Lagerhaus, and
+# two patches outside the village where the photo decides what is bare ground: the bike track and the car park of
+# the sports ground.
+SILOS = [(49.751396, 10.719124), (49.751418, 10.719184), (49.751353, 10.719138), (49.751311, 10.719164),
+         (49.751316, 10.719235)]
+BARE = [
+    [(49.755871, 10.701037), (49.755806, 10.701312), (49.755563, 10.701688), (49.755385, 10.702338),
+     (49.755191, 10.702288), (49.755142, 10.701838), (49.755239, 10.701537), (49.755433, 10.701187),
+     (49.75566, 10.701024)],
+    [(49.755312, 10.701187), (49.755223, 10.701412), (49.755029, 10.701187), (49.754899, 10.701162),
+     (49.754794, 10.701099), (49.754907, 10.700724), (49.755142, 10.700937)],
+]
 
 KX = 111320 * math.cos(math.radians((S + N) / 2))
 KY = 111200
@@ -204,6 +230,121 @@ def lod2(paths):
     return out
 
 
+def trees_of(path):
+    """The state's single trees (a GeoPackage, which is SQLite) as x, y and height in whole metres."""
+    db = sqlite3.connect(f'file:{path}?mode=ro', uri=True)
+    table = db.execute('select table_name from gpkg_contents').fetchone()[0]
+    rows = db.execute(f'select r.minx, r.miny, t.baumhoehe from "rtree_{table}_geom" r join "{table}" t '
+                      'on t.fid = r.id where r.minx > ? and r.maxx < ? and r.miny > ? and r.maxy < ?', UTM)
+    out = []
+    for east, north, tall in rows:
+        p = xy(latlon(east, north))
+        if inside(p, 60):
+            out.append((round(p[0]), round(p[1]), round(tall)))
+    return sorted(out)
+
+
+def read_png(path):
+    """An 8-bit RGB or RGBA PNG as (width, height, bytes per pixel, pixel bytes)."""
+    data = open(path, 'rb').read()
+    at, packed = 8, []
+    while at < len(data):
+        size, kind = struct.unpack('>I4s', data[at:at + 8])
+        if kind == b'IHDR':
+            w, h, depth, colour, _, _, lace = struct.unpack('>IIBBBBB', data[at + 8:at + 21])
+            assert depth == 8 and colour in (2, 6) and not lace, 'the photo must be a plain 8-bit RGB(A) PNG'
+        elif kind == b'IDAT':
+            packed.append(data[at + 8:at + 8 + size])
+        at += size + 12
+    n = 3 if colour == 2 else 4
+    raw, line = zlib.decompress(b''.join(packed)), w * n
+    out, up = bytearray(), bytearray(line)
+    for y in range(h):
+        how, row = raw[y * (line + 1)], bytearray(raw[y * (line + 1) + 1:(y + 1) * (line + 1)])
+        if how == 1:
+            for i in range(n, line):
+                row[i] = (row[i] + row[i - n]) & 255
+        elif how == 2:
+            row = bytearray((a + b) & 255 for a, b in zip(row, up))
+        elif how == 3:
+            for i in range(line):
+                row[i] = (row[i] + ((row[i - n] if i >= n else 0) + up[i]) // 2) & 255
+        elif how == 4:
+            for i in range(line):
+                a, b, c = row[i - n] if i >= n else 0, up[i], up[i - n] if i >= n else 0
+                pa, pb, pc = abs(b - c), abs(a - c), abs(a + b - 2 * c)
+                row[i] = (row[i] + (a if pa <= pb and pa <= pc else b if pb <= pc else c)) & 255
+        out += row
+        up = row
+    return w, h, n, out
+
+
+def spans(pts, y):
+    """Where the row of pixels y crosses a polygon: [from, to) pairs of pixel columns."""
+    xs = sorted(a[0] + (y + .5 - a[1]) * (b[0] - a[0]) / (b[1] - a[1])
+                for a, b in zip(pts, pts[1:] + pts[:1]) if (a[1] > y + .5) != (b[1] > y + .5))
+    cut = [(max(0, math.ceil(a - .5)), min(WW, math.ceil(b - .5))) for a, b in zip(xs[::2], xs[1::2])]
+    return [(a, b) for a, b in cut if a < b]
+
+
+def roofs(buildings, photo):
+    """Read the colour of every roof off the photo.
+
+    ponytail: solar panels are not read. At one metre per pixel they look like a slate roof or a slope in shadow;
+    telling them apart needs the photo at its full 20 cm.
+    """
+    w, h, n, px = photo
+    for b in buildings:
+        pts = corners(b)
+        rows = range(max(0, int(min(p[1] for p in pts))), min(h, int(max(p[1] for p in pts)) + 1))
+        seen = [px[(y * w + x) * n:(y * w + x) * n + 3]
+                for y in rows for x0, x1 in spans(pts, y) for x in range(x0, x1)]
+        if len(seen) < 6 or b['k'] in 'os':
+            continue
+        seen.sort(key=sum)
+        r, g, bl = seen[len(seen) // 2]
+        warm, light = r - bl, (r + g + bl) / 3
+        # orange, red or brown tiles; weathered grey-brown; then the greys: light, dark or bluish (slate), in between
+        b['c'] = 'o' if warm >= 38 else 'r' if warm >= 22 else ('w' if light >= 145 else 'b') if warm >= 8 \
+            else 'l' if light >= 165 else 'd' if light < 125 or warm < -8 else 'g'
+
+
+def yards(areas, photo):
+    """Paved, gravelled and bare ground inside the village, read off the photo: a see-through PNG, 1 px per metre.
+
+    Everything that is neither green nor in deep shadow counts, roofs and roads too: the game paints over those.
+    The areas come in the order the game paints them, so a car park or a pitch inside the village stays as it is.
+    """
+    w, h, n, px = photo
+    rows = [bytearray(w) for _ in range(h)]
+    bare = [{'k': PAVED[0], 'p': flat(xy({'lat': lat, 'lon': lon}) for lat, lon in patch)} for patch in BARE]
+    for a in areas + bare:
+        pts = list(zip(a['p'][::2], a['p'][1::2]))
+        for y in range(max(0, int(min(p[1] for p in pts))), min(h, int(max(p[1] for p in pts)) + 1)):
+            for x0, x1 in spans(pts, y):
+                at, to = (y * w + x0) * n, (y * w + x1) * n
+                rows[y][x0:x1] = bytes(2 * g - r - b < 14 and r + g + b > 285 for r, g, b in
+                                       zip(px[at:to:n], px[at + 1:to:n], px[at + 2:to:n])) \
+                    if a['k'] in PAVED else bytes(x1 - x0)
+    # A pixel stays when most of the 5 x 5 around it agree: no specks from cars and garden chairs.
+    wide = []
+    for row in rows:
+        acc = [0, 0, 0] + list(itertools.accumulate(row)) + [sum(row)] * 2
+        wide.append([b - a for a, b in zip(acc, acc[5:])])
+    wide = [[0] * w] * 2 + wide + [[0] * w] * 2
+    lines = []
+    for y in range(h):
+        bits = ''.join('1' if sum(v) > 12 else '0' for v in zip(*wide[y:y + 5]))
+        lines.append(b'\0' + int(bits.ljust(-(-w // 8) * 8, '0'), 2).to_bytes(-(-w // 8), 'big'))
+
+    def chunk(kind, body):
+        return struct.pack('>I', len(body)) + kind + body + struct.pack('>I', zlib.crc32(kind + body))
+    png = (b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', w, h, 1, 3, 0, 0, 0))
+           + chunk(b'PLTE', bytes(6)) + chunk(b'tRNS', b'\0\xff') + chunk(b'IDAT', zlib.compress(b''.join(lines), 9))
+           + chunk(b'IEND', b''))
+    return 'data:image/png;base64,' + base64.b64encode(png).decode()
+
+
 def outers(rel):
     """Stitch a multipolygon's outer member ways into closed rings."""
     parts = [m['geometry'] for m in rel['members'] if m['type'] == 'way' and m['role'] == 'outer' and m.get('geometry')]
@@ -237,7 +378,7 @@ for e in els:
     t = e.get('tags', {})
     if e['type'] == 'node':
         if t.get('natural') == 'tree' and inside(xy(e), 20):
-            trees.append(xy(e))
+            trees.append((*xy(e), 0))  # x, y and a height of 0 for "not known"
         continue
     rings = outers(e) if e['type'] == 'relation' else [e.get('geometry') or []]
     hw, ww = t.get('highway'), t.get('waterway')
@@ -306,10 +447,18 @@ for e in els:
             if k in zones:
                 zones[k].append(pts)
 
-if len(sys.argv) > 2:
+for lat, lon in SILOS:
+    x, y = xy({'lat': lat, 'lon': lon})
+    lid = [(round(x + 2.3 * math.cos(i * math.pi / 5), 1), round(y + 2.3 * math.sin(i * math.pi / 5), 1))
+           for i in range(10)]
+    buildings.append({'p': flat(lid), 'h': 12, 'a': 17, 'k': 's', 'look': {'wall': '#d6d8da'}})  # pale steel
+tiles = [a for a in sys.argv[2:] if a.endswith('.gml')]
+photo = next((read_png(a) for a in sys.argv[2:] if a.endswith('.png')), None)
+assert not photo or photo[:2] == (WW, WH), f'the photo must be {WW} x {WH} pixels'
+if tiles:
     # Build on the state's buildings. OSM adds what it knows better: that something is a church, a garage or an
     # open roof, the round silos, and the few buildings the state does not have.
-    drawn, buildings = buildings, lod2(sys.argv[2:])
+    drawn, buildings = buildings, lod2(tiles)
     for b in drawn:
         pts, c = corners(b), centre(b)
         hits = [o for o in buildings if math.dist(c, centre(o)) < 150 and pip(centre(o), pts)]
@@ -329,6 +478,11 @@ for b in buildings:
         c = centre(b)
         b['k'] = next((ZONE[z] for z in ZONE if any(pip(c, poly) for poly in zones[z])), b['k'])
 areas.sort(key=lambda a: -a.pop('a'))
+if photo:
+    roofs(buildings, photo)
+for path in sys.argv[2:]:
+    if path.endswith('.gpkg'):
+        trees += trees_of(path)
 
 # Through traffic: drop cul-de-sacs so AI cars never need a three-point turn.
 exits = {i for i, p in enumerate(nodes) if not inside(p)}
@@ -356,9 +510,11 @@ for k, p in pois.items():
 
 out = {'w': WW, 'h': WH, 'roads': roads, 'nodes': flat(nodes), 'edges': flat(edges), 'areas': areas,
        'buildings': buildings, 'trees': flat(trees), 'hedges': hedges, 'fences': fences, 'pois': pois}
+if photo:
+    out['yards'] = yards(areas, photo)
 print('// Generated by tools/osm2map.py. Map data (c) OpenStreetMap contributors, ODbL.'
-      + (' Buildings: Bayerische Vermessungsverwaltung, www.geodaten.bayern.de, CC BY 4.0, simplified.'
-         if len(sys.argv) > 2 else ''))
+      + (' Buildings, trees, roof colours and yards: Bayerische Vermessungsverwaltung, www.geodaten.bayern.de,'
+         ' CC BY 4.0, simplified.' if len(sys.argv) > 2 else ''))
 print('export const MAP = ' + json.dumps(out, separators=(',', ':'), ensure_ascii=False) + ';')
 print(f'{len(roads)} roads, {len(nodes)} nodes, {len(buildings)} buildings, {len(areas)} areas, {len(trees)} trees, '
       f'{len(hedges)} hedges, {WW}x{WH} m', file=sys.stderr)
