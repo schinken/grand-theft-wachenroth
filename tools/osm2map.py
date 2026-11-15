@@ -143,8 +143,42 @@ SPLIT = [
 
 # How single buildings look where the photo shows it better than any rule: a point in the building, and what it
 # gets. The garage of Schulstraße 22 is covered with solar panels.
+#
+# With 'faces' the roof is drawn face by face as the survey measured it. 'slopes' gives the faces that look some way
+# (degrees from north, clockwise) a roof of their own, 'panels' lays things on the faces: lat, lon, metres along and
+# across the building, and True for a roof window or a colour for a dormer. 'chimney' is a lat, lon.
+# The neighbours of Bernhard's garage, as the state's and Google's photos show them:
+NEIGHBOURS = [
+    # Kleinwachenroth 48: dark slope to the north-east with three dormers, two dormers to the south-west
+    (49.745996, 10.719213, {'faces': 1, 'look': {'roof': 'tile3'}, 'slopes': {47: 'slate'},
+                            'panels': [(49.746038, 10.719219, 1.7, 1.7, '#8a5048'),
+                                       (49.746015, 10.719253, 1.7, 1.7, '#8a5048'),
+                                       (49.745994, 10.719284, 1.7, 1.7, '#8a5048'),
+                                       (49.745996, 10.719131, 1.4, 1.4, '#6e3a2c'),
+                                       (49.745975, 10.719164, 1.4, 1.4, '#6e3a2c')],
+                            'chimney': (49.745949, 10.719150)}),
+    (49.745587, 10.719273, {'faces': 1, 'look': {'roof': 'tile1'}}),  # the barn beside the garage
+    # Kleinwachenroth 54: grey-brown, four roof windows to the north, two to the south
+    (49.745673, 10.719748, {'faces': 1, 'look': {'roof': 'tile5'},
+                            'panels': [(49.745701, 10.719690, .6, .9, True), (49.745705, 10.719741, .6, .9, True),
+                                       (49.745710, 10.719784, .6, .9, True), (49.745711, 10.719818, .6, .9, True),
+                                       (49.745652, 10.719800, .9, .9, True), (49.745652, 10.719825, .9, .9, True)],
+                            'chimney': (49.745663, 10.719768)}),
+    (49.745556, 10.719609, {'faces': 1, 'look': {'roof': 'tile4'}}),  # the house across the road
+    (49.745481, 10.719465, {'faces': 1, 'look': {'roof': 'tile1'}}),  # its barn
+    (49.745407, 10.719491, {'look': {'roof': 'solar'}}),  # and the sheds behind it
+    (49.745394, 10.719331, {'look': {'roof': 'tile1'}}),
+    (49.745340, 10.719338, {'look': {'roof': 'tile1'}}),
+]
 LOOKS = [
     (49.753529, 10.714888, {'look': {'roof': 'solar', 'flat': True}}),
+] + NEIGHBOURS
+
+# Buildings neither the survey nor OSM has, read off the photos: what they are, and their corners as lat/lon. The red
+# shed north-west of Bernhard's garage.
+SHEDS = [
+    ({'h': 2.6, 'k': 'd', 'r': 'p', 't': 1.6, 'look': {'roof': 'tile1'}},
+     [(49.745848, 10.719196), (49.745817, 10.719262), (49.745781, 10.719192), (49.745811, 10.719127)]),
 ]
 
 # Garden pools, turquoise on the same photo: lat, lon, and how many metres they measure east-west and north-south.
@@ -325,6 +359,10 @@ def lod2(paths):
             # A roof drawn flat lies at its middle height: a lean-to has no ridge.
             wall = eaves + (rise / 2 if roof == 'f' else 0)
             b = {'p': flat(pts), 'h': round(max(wall, 2.2), 1), 'a': round(a), 'k': k}
+            # The faces as surveyed, for the few roofs drawn face by face (see LOOKS): where they look, and their
+            # corners as UTM east, north and height above the sea, with the ground's height.
+            b['_f'] = ([(f[3], f[4].find('.//g:posList', ns).text) for f in faces if f[4] is not None],
+                       min(float(z) for z in v[2::3]))
             if roof:
                 b['r'] = roof
             if roof != 'f' and k != 'o' and rise >= .5:
@@ -344,6 +382,35 @@ def lod2(paths):
                     spire = {'k': 't', 't': round(tip - foot, 1)} if k == 'c' else {'k': k, 'r': 'f'}
                     out.append({'p': flat(top), 'h': round(foot if k == 'c' else (foot + tip) / 2, 1),
                                 'a': round(shoelace(top)), **spire})
+    return out
+
+
+def survey_faces(raw, slopes, panels):
+    """The surveyed roof faces of one building as the game draws them: corners x, y and height above the ground, a
+    roof of their own where slopes asks for it, and the panels w that lie on them."""
+    looks, ground = raw
+    out = []
+    for look, text in looks:
+        v = [float(c) for c in text.split()]
+        pts = []
+        for east, north, z in zip(v[::3], v[1::3], v[2::3]):
+            p = (*xy(latlon(east, north)), round(z - ground, 1))
+            if not pts or math.dist(p, pts[-1]) > .15:
+                pts.append(p)
+        while len(pts) > 2 and math.dist(pts[0], pts[-1]) <= .15:
+            pts.pop()
+        if len(pts) < 3 or abs(shoelace([q[:2] for q in pts])) < .3:
+            continue  # a sliver where faces meet
+        face = {'p': flat(pts)}
+        own = [r for at, r in slopes.items() if look >= 0 and abs((look - at + 180) % 360 - 180) < 30]
+        if own:
+            face['r'] = own[0]
+        out.append(face)
+    for lat, lon, along, across, kind in panels:
+        x, y = xy({'lat': lat, 'lon': lon})
+        on = [f for f in out if pip((x, y), list(zip(f['p'][::3], f['p'][1::3])))]
+        assert on, f'the panel at {lat}, {lon} lies on no face'
+        on[0].setdefault('w', []).append([x, y, along, across, kind])
     return out
 
 
@@ -807,6 +874,9 @@ for lat, lon, pieces in SPLIT:
         for shape, corner_list in pieces:
             pts = ring([{'lat': la, 'lon': lo} for la, lo in corner_list])
             buildings.append({'p': flat(pts), 'a': round(shoelace(pts)), 'k': whole['k'], **shape})
+for shape, corner_list in SHEDS:
+    pts = ring([{'lat': la, 'lon': lo} for la, lo in corner_list])
+    buildings.append({'p': flat(pts), 'a': round(shoelace(pts)), **shape})
 for b in buildings:
     if b['k'] in 'hy':
         c = centre(b)
@@ -819,6 +889,13 @@ for lat, lon, changes in LOOKS:
     for b in buildings:
         if pip(spot, corners(b)):
             b.update(changes)
+for b in buildings:
+    raw, faces = b.pop('_f', None), b.pop('faces', 0)
+    slopes, panels, chimney = b.pop('slopes', {}), b.pop('panels', []), b.pop('chimney', None)
+    if faces and raw:
+        b['f'] = survey_faces(raw, slopes, panels)
+    if chimney:
+        b['ch'] = xy({'lat': chimney[0], 'lon': chimney[1]})
 if plan:
     drawn = len(fences), len(hedges)
     more = borders(plan, photo, buildings, areas, roads)

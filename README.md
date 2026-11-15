@@ -109,7 +109,10 @@ The village is built from open data:
 - **Fences and hedges:** along the parcel borders of the cadastre.
 
 A few buildings that matter to the story are modelled by hand: Flo's house, the
-town hall with its square, and Johann-Philipp-Ring 14 with its garden.
+town hall with its square, and Johann-Philipp-Ring 14 with its garden. The
+neighbours of Bernhard's garage get their roofs face by face as the survey
+measured them, with the colours, dormers, roof windows and solar panels the
+photos show.
 
 Map data © OpenStreetMap contributors, ODbL. Buildings, trees, aerial photo and
 parcels: Bayerische Vermessungsverwaltung – www.geodaten.bayern.de, CC BY 4.0,

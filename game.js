@@ -2012,13 +2012,7 @@ const ROOFS = {
  * @param {string} wall The colour of the walls.
  */
 function buildRoof(b, spec, wall) {
-  // u and v start at the south-west corner of the outline.
-  const lp = b.lp;
-  let sw = 0;
-  for (let i = 0; i < lp.length; i += 2) {
-    sw = lp[i] - lp[i + 1] < lp[sw] - lp[sw + 1] ? i : sw;
-  }
-  b.at = [lp[sw], lp[sw + 1]];
+  b.at = southWest(b.lp);
   if (!spec.slopes) {
     return; // the roof the survey gives it is right
   }
@@ -2046,8 +2040,8 @@ function buildRoof(b, spec, wall) {
       wall: shade(wall, 0.78 - 0.22 * shadow(du, -dv)),
     })
   );
-  for (const [q, ...panels] of spec.slopes) {
-    const f = face(q, {});
+  for (const [n, [q, ...panels]] of spec.slopes.entries()) {
+    const f = face(q, {roof: spec.roofs && textures[spec.roofs[n]]});
     const p = f.p;
     // The three corners that span the face best fix its texture, and tell
     // which way it falls.
@@ -2097,6 +2091,113 @@ function buildRoof(b, spec, wall) {
   b.h = spec.eaves;
   b.rh = spec.ridge - spec.eaves;
   b.chimney = spec.chimney && [au + spec.chimney[0], av - spec.chimney[1]];
+}
+
+/**
+ * Where u and v of a modelled roof start: the south-west corner of the
+ * outline, in the building's frame.
+ * @param {!Array<number>} lp
+ * @return {!Array<number>}
+ */
+function southWest(lp) {
+  let sw = 0;
+  for (let i = 0; i < lp.length; i += 2) {
+    sw = lp[i] - lp[i + 1] < lp[sw] - lp[sw + 1] ? i : sw;
+  }
+  return [lp[sw], lp[sw + 1]];
+}
+
+/**
+ * A roof as the survey measured it, face by face, in the form ROOFS uses.
+ * Where a face meets the outline above the eaves, a gable wall fills the gap
+ * down to them.
+ * @param {!Building} b One with faces f: corners x, y, z on the map, maybe
+ *     a roof r of its own and panels w [x, y, along, across, window or
+ *     colour], and maybe a chimney ch.
+ * @return {!Object}
+ */
+function surveyedRoof(b) {
+  const [au, av] = southWest(b.lp);
+  const frame = (x, y) => [
+    (x - b.mx) * b.ca + (y - b.my) * b.sa - au,
+    av - ((y - b.my) * b.ca - (x - b.mx) * b.sa),
+  ];
+  const zs = b.f.flatMap(f => f.p.filter((v, i) => i % 3 === 2));
+  const eaves = Math.min(...zs);
+  const outline = [];
+  for (let i = 0; i < b.lp.length; i += 2) {
+    outline.push(b.lp[i] - au, av - b.lp[i + 1]);
+  }
+  // How far a point lies from the outline edge that starts at corner i
+  const off = (i, u, v) => {
+    const j = (i + 2) % outline.length;
+    const eu = outline[j] - outline[i];
+    const ev = outline[j + 1] - outline[i + 1];
+    const t = clamp(
+      ((u - outline[i]) * eu + (v - outline[i + 1]) * ev) / (eu * eu + ev * ev),
+      0,
+      1
+    );
+    return Math.hypot(outline[i] + eu * t - u, outline[i + 1] + ev * t - v);
+  };
+  const gables = [];
+  const slopes = b.f.map(f => {
+    const q = [];
+    for (let i = 0; i < f.p.length; i += 3) {
+      q.push(...frame(f.p[i], f.p[i + 1]), f.p[i + 2]);
+    }
+    const n = q.length / 3;
+    const cu = q.reduce((s, v, i) => (i % 3 ? s : s + v), 0) / n;
+    const cv = q.reduce((s, v, i) => (i % 3 === 1 ? s + v : s), 0) / n;
+    for (let k = 0; k < q.length; k += 3) {
+      const [u0, v0, z0] = q.slice(k, k + 3);
+      const [u1, v1, z1] = q.slice(
+        (k + 3) % q.length,
+        ((k + 3) % q.length) + 3
+      );
+      const on = outline.some(
+        (x, i) => i % 2 === 0 && off(i, u0, v0) < 0.4 && off(i, u1, v1) < 0.4
+      );
+      if (!on || Math.max(z0, z1) < eaves + 0.15) {
+        continue;
+      }
+      // The wall looks away from the middle of the face.
+      let du = v1 - v0;
+      let dv = u0 - u1;
+      if (du * ((u0 + u1) / 2 - cu) + dv * ((v0 + v1) / 2 - cv) < 0) {
+        du = -du;
+        dv = -dv;
+      }
+      const l = Math.hypot(du, dv);
+      const wall = [u0, v0, z0, u1, v1, z1];
+      if (z1 > eaves + 0.05) {
+        wall.push(u1, v1, eaves);
+      }
+      if (z0 > eaves + 0.05) {
+        wall.push(u0, v0, eaves);
+      }
+      gables.push([du / l, dv / l, wall]);
+    }
+    const panels = (f.w || []).map(([x, y, along, across, kind]) => {
+      const [u, v] = frame(x, y);
+      return [
+        u - along / 2,
+        v - across / 2,
+        u + along / 2,
+        v + across / 2,
+        kind,
+      ];
+    });
+    return [q, ...panels];
+  });
+  return {
+    eaves,
+    ridge: Math.max(...zs),
+    slopes,
+    gables,
+    roofs: b.f.map(f => f.r),
+    chimney: b.ch && frame(b.ch[0], b.ch[1]),
+  };
 }
 
 /**
@@ -2488,7 +2589,7 @@ function prepBuilding(b, r) {
     );
     b.signW = b.signH * aspect;
   }
-  const spec = ROOFS[b.poi];
+  const spec = ROOFS[b.poi] || (b.f && surveyedRoof(b));
   if (spec) {
     buildRoof(b, spec, base);
   }
@@ -2732,7 +2833,8 @@ const treeGrid = grid();
   }
   for (const b of BUILD) {
     // Fruit trees in the modelled gardens
-    for (const [u, v, size, tall] of (b.at && ROOFS[b.poi].trees) || []) {
+    for (const [u, v, size, tall] of (ROOFS[b.poi] && ROOFS[b.poi].trees) ||
+      []) {
       const [x, y] = fromFrame(b, u, v);
       add(x, y, size, tall, 1);
     }
@@ -2904,7 +3006,7 @@ function driveSpot(b) {
 }
 const HOME = BUILD.find(b => b.poi === 'hq');
 // The modelled buildings that have a ground of their own
-const MODELLED = BUILD.filter(b => b.at && ROOFS[b.poi].ground);
+const MODELLED = BUILD.filter(b => ROOFS[b.poi] && ROOFS[b.poi].ground);
 
 /**
  * Index of the junction closest to a point.
@@ -7001,7 +7103,7 @@ function byTile(lines) {
 function borderTiles(kind) {
   let lines = MAP[kind];
   for (const b of BUILD) {
-    const spec = b.at && ROOFS[b.poi];
+    const spec = ROOFS[b.poi];
     if (!spec || !spec.plot) {
       continue;
     }
@@ -7611,9 +7713,13 @@ function drawPlanes(b, lx, ly, s, s2) {
       face[i * 4 + 2] = seen[(k / 3) * 2];
       face[i * 4 + 3] = seen[(k / 3) * 2 + 1];
     }
-    pinPattern(b.roof, f.turned);
-    ctx.fillStyle = b.roof;
+    // A face may have a roof of its own; the textures are shared, so it
+    // goes back to rest afterwards.
+    const roof = f.roof || b.roof;
+    pinPattern(roof, f.turned);
+    ctx.fillStyle = roof;
     ctx.fill();
+    roof.setTransform(PATTERN_HOME);
     ctx.fillStyle = f.tint;
     ctx.fill();
     ctx.stroke();
@@ -7639,7 +7745,9 @@ function drawPlanes(b, lx, ly, s, s2) {
         (m.b * u0 + m.d * v1) * q + m.f
       );
       ctx.closePath();
-      ctx.fillStyle = glass ? '#9cc3d9' : '#1b2a47';
+      // A colour instead of glass is a dormer.
+      const dormer = typeof glass === 'string';
+      ctx.fillStyle = dormer ? glass : glass ? '#9cc3d9' : '#1b2a47';
       ctx.fill();
       for (let u = u0 + 1.1; u < u1 - 0.3 && !glass; u += 1.1) {
         ctx.moveTo(
@@ -7651,14 +7759,17 @@ function drawPlanes(b, lx, ly, s, s2) {
           (m.b * u + m.d * v1) * q + m.f
         );
       }
-      ctx.strokeStyle = glass ? '#e8e6df' : '#4a6a9c';
+      ctx.strokeStyle = dormer
+        ? 'rgba(0,0,0,.35)'
+        : glass
+          ? '#e8e6df'
+          : '#4a6a9c';
       ctx.lineWidth = 0.12;
       ctx.stroke();
       ctx.strokeStyle = 'rgba(0,0,0,.5)';
       ctx.lineWidth = 0.3;
     }
   }
-  b.roof.setTransform(PATTERN_HOME);
   if (b.chimney) {
     // a little higher than the ridge
     const ss = 1 / (1 / s + (1 / s2 - 1 / s) * 1.15);
@@ -9209,10 +9320,18 @@ if (location.search.includes('selftest')) {
     "Flo's house has its own roof: slopes, gable walls and solar panels":
       HOME.planes.filter(f => f.wall).length === HOME_GABLES.length &&
       HOME.planes.filter(f => !f.wall).length === HOME_SLOPES.length &&
-      BUILD.filter(b => b.at).length === Object.keys(ROOFS).length &&
+      BUILD.filter(b => ROOFS[b.poi]).length === Object.keys(ROOFS).length &&
       ROADS.lane.length === 1 &&
       HOME.planes.every(f => f.p.every(v => v > -40 && v < 40)) &&
       HOME.planes.filter(f => f.pv && f.pv.length).length === 2,
+    "the garage's neighbours have the surveyed roofs, closed by gable walls":
+      BUILD.filter(b => b.f).length === 5 &&
+      BUILD.filter(b => b.f).every(
+        b =>
+          b.planes.filter(f => !f.wall).length === b.f.length &&
+          b.planes.filter(f => f.wall).length >= 2 &&
+          b.planes.every(f => f.p.every(v => v > -40 && v < 40))
+      ),
     'a pedestrian who is hit flies, lands and runs off, unhurt': (() => {
       const p = {x: 50, y: 50, a: 0, fly: 0, flyT: 1, vx: 0, vy: 0};
       Object.assign(p, {spin: 0, spinV: 0, flee: 0, t: 0});
