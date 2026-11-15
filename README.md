@@ -82,6 +82,7 @@ At least not that we know of.
 | Keyboard       | Phone       | Does               |
 | -------------- | ----------- | ------------------ |
 | Arrows or WASD | Thumb stick | Drive or walk      |
+| Shift          | RENNEN      | Run, on foot       |
 | Space          | BREMSE      | Handbrake          |
 | F or Enter     | EIN/AUS     | Get in or out      |
 | H              | HUPE        | Horn               |
