@@ -90,7 +90,7 @@ POIS = {
     'adler': (49.75025, 10.71620),     # Schwarzer Adler, Hauptstraße 25
     'inn': (49.74986, 10.71655),      # Grüner Baum, Hauptstraße 30
     'maras': (49.74994, 10.71768),     # Maras Marktschänke, Hauptstraße 38
-    'butcher': (49.75211, 10.71376),   # Kellerstraße 1
+    'butcher': (49.752165, 10.713714),   # Kellerstraße 1, in the house: its plot is painted
     'pond': (49.74498, 10.71090),    # carp pond
     'farmyard': (49.74890, 10.71823),       # farmyard by the old railway
     'playground': (49.75227, 10.71083),
@@ -172,15 +172,22 @@ NEIGHBOURS = [
     (49.745407, 10.719491, {'look': {'roof': 'solar'}}),  # and the sheds behind it
     (49.745394, 10.719331, {'look': {'roof': 'tile1'}}),
     (49.745340, 10.719338, {'look': {'roof': 'tile1'}}),
+]
+# The same for the buildings at the places of the jobs.
+LOOKS_PLACES = [
     # The long hall at Toxicity: dark roofs with solar panels on the slopes to the south-west, the high back part brown
     (49.750799, 10.712199, {'faces': 1, 'look': {'roof': 'slate'},
                             'panels': [(49.750776, 10.712192, 13, 4, False)]}),
     (49.750745, 10.712407, {'faces': 1, 'look': {'roof': 'slate'}, 'slopes': {296: 'tile3', 116: 'tile3'},
                             'panels': [(49.750717, 10.712396, 16, 4.5, False)]}),
+    # Metzgerei Braun: dark to the north, grey to the south with two solar arrays
+    (49.752165, 10.713714, {'faces': 1, 'look': {'roof': 'tile6'}, 'slopes': {19: 'slate'},
+                            'panels': [(49.752162, 10.713647, 6.8, 4, False), (49.752138, 10.713799, 7.5, 4, False)],
+                            'chimney': (49.752198, 10.713799)}),
 ]
 LOOKS = [
     (49.753529, 10.714888, {'look': {'roof': 'solar', 'flat': True}}),
-] + NEIGHBOURS
+] + NEIGHBOURS + LOOKS_PLACES
 
 # Buildings neither the survey nor OSM has, read off the photos: what they are, and their corners as lat/lon. The red
 # shed north-west of Bernhard's garage.
