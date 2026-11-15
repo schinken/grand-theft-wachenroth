@@ -985,6 +985,173 @@ const ROOF_BY_COLOUR = {
 };
 const FLAT_BY_COLOUR = {g: ['flat'], l: ['flatLight'], d: ['tar']};
 
+// Flo's house, Johann-Philipp-Ring 9, as the survey and the aerial photos
+// show it: a main block and a lower wing to the east. Both have a cross gable
+// to the street and one to the garden; the garden one of the main block
+// stands on a bay. In metres: u runs east along the street front from the
+// south-west corner, v north from it, z up from the ground.
+const HOME_EAVES = 5.1;
+const HOME_RIDGE = 10.7;
+// The roof slopes as corners u, v, z, and the solar panels that lie on them
+// as [u0, v0, u1, v1].
+const HOME_SLOPES = [
+  // main block, to the street and to the garden, cut out for the cross gables
+  [
+    [
+      0, 0, 5.1, 2.15, 0, 5.1, 5.45, 4.35, 10, 8.75, 0, 5.1, 10.92, 0, 5.1,
+    ].concat([10.92, 4.97, 10.7, 0, 4.97, 10.7]),
+    [0.3, 2.2, 3.3, 4.4],
+    [0.3, 0.5, 2.3, 2.2],
+    [7, 3.3, 10.6, 4.5],
+    [9, 0.4, 10.6, 3.3],
+  ],
+  [
+    [0, 4.97, 10.7, 10.92, 4.97, 10.7, 10.92, 9.93, 5.1, 8, 9.93, 5.1]
+      .concat([8, 7.89, 7.4, 5.45, 5.32, 10.3, 2.9, 7.89, 7.4])
+      .concat([2.9, 9.93, 5.1, 0, 9.93, 5.1]),
+  ],
+  // wing
+  [
+    [
+      10.92, 1.94, 5.1, 13.25, 1.94, 5.1, 15.4, 4.75, 8.25, 17.55, 1.94, 5.1,
+    ].concat([19.35, 1.94, 5.1, 19.35, 5.95, 9.6, 10.92, 5.95, 9.6]),
+    [16.7, 3.9, 19, 5.4],
+    [17.9, 2.3, 19, 3.9],
+  ],
+  [
+    [10.92, 5.95, 9.6, 19.35, 5.95, 9.6, 19.35, 9.95, 5.1, 17.2, 9.95, 5.1]
+      .concat([17.2, 8.26, 7, 15.3, 6.31, 9.2, 13.4, 8.26, 7])
+      .concat([13.4, 9.95, 5.1, 10.92, 9.95, 5.1]),
+  ],
+  // cross gable of the main block to the street
+  [[5.45, 4.35, 10, 5.45, 0, 10, 2.15, 0, 5.1]],
+  [[5.45, 4.35, 10, 8.75, 0, 5.1, 5.45, 0, 10]],
+  // and to the garden, on the bay
+  [[5.45, 5.32, 10.3, 2.9, 7.89, 7.4, 2.9, 11.35, 7.4, 5.45, 11.35, 10.3]],
+  [[5.45, 5.32, 10.3, 5.45, 11.35, 10.3, 8, 11.35, 7.4, 8, 7.89, 7.4]],
+  // cross gables of the wing
+  [[15.4, 4.75, 8.25, 15.4, 1.94, 8.25, 13.25, 1.94, 5.1]],
+  [[15.4, 4.75, 8.25, 17.55, 1.94, 5.1, 15.4, 1.94, 8.25]],
+  [[15.3, 6.31, 9.2, 13.4, 8.26, 7, 13.4, 9.95, 7, 15.3, 9.95, 9.2]],
+  [[15.3, 6.31, 9.2, 15.3, 9.95, 9.2, 17.2, 9.95, 7, 17.2, 8.26, 7]],
+];
+// The walls above the eaves: where they look, [du, dv], and their corners.
+const HOME_GABLES = [
+  [-1, 0, [0, 9.93, 5.1, 0, 0, 5.1, 0, 4.97, 10.7]],
+  [1, 0, [10.92, 0, 5.1, 10.92, 9.93, 5.1, 10.92, 4.97, 10.7]],
+  [1, 0, [19.35, 1.94, 5.1, 19.35, 9.95, 5.1, 19.35, 5.95, 9.6]],
+  [0, -1, [2.15, 0, 5.1, 8.75, 0, 5.1, 5.45, 0, 10]],
+  [0, -1, [13.25, 1.94, 5.1, 17.55, 1.94, 5.1, 15.4, 1.94, 8.25]],
+  [
+    0,
+    1,
+    [8, 11.35, 5.1, 2.9, 11.35, 5.1, 2.9, 11.35, 7.4, 5.45, 11.35, 10.3].concat(
+      [8, 11.35, 7.4]
+    ),
+  ],
+  [-1, 0, [2.9, 7.89, 7.4, 2.9, 9.93, 5.1, 2.9, 11.35, 5.1, 2.9, 11.35, 7.4]],
+  [1, 0, [8, 7.89, 7.4, 8, 11.35, 7.4, 8, 11.35, 5.1, 8, 9.93, 5.1]],
+  [
+    0,
+    1,
+    [17.2, 9.95, 5.1, 13.4, 9.95, 5.1, 13.4, 9.95, 7, 15.3, 9.95, 9.2].concat([
+      17.2, 9.95, 7,
+    ]),
+  ],
+  [-1, 0, [13.4, 8.26, 7, 13.4, 9.95, 5.1, 13.4, 9.95, 7]],
+  [1, 0, [17.2, 8.26, 7, 17.2, 9.95, 7, 17.2, 9.95, 5.1]],
+];
+
+/**
+ * Turns the description of Flo's roof into faces in the frame of his house:
+ * slopes and gable walls, each as corners u, v and the share k of the way
+ * from the eaves up to the ridge.
+ * @param {!Building} b
+ * @param {string} wall The colour of the walls.
+ */
+function buildHome(b, wall) {
+  // u and v start at the south-west corner of the outline.
+  const lp = b.lp;
+  let sw = 0;
+  for (let i = 0; i < lp.length; i += 2) {
+    sw = lp[i] - lp[i + 1] < lp[sw] - lp[sw + 1] ? i : sw;
+  }
+  b.at = [lp[sw], lp[sw + 1]];
+  const [au, av] = b.at;
+  // How much a face looking along (du, dv) of the building is turned away
+  // from the sun
+  const shadow = (du, dv) =>
+    (du * b.ca - dv * b.sa) * LIGHT[0] + (du * b.sa + dv * b.ca) * LIGHT[1];
+  const face = (q, extra) => {
+    const p = [];
+    let cu = 0;
+    let cv = 0;
+    for (let i = 0; i < q.length; i += 3) {
+      p.push(au + q[i], av - q[i + 1]);
+      p.push((q[i + 2] - HOME_EAVES) / (HOME_RIDGE - HOME_EAVES));
+      cu += (au + q[i]) / (q.length / 3);
+      cv += (av - q[i + 1]) / (q.length / 3);
+    }
+    return {p, cu, cv, d: 0, wall: '', tint: '', pin: [0, 3, 6], ...extra};
+  };
+  b.planes = HOME_GABLES.map(([du, dv, q]) =>
+    face(q, {
+      nu: du,
+      nv: -dv,
+      wall: shade(wall, 0.78 - 0.22 * shadow(du, -dv)),
+    })
+  );
+  for (const [q, ...panels] of HOME_SLOPES) {
+    const f = face(q, {});
+    const p = f.p;
+    // The three corners that span the face best fix its texture, and tell
+    // which way it falls.
+    let best = 0;
+    for (let i = 3; i < p.length; i += 3) {
+      for (let j = i + 3; j < p.length; j += 3) {
+        const size = Math.abs(
+          (p[i] - p[0]) * (p[j + 1] - p[1]) - (p[i + 1] - p[1]) * (p[j] - p[0])
+        );
+        if (size > best) {
+          best = size;
+          f.pin = [0, i, j];
+        }
+      }
+    }
+    const [, i, j] = f.pin;
+    const e = [p[i] - p[0], p[i + 1] - p[1], p[i + 2] - p[2]];
+    const g = [p[j] - p[0], p[j + 1] - p[1], p[j + 2] - p[2]];
+    const up = Math.sign(e[0] * g[1] - e[1] * g[0]);
+    const du = (e[1] * g[2] - e[2] * g[1]) * up;
+    const dv = (e[2] * g[0] - e[0] * g[2]) * up;
+    f.tint = roofTint(shadow(du, dv) / Math.hypot(du, dv));
+    f.turned = Math.abs(du) > Math.abs(dv);
+    f.pv = panels.map(([u0, v0, u1, v1]) => [
+      au + u0,
+      av - v1,
+      au + u1,
+      av - v0,
+    ]);
+    // Corners run clockwise, so a slope seen from below turns the other way.
+    let turn = 0;
+    for (let k = 0; k < p.length; k += 3) {
+      const n = (k + 3) % p.length;
+      turn += p[k] * p[n + 1] - p[n] * p[k + 1];
+    }
+    if (turn < 0) {
+      f.p = [];
+      for (let k = p.length - 3; k >= 0; k -= 3) {
+        f.p.push(p[k], p[k + 1], p[k + 2]);
+      }
+      f.pin = f.pin.map(k => p.length - 3 - k);
+    }
+    b.planes.push(f);
+  }
+  b.halves = null;
+  b.h = HOME_EAVES;
+  b.rh = HOME_RIDGE - HOME_EAVES;
+}
+
 /**
  * The veil over a roof face: dark where it is turned away from the sun.
  * @param {number} shadow How much the face is turned south-east, -1 to 1.
@@ -1343,6 +1510,14 @@ function prepBuilding(b, r) {
       9
     );
     b.signW = b.signH * aspect;
+  }
+  if (b.poi === 'hq') {
+    buildHome(b, base);
+    // The name goes on the garden side, where the roof is plain.
+    b.signH = 2.4;
+    b.signW = b.signH * (b.sign.width / b.sign.height);
+    b.signU = b.at[0] + 10.7;
+    b.signV = b.at[1] - 7.5;
   }
   // For the order of drawing: a number, the buildings this one hides in the
   // current frame, and what it covers on the screen.
@@ -1784,6 +1959,16 @@ const NEW_HOUSES = BUILD.filter(b => b.rd && b.rd[2][6].n === NEW_ESTATE);
  * @return {{x: number, y: number, a: number}}
  */
 function driveSpot(b) {
+  if (b.at) {
+    // Flo parks in front of the wing, as on the aerial photo.
+    const u = b.at[0] + 15.3;
+    const v = b.at[1] + 2.6;
+    return {
+      x: b.mx + u * b.ca - v * b.sa,
+      y: b.my + u * b.sa + v * b.ca,
+      a: Math.atan2(b.ca, -b.sa),
+    };
+  }
   const [qx, qy, seg, far] = b.rd;
   const ux = (b.mx - qx) / far;
   const uy = (b.my - qy) / far;
@@ -5078,12 +5263,22 @@ function paintGround(g, x0, y0, x1, y1) {
     g.transform(b.ca, b.sa, -b.sa, b.ca, b.mx, b.my);
     g.fillStyle = textures.constr;
     g.fillRect(b.u0 - 6, b.v0 - 6, b.u1 - b.u0 + 12, b.v1 - b.v0 + 12);
+    if (b === HOME) {
+      // Flo's paved drive runs from the wing down to the street, and a
+      // terrace lies along the front of the main block.
+      g.fillStyle = textures.school;
+      g.fillRect(b.at[0] + 10.6, b.at[1] - 1.94, 8.4, 18);
+      g.fillRect(b.at[0] + 0.6, b.at[1], 10, 2.6);
+    }
     g.restore();
   }
   g.lineCap = 'butt';
   g.strokeStyle = textures.school;
   for (const b of NEW_HOUSES) {
-    g.lineWidth = b === HOME ? 6.5 : 4.5;
+    if (b === HOME) {
+      continue;
+    }
+    g.lineWidth = 4.5;
     g.beginPath();
     g.moveTo(b.mx, b.my);
     g.lineTo(b.rd[0], b.rd[1]);
@@ -5682,6 +5877,111 @@ function drawWalls(b, cx, cy, hc, h, s) {
   ctx.lineCap = 'round';
 }
 
+const byFar = (a, b) => b.d - a.d;
+// Where the corners of one roof face appear, x then y.
+const seen = new Float64Array(40);
+
+/**
+ * A roof made of faces, as Flo's house has it: slopes and the gable walls
+ * above the eaves, the far ones first.
+ * @param {!Building} b
+ * @param {number} lx The camera, in the building's frame.
+ * @param {number} ly
+ * @param {number} s How far the perspective pushes the eaves out.
+ * @param {number} s2 The same for the ridge.
+ */
+function drawPlanes(b, lx, ly, s, s2) {
+  for (const f of b.planes) {
+    f.d = (f.cu - lx) ** 2 + (f.cv - ly) ** 2;
+  }
+  b.planes.sort(byFar);
+  const q = PX_PER_M;
+  const m = pinned;
+  for (const f of b.planes) {
+    const p = f.p;
+    if (f.wall && (lx - p[0]) * f.nu + (ly - p[1]) * f.nv <= 0) {
+      continue; // looks away
+    }
+    // A corner the share k up the roof is pushed out between eaves and ridge.
+    let turn = 0;
+    for (let i = 0, n = 0; i < p.length; i += 3, n += 2) {
+      const ss = 1 / (1 / s + (1 / s2 - 1 / s) * p[i + 2]);
+      seen[n] = p[i] * ss + lx * (1 - ss);
+      seen[n + 1] = p[i + 1] * ss + ly * (1 - ss);
+    }
+    const count = (p.length / 3) * 2;
+    ctx.beginPath();
+    for (let n = 0; n < count; n += 2) {
+      const o = (n + 2) % count;
+      turn += seen[n] * seen[o + 1] - seen[o] * seen[n + 1];
+      ctx.lineTo(seen[n], seen[n + 1]);
+    }
+    ctx.closePath();
+    if (f.wall) {
+      ctx.fillStyle = f.wall;
+      ctx.fill();
+      ctx.stroke();
+      continue;
+    }
+    if (turn <= 0) {
+      continue; // seen from below
+    }
+    for (let i = 0; i < 3; i++) {
+      const k = f.pin[i];
+      face[i * 4] = p[k];
+      face[i * 4 + 1] = p[k + 1];
+      face[i * 4 + 2] = seen[(k / 3) * 2];
+      face[i * 4 + 3] = seen[(k / 3) * 2 + 1];
+    }
+    pinPattern(b.roof, f.turned);
+    ctx.fillStyle = b.roof;
+    ctx.fill();
+    ctx.fillStyle = f.tint;
+    ctx.fill();
+    ctx.stroke();
+    for (const [u0, v0, u1, v1] of f.pv) {
+      // Solar panels lie on the slope, so they use the same map as its
+      // tiles: the field, then the gaps between the modules.
+      ctx.beginPath();
+      ctx.moveTo(
+        (m.a * u0 + m.c * v0) * q + m.e,
+        (m.b * u0 + m.d * v0) * q + m.f
+      );
+      ctx.lineTo(
+        (m.a * u1 + m.c * v0) * q + m.e,
+        (m.b * u1 + m.d * v0) * q + m.f
+      );
+      ctx.lineTo(
+        (m.a * u1 + m.c * v1) * q + m.e,
+        (m.b * u1 + m.d * v1) * q + m.f
+      );
+      ctx.lineTo(
+        (m.a * u0 + m.c * v1) * q + m.e,
+        (m.b * u0 + m.d * v1) * q + m.f
+      );
+      ctx.closePath();
+      ctx.fillStyle = '#1b2a47';
+      ctx.fill();
+      for (let u = u0 + 1.1; u < u1 - 0.3; u += 1.1) {
+        ctx.moveTo(
+          (m.a * u + m.c * v0) * q + m.e,
+          (m.b * u + m.d * v0) * q + m.f
+        );
+        ctx.lineTo(
+          (m.a * u + m.c * v1) * q + m.e,
+          (m.b * u + m.d * v1) * q + m.f
+        );
+      }
+      ctx.strokeStyle = '#4a6a9c';
+      ctx.lineWidth = 0.12;
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(0,0,0,.5)';
+      ctx.lineWidth = 0.3;
+    }
+  }
+  b.roof.setTransform(PATTERN_HOME);
+}
+
 /**
  * The roof, in the building's own frame: x runs along the long side.
  * @param {!Building} b
@@ -5695,7 +5995,10 @@ function drawRoof(b, lx, ly, s, s2) {
   const k2 = 1 - s2;
   ctx.strokeStyle = 'rgba(0,0,0,.5)';
   ctx.lineWidth = 0.3;
-  if (b.halves) {
+  if (b.planes) {
+    drawPlanes(b, lx, ly, s, s2);
+    ctx.transform(s2, 0, 0, s2, lx * k2, ly * k2);
+  } else if (b.halves) {
     for (const g of b.gables) {
       // The triangle under each end of the ridge: wall on a gable, roof on a
       // hip.
@@ -5720,7 +6023,10 @@ function drawRoof(b, lx, ly, s, s2) {
       }
     }
     const span = (b.rx0 + b.rx1) / 2;
-    for (let n = 0; n < 2; n++) {
+    // The slope beyond the ridge first: seen from far off a steep roof hides
+    // it, and then the near slope has to cover it.
+    for (let i = 0; i < 2; i++) {
+      const n = ly >= b.ry === i > 0 ? 0 : 1;
       const hp = b.halves[n];
       ctx.beginPath();
       for (let i = 0; i < hp.length; i += 3) {
@@ -5840,7 +6146,13 @@ function drawRoof(b, lx, ly, s, s2) {
   }
   if (b.sign) {
     ctx.imageSmoothingEnabled = true;
-    ctx.drawImage(b.sign, -b.signW / 2, -b.signH / 2, b.signW, b.signH);
+    ctx.drawImage(
+      b.sign,
+      (b.signU || 0) - b.signW / 2,
+      (b.signV || 0) - b.signH / 2,
+      b.signW,
+      b.signH
+    );
     ctx.imageSmoothingEnabled = false;
   }
 }
@@ -6993,6 +7305,11 @@ if (location.search.includes('selftest')) {
         inFront(shed, ell, 5, 40)
       );
     })(),
+    "Flo's house has its own roof: slopes, gable walls and solar panels":
+      HOME.planes.filter(f => f.wall).length === HOME_GABLES.length &&
+      HOME.planes.filter(f => !f.wall).length === HOME_SLOPES.length &&
+      HOME.planes.every(f => f.p.every(v => v > -40 && v < 40)) &&
+      HOME.planes.filter(f => f.pv && f.pv.length).length === 2,
     'the church has its surveyed tower, standing on the church': BUILD.some(
       b => b.k === 't' && b.apex > 10 && b.on && b.on.k === 'c'
     ),
