@@ -6765,8 +6765,9 @@ function drawProps() {
         );
       }
     } else if (pr.k === 'tent') {
+      // A tent stands on the ground itself; the way there ends beside it.
       ctx.save();
-      ctx.translate(x, y);
+      ctx.translate(...MAP.pois[pr.at]);
       ctx.rotate(s.a);
       for (let i = 0; i < 8; i++) {
         ctx.fillStyle = i % 2 ? '#f4f4ef' : '#2b62c8';
