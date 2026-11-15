@@ -1295,6 +1295,8 @@ const LANDMARKS = {
   clubhouse: {plate: ['#c8201c', '#ffffff']},
   club: {wall: '#d9c9a4', roof: 'tile2'},
   butcher: {},
+  church: {roof: 'tile1'},
+  linsner: {roof: 'tile1'},
   lavite: {wall: '#f1ead8', roof: 'tile2'},
   garage: {plate: ['#15151a', '#f2a01c'], gates: '#5a5d63'},
   no14: {wall: '#f4f2ea', roof: 'slate'},
@@ -2314,6 +2316,15 @@ const ROOFS = {
   },
   // The Schwallclub keeps the roof of the survey; its beer garden is painted.
   club: {ground: paintClub},
+  // St. Gertrud: the row of four trees on the square in front of it.
+  church: {
+    trees: [
+      [4.3, -5.8, 2.2, 7],
+      [12, -5.3, 2.3, 7.5],
+      [20.3, -4.7, 2.2, 7],
+      [28.3, -4.1, 2, 6.5],
+    ],
+  },
   // Metzgerei Braun has its roof from the survey (see LOOKS in osm2map.py);
   // its forecourt is painted.
   butcher: {
