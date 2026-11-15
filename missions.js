@@ -750,6 +750,7 @@ export const MISSIONS = [
         r: 230,
         item: 'xmas',
         kerb: true,
+        veh: true,
         obj: 'Sammle 8 Christbäume vor den Haustüren ein, mit dem Bulldog',
         say: 'An jedem Baum hängt ein Kuvert mit 20 € Spende. Fahr die Straßen ab und lad alles auf den Hänger!',
       },
