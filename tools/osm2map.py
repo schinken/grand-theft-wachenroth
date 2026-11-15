@@ -10,15 +10,19 @@ More files add what OSM does not know. All of them are open data of the Bayerisc
           the way the ridge runs, and towers as buildings of their own. Wachenroth is on
           622_5510, 624_5510, 622_5512 and 624_5512 of https://download1.bayernwolke.de/a/lod2/citygml/<tile>.gml
   *.gpkg  single trees with their height: https://geodaten.bayern.de/odd/m/8/baeume3d/data/125021_baeume.gpkg
-  *.png   the aerial photo of exactly the map, one pixel per metre: roof colours and paved yards. From
+  *.png   two pictures of exactly the map, one pixel per metre, told apart by whether one can see through them:
+          the aerial photo for roof colours and paved yards, and the outlines of the parcels for garden fences.
           https://geoservices.bayern.de/od/wms/dop/v1/dop20?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&LAYERS=by_dop20c
           &STYLES=&SRS=EPSG:4326&BBOX=10.6950,49.7440,10.7300,49.7590&WIDTH=2517&HEIGHT=1668&FORMAT=image/png
+          and the same from .../od/wms/alkis/v1/parzellarkarte? with LAYERS=by_alkis_parzellarkarte_umr_schwarz
+          and &TRANSPARENT=TRUE
 """
 import base64
 import cmath
 import itertools
 import json
 import math
+import random
 import sqlite3
 import struct
 import sys
@@ -399,6 +403,153 @@ def yards(areas, photo):
     return 'data:image/png;base64,' + base64.b64encode(png).decode()
 
 
+def paved(photo, x, y):
+    """Whether the photo shows neither green nor deep shadow at a point."""
+    w, h, n, px = photo
+    at = (min(max(int(y), 0), h - 1) * w + min(max(int(x), 0), w - 1)) * n
+    return 2 * px[at + 1] - px[at] - px[at + 2] < 14 and px[at] + px[at + 1] + px[at + 2] > 285
+
+
+def thin(ink):
+    """Peel lines of pixels down to a width of one (Zhang and Suen)."""
+    ring = ((0, -1), (1, -1), (1, 0), (1, 1), (0, 1), (-1, 1), (-1, 0), (-1, -1))
+    peeled = True
+    while peeled:
+        peeled = False
+        for odd in (False, True):
+            drop = []
+            for x, y in ink:
+                nb = [(x + dx, y + dy) in ink for dx, dy in ring]
+                if not 2 <= sum(nb) <= 6 or sum(not a and b for a, b in zip(nb, nb[1:] + nb[:1])) != 1:
+                    continue
+                if (nb[0] and nb[2] and nb[6] or nb[0] and nb[4] and nb[6]) if odd \
+                        else (nb[0] and nb[2] and nb[4] or nb[2] and nb[4] and nb[6]):
+                    continue
+                drop.append((x, y))
+            ink.difference_update(drop)
+            peeled = peeled or bool(drop)
+    return ink
+
+
+def chains(ink):
+    """Follow thinned lines from one crossing or end to the next: lists of pixels."""
+    def links(x, y):
+        near = [(x + dx, y + dy) for dx, dy in ((0, -1), (1, 0), (0, 1), (-1, 0)) if (x + dx, y + dy) in ink]
+        # A diagonal step counts only where no two straight steps lead to the same pixel.
+        return near + [(x + dx, y + dy) for dx, dy in ((1, -1), (1, 1), (-1, 1), (-1, -1))
+                       if (x + dx, y + dy) in ink and (x + dx, y) not in ink and (x, y + dy) not in ink]
+    graph = {p: links(*p) for p in ink}
+    ends = {p for p, near in graph.items() if len(near) != 2}
+    out, done = [], set()
+    for start in sorted(ends):
+        for step in graph[start]:
+            if (start, step) in done:
+                continue
+            line, cur = [start], step
+            while cur not in ends:
+                line.append(cur)
+                cur = next(q for q in graph[cur] if q != line[-2])
+            line.append(cur)
+            done.add((cur, line[-2]))
+            out.append(line)
+    return out
+
+
+def straighten(line, tol=.8):
+    """Keep only the corners of a line of points (Douglas and Peucker)."""
+    keep, todo = {0, len(line) - 1}, [(0, len(line) - 1)]
+    while todo:
+        i, j = todo.pop()
+        (x0, y0), (x1, y1) = line[i], line[j]
+        length = math.dist(line[i], line[j]) or 1
+        off, at = max((abs((x1 - x0) * (y - y0) - (y1 - y0) * (x - x0)) / length, k)
+                      for k, (x, y) in enumerate(line[i:j + 1], i))
+        if off > tol:
+            keep.add(at)
+            todo += [(i, at), (at, j)]
+    return [line[k] for k in sorted(keep)]
+
+
+def borders(plan, photo, buildings, areas, roads):
+    """Garden fences and hedges along the borders of the parcels, read off the cadastre's outline picture.
+
+    The picture also outlines the buildings and names the streets: buildings and letters are rubbed out, and what
+    lies on a road is left aside. The game's roads and pavements are wider than the real ones, so a border along a
+    street is pushed back to the edge of the pavement, and stays open where the photo shows a paved drive behind it.
+    ponytail: which borders get a fence, a hedge or nothing is diced, nobody mapped that.
+    """
+    w, h, n, px = plan
+    # Borders are drawn crisp, letters with soft edges: ink that has soft pixels around it is a letter.
+    ink = {(i % w, i // w) for i in range(w * h) if px[i * n + 3] >= 224}
+    soft = {(i % w, i // w) for i in range(w * h) if 16 < px[i * n + 3] < 224}
+    ink -= {(x, y) for x, y in ink
+            if sum((x + dx, y + dy) in soft for dx in (-1, 0, 1) for dy in (-1, 0, 1)) > 1}
+    for b in buildings:
+        pts = corners(b)
+        for a, c in zip(pts, pts[1:] + pts[:1]):
+            steps = int(math.dist(a, c) * 2) + 1
+            for i in range(steps + 1):
+                x, y = a[0] + (c[0] - a[0]) * i / steps, a[1] + (c[1] - a[1]) * i / steps
+                ink.difference_update((int(x + dx), int(y + dy)) for dx in (-.5, 0, .5) for dy in (-.5, 0, .5))
+    # Gardens are in the village, but not in its car parks, school yards and playing fields.
+    village = [bytearray(w) for _ in range(h)]
+    for a in areas:
+        pts = list(zip(a['p'][::2], a['p'][1::2]))
+        for y in range(max(0, int(min(p[1] for p in pts))), min(h, int(max(p[1] for p in pts)) + 1)):
+            for x0, x1 in spans(pts, y):
+                village[y][x0:x1] = bytes([a['k'] in PAVED]) * (x1 - x0)
+    # Every stretch of road, track, rail and brook, filed under the squares of 32 m it runs through: its ends, half
+    # its width, and how far its verge or pavement reaches.
+    lanes = {}
+    for r in roads:
+        pts, half = list(zip(r['p'][::2], r['p'][1::2])), r['w'] / 2
+        verge = half + (2.3 if r['t'] in CAR and r['t'] != 'service' else .8)
+        for a, c in zip(pts, pts[1:]):
+            for gx in range(int(min(a[0], c[0]) - 8) // 32, int(max(a[0], c[0]) + 8) // 32 + 1):
+                for gy in range(int(min(a[1], c[1]) - 8) // 32, int(max(a[1], c[1]) + 8) // 32 + 1):
+                    lanes.setdefault((gx, gy), []).append((a, c, half, verge))
+
+    def post(x, y):
+        """Where a fence post meant for (x, y) may stand, or None: not on a road, not across a paved drive."""
+        if not (0 <= x < w and 0 <= y < h and village[int(y)][int(x)]):
+            return None
+        back = 0, None  # how far to step back from the nearest road, and from which point of it
+        for a, c, half, verge in lanes.get((int(x) // 32, int(y) // 32), ()):
+            t = ((x - a[0]) * (c[0] - a[0]) + (y - a[1]) * (c[1] - a[1])) / (math.dist(a, c) ** 2 or 1)
+            q = (a[0] + (c[0] - a[0]) * min(max(t, 0), 1), a[1] + (c[1] - a[1]) * min(max(t, 0), 1))
+            far = math.dist((x, y), q)
+            if far < half:
+                return None
+            back = max(back, (verge - far, (q, far, verge)), key=lambda v: v[0])
+        if not back[1]:
+            return x, y
+        q, far, verge = back[1]
+        ux, uy = (x - q[0]) / far, (y - q[1]) / far
+        if photo and paved(photo, q[0] + ux * (verge + 2), q[1] + uy * (verge + 2)):
+            return None
+        return q[0] + ux * verge, q[1] + uy * verge
+
+    dice, fences, hedges = random.Random(9), [], []
+    for line in chains(thin(ink)):
+        if len(line) < 5:
+            continue  # a dot, or the rest of a letter
+        line = straighten([(x + .5, y + .5) for x, y in line], 1.5)  # generous: letters leave lines ragged
+        roll, run = dice.random(), []
+        into = None if roll < .3 else hedges if roll < .5 else fences
+        # A post every metre; where none may stand, the fence so far is done.
+        posts = [post(a[0] + (c[0] - a[0]) * i / steps, a[1] + (c[1] - a[1]) * i / steps)
+                 for a, c in zip(line, line[1:]) for steps in [round(math.dist(a, c)) or 1] for i in range(steps)]
+        for at in posts + [post(*line[-1]), None] if into is not None else []:
+            if at:
+                run.append(at)
+                continue
+            run = straighten(run, .5) if run else run
+            if sum(map(math.dist, run, run[1:])) >= 3:
+                into.append([round(v, 1) for q in run for v in q])
+            run = []
+    return fences, hedges
+
+
 def outers(rel):
     """Stitch a multipolygon's outer member ways into closed rings."""
     parts = [m['geometry'] for m in rel['members'] if m['type'] == 'way' and m['role'] == 'outer' and m.get('geometry')]
@@ -507,8 +658,13 @@ for lat, lon in SILOS:
            for i in range(10)]
     buildings.append({'p': flat(lid), 'h': 12, 'a': 17, 'k': 's', 'look': {'wall': '#d6d8da'}})  # pale steel
 tiles = [a for a in sys.argv[2:] if a.endswith('.gml')]
-photo = next((read_png(a) for a in sys.argv[2:] if a.endswith('.png')), None)
-assert not photo or photo[:2] == (WW, WH), f'the photo must be {WW} x {WH} pixels'
+photo = plan = None
+for picture in (read_png(a) for a in sys.argv[2:] if a.endswith('.png')):
+    assert picture[:2] == (WW, WH), f'the pictures must be {WW} x {WH} pixels'
+    if picture[2] == 4 and 0 in picture[3][3::4 * 97]:
+        plan = picture  # one can see through it
+    else:
+        photo = picture
 if tiles:
     # Build on the state's buildings. OSM adds what it knows better: that something is a church, a garage or an
     # open roof, the round silos, and the few buildings the state does not have.
@@ -535,6 +691,13 @@ for b in buildings:
 areas.sort(key=lambda a: -a.pop('a'))
 if photo:
     roofs(buildings, photo)
+if plan:
+    drawn = len(fences), len(hedges)
+    more = borders(plan, photo, buildings, areas, roads)
+    fences += more[0]
+    hedges += more[1]
+    print(f'{len(more[0])} fences and {len(more[1])} hedges along parcel borders, besides {drawn} in OSM',
+          file=sys.stderr)
 for path in sys.argv[2:]:
     if path.endswith('.gpkg'):
         trees += trees_of(path)
@@ -568,8 +731,8 @@ out = {'w': WW, 'h': WH, 'roads': roads, 'nodes': flat(nodes), 'edges': flat(edg
 if photo:
     out['yards'] = yards(areas, photo)
 print('// Generated by tools/osm2map.py. Map data (c) OpenStreetMap contributors, ODbL.'
-      + (' Buildings, trees, roof colours and yards: Bayerische Vermessungsverwaltung, www.geodaten.bayern.de,'
-         ' CC BY 4.0, simplified.' if len(sys.argv) > 2 else ''))
+      + (' Buildings, trees, roof colours, yards and parcel borders: Bayerische Vermessungsverwaltung,'
+         ' www.geodaten.bayern.de, CC BY 4.0, simplified.' if len(sys.argv) > 2 else ''))
 print('export const MAP = ' + json.dumps(out, separators=(',', ':'), ensure_ascii=False) + ';')
 print(f'{len(roads)} roads, {len(nodes)} nodes, {len(buildings)} buildings, {len(areas)} areas, {len(trees)} trees, '
       f'{len(hedges)} hedges, {WW}x{WH} m', file=sys.stderr)

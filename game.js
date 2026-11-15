@@ -1764,77 +1764,14 @@ const treeGrid = grid();
     );
   }
 }
-const HEDGES = new Path2D();
-for (const h of MAP.hedges) {
-  for (let i = 0; i < h.length; i += 2) {
-    if (i) {
-      HEDGES.lineTo(h[i], h[i + 1]);
-    } else {
-      HEDGES.moveTo(h[i], h[i + 1]);
-    }
-  }
-}
-
 const blocked = (x, y, r) =>
   at(buildingGrid, x, y).some(b => pushOut(x, y, r, b.p));
 
-// Street furniture. Fences are painted on; lanterns and hydrants give way when
-// a car hits them.
-const FENCES = new Path2D();
+// Street furniture: lanterns and hydrants give way when a car hits them.
 const streetProps = [];
 const propGrid = grid();
-for (const f of MAP.fences || []) {
-  for (let i = 0; i < f.length; i += 2) {
-    if (i) {
-      FENCES.lineTo(f[i], f[i + 1]);
-    } else {
-      FENCES.moveTo(f[i], f[i + 1]);
-    }
-  }
-}
 {
   const r = rng(5);
-  for (const b of BUILD) {
-    // a garden fence along the street in front of most houses, with a gap for
-    // the gate
-    if (!b.rd || r() > 0.75 || b.rd[2][6].n === NEW_ESTATE) {
-      continue;
-    }
-    const [qx, qy, sg, far] = b.rd;
-    const dx = (sg[2] - sg[0]) / sg[5];
-    const dy = (sg[3] - sg[1]) / sg[5];
-    const off = sg[4] / 2 + 2.3;
-    if (far < off + 3) {
-      continue;
-    } // the house stands right at the kerb
-    const side = Math.sign((b.mx - qx) * -dy + (b.my - qy) * dx) || 1;
-    const along = (qx - sg[0]) * dx + (qy - sg[1]) * dy;
-    const half = Math.max(b.u1 - b.u0, b.v1 - b.v0) / 2 + 1.5;
-    const gate = along + (r() - 0.5) * half;
-    let from = null;
-    for (let t = Math.max(1, along - half); ; t += 0.5) {
-      const x = sg[0] + dx * t - dy * off * side;
-      const y = sg[1] + dy * t + dx * off * side;
-      const ok =
-        t < Math.min(sg[5] - 1, along + half) &&
-        Math.abs(t - gate) > 1.5 &&
-        !(surfAt(x, y) & 4) &&
-        !blocked(x, y, 0.7);
-      if (ok && !from) {
-        from = [x, y];
-      }
-      if (!ok && from) {
-        if (Math.hypot(x - from[0], y - from[1]) > 2) {
-          FENCES.moveTo(from[0], from[1]);
-          FENCES.lineTo(x, y);
-        }
-        from = null;
-      }
-      if (t > along + half) {
-        break;
-      }
-    }
-  }
   const crossings = NODES.filter(n => n.gps.length > 2);
   const put = (k, x, y, a) => {
     if (
@@ -5341,29 +5278,36 @@ function paintGround(g, x0, y0, x1, y1) {
     g.restore();
   }
   paintDecor(g, x0, y0, x1, y1);
-  g.strokeStyle = '#2a5a22';
-  g.lineWidth = 1.7;
-  g.stroke(HEDGES);
-  g.strokeStyle = '#3b7d2e';
-  g.lineWidth = 0.9;
-  g.stroke(HEDGES);
-  // Garden fences: a rail with pale pickets, and a thin shadow
-  g.lineCap = 'butt';
-  g.save();
-  g.translate(0.25, 0.25);
-  g.strokeStyle = 'rgba(0,0,0,.22)';
-  g.lineWidth = 0.3;
-  g.stroke(FENCES);
-  g.restore();
-  g.strokeStyle = '#4a3826';
-  g.lineWidth = 0.24;
-  g.stroke(FENCES);
-  g.setLineDash([0.2, 0.5]);
-  g.strokeStyle = '#dccfae';
-  g.lineWidth = 0.44;
-  g.stroke(FENCES);
-  g.setLineDash([]);
-  g.lineCap = 'round';
+  const tile = tileKey(Math.round(x0 / TILE_M), Math.round(y0 / TILE_M));
+  const hedges = HEDGE_TILES.get(tile);
+  if (hedges) {
+    g.strokeStyle = '#2a5a22';
+    g.lineWidth = 1.7;
+    g.stroke(hedges);
+    g.strokeStyle = '#3b7d2e';
+    g.lineWidth = 0.9;
+    g.stroke(hedges);
+  }
+  const fences = FENCE_TILES.get(tile);
+  if (fences) {
+    // Garden fences: a rail with pale pickets, and a thin shadow
+    g.lineCap = 'butt';
+    g.save();
+    g.translate(0.25, 0.25);
+    g.strokeStyle = 'rgba(0,0,0,.22)';
+    g.lineWidth = 0.3;
+    g.stroke(fences);
+    g.restore();
+    g.strokeStyle = '#4a3826';
+    g.lineWidth = 0.24;
+    g.stroke(fences);
+    g.setLineDash([0.2, 0.5]);
+    g.strokeStyle = '#dccfae';
+    g.lineWidth = 0.44;
+    g.stroke(fences);
+    g.setLineDash([]);
+    g.lineCap = 'round';
+  }
 }
 
 // The ground never changes, so it is painted once into tiles of 64 m and the
@@ -5375,6 +5319,46 @@ const TILE_LIMIT = 40;
 
 // Tile canvases by position, least recently used first.
 const groundTiles = new Map();
+const tileKey = (tx, ty) => (ty + 512) * 4096 + tx + 512;
+
+/**
+ * Sorts lines into the ground tiles they cross: there are kilometres of
+ * fences, and painting a tile should stroke only its own.
+ * @param {!Array<!Array<number>>} lines Each as x, y, x, y and so on.
+ * @return {!Map<number, !Path2D>} A path for every tile that has some.
+ */
+function byTile(lines) {
+  const tiles = new Map();
+  for (const l of lines) {
+    for (let i = 2; i < l.length; i += 2) {
+      // A stretch goes to every tile its box touches, with room for the
+      // width of a hedge.
+      const tx1 = Math.floor((Math.max(l[i - 2], l[i]) + 1) / TILE_M);
+      const ty1 = Math.floor((Math.max(l[i - 1], l[i + 1]) + 1) / TILE_M);
+      for (
+        let tx = Math.floor((Math.min(l[i - 2], l[i]) - 1) / TILE_M);
+        tx <= tx1;
+        tx++
+      ) {
+        for (
+          let ty = Math.floor((Math.min(l[i - 1], l[i + 1]) - 1) / TILE_M);
+          ty <= ty1;
+          ty++
+        ) {
+          const key = tileKey(tx, ty);
+          const path = tiles.get(key) || new Path2D();
+          tiles.set(key, path);
+          path.moveTo(l[i - 2], l[i - 1]);
+          path.lineTo(l[i], l[i + 1]);
+        }
+      }
+    }
+  }
+  return tiles;
+}
+// Hedges and garden fences, from OpenStreetMap and along the parcel borders
+const HEDGE_TILES = byTile(MAP.hedges);
+const FENCE_TILES = byTile(MAP.fences);
 
 // Paved and gravelled ground in the village, read off the aerial photo: a
 // see-through picture with one pixel per metre. Tiles painted before it has
@@ -5420,7 +5404,7 @@ function paintYards(g, x0, y0) {
  * @return {?HTMLCanvasElement}
  */
 function groundTile(tx, ty, paint, room) {
-  const key = (ty + 512) * 4096 + tx + 512;
+  const key = tileKey(tx, ty);
   let tile = groundTiles.get(key);
   if (tile) {
     groundTiles.delete(key); // back to the young end of the queue
@@ -7275,7 +7259,8 @@ if (location.search.includes('selftest')) {
       a && a[0] === 1 && Math.abs(a[2] - 0.5) < 1e-9,
     'inside a building: pushed out through the nearest wall':
       b && b[0] === 1 && Math.abs(b[2] - 2) < 1e-9,
-    'the map has its surveyed trees, roof colours and yards':
+    'the map has its surveyed trees, roof colours, yards and fences':
+      FENCE_TILES.size > 100 &&
       TREES.length > 4000 &&
       BUILD.filter(b => b.c).length > 1000 &&
       MAP.yards.length > 1000,
