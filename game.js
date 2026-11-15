@@ -2372,7 +2372,7 @@ const ROOFS = {
     cars: [
       [36.5, 6.9, 1.36, '#2b2f36'],
       [31.1, 6.1, 1.36, '#eeeee8', 'van'],
-      [25.5, 4.2, 1.36, '#d9dcdf'],
+      [25.5, 4.2, 1.36, '#d65b32', 'baby'],
       [18.7, 3.6, 1.36, '#eeeee8'],
     ],
     plot: [39.5, 16.9, 47.5, 9.3, 42.4, 1.5, 13.5, -8.2, -1.9, -5.8].concat([
@@ -3558,6 +3558,15 @@ const TYPES = {
     hp: 100,
     mass: 1,
   },
+  baby: {
+    name: ['Baby'],
+    length: 3.05,
+    width: 1.38,
+    max: 29,
+    acc: 27,
+    hp: 75,
+    mass: 0.65,
+  },
   sport: {
     name: ['Sportflitzer', 'Angeberkarre'],
     length: 4.4,
@@ -3697,6 +3706,7 @@ const PAINT = {
   heli: '#c8201c',
   fire: '#c8201c',
   van: '#eeeee8',
+  baby: '#d65b32',
 };
 const spriteCache = new Map();
 /**
@@ -3714,8 +3724,10 @@ function carSprite(kind, col, frame = 0, extras = '') {
     return spriteCache.get(key);
   }
   const type = TYPES[kind];
-  const w = Math.round(type.length * PX_PER_M);
-  const h = Math.round(type.width * PX_PER_M);
+  // Baby's tiny body needs a finer pixel grid for its windows and rear vents.
+  const detail = kind === 'baby' ? 2 : 1;
+  const w = Math.round(type.length * PX_PER_M * detail);
+  const h = Math.round(type.width * PX_PER_M * detail);
   const c = canvas(w, h);
   const g = c.getContext('2d');
   const rect = (x, y, ww, hh, f) => {
@@ -3782,6 +3794,49 @@ function carSprite(kind, col, frame = 0, extras = '') {
       rect(a + 5, mid - 3, 2, 6, '#2f8f4a');
       rect(a + 7, mid - 3, 2, 6, '#f4f4ef');
       rect(a + 9, mid - 3, 2, 6, '#c8201c');
+    }
+  } else if (kind === 'baby') {
+    // Fiat 126P reference, nose-right: short bonnet, tall cabin, rear engine.
+    box(0, w, body);
+    rect(1, 3, 2, h - 6, paint('#9a9b98')); // rear bumper
+    rect(w - 3, 3, 2, h - 6, paint('#9a9b98'));
+    // Engine lid, with two banks of cooling slots and its centre latch.
+    rect(4, 3, 1, h - 6, shade(body, 0.7));
+    for (let y = 4; y < h - 4; y += 2) {
+      if (Math.abs(y - mid) > 2) {
+        rect(5, y, 1, 1, paint('#454343'));
+      }
+    }
+    rect(5, mid, 1, 2, paint('#b8b7ae'));
+    // Rear glass and broad, slightly bowed front windscreen.
+    rect(6, 4, 4, h - 8, glass);
+    rect(7, 3, 2, h - 6, glass);
+    rect(w - 17, 4, 5, h - 8, glass);
+    rect(w - 16, 3, 3, h - 6, glass);
+    // Side windows taper towards both ends; slim B pillars divide them.
+    for (const y of [2, h - 4]) {
+      rect(10, y, w - 27, 2, glass);
+      rect(9, y + (y === 2 ? 1 : 0), 1, 1, glass);
+      rect(21, y, 1, 2, shade(body, 0.8));
+    }
+    rect(11, 4, w - 28, h - 8, shade(body, 1.12));
+    rect(11, 4, w - 28, 1, shade(body, 1.23));
+    // Bonnet seam, wipers, handles, small square lamps and black bumper ends.
+    rect(w - 11, 4, 1, h - 8, shade(body, 0.8));
+    rect(w - 10, 3, 6, 1, shade(body, 1.14));
+    rect(w - 17, 5, 1, 4, paint('#44494a'));
+    rect(w - 17, h - 9, 1, 4, paint('#44494a'));
+    rect(23, 1, 2, 1, paint('#b8b7ae'));
+    rect(23, h - 2, 2, 1, paint('#b8b7ae'));
+    rect(0, 4, 1, 3, '#25262a');
+    rect(0, h - 7, 1, 3, '#25262a');
+    rect(w - 1, 4, 1, 3, '#25262a');
+    rect(w - 1, h - 7, 1, 3, '#25262a');
+    if (!wreck) {
+      rect(w - 4, 4, 2, 3, '#ffe9a0');
+      rect(w - 4, h - 7, 2, 3, '#ffe9a0');
+      rect(2, 3, 2, 3, '#e02a2a');
+      rect(2, h - 6, 2, 3, '#e02a2a');
     }
   } else if (kind === 'van') {
     box(0, w, body);
@@ -3917,7 +3972,9 @@ function carSprite(kind, col, frame = 0, extras = '') {
     rect(w - 10, 2, 5, h - 4, glass);
     rect(w - 14, 3, 3, h - 6, shade(body, 1.15));
   }
-  lamps();
+  if (kind !== 'baby') {
+    lamps();
+  }
   if (!wreck && extras) {
     // From the garage: racing stripes, flames on the bonnet, a rear spoiler
     if (extras.includes('r')) {
@@ -5429,17 +5486,19 @@ function populate(dt, near) {
         a.x - (Math.sin(ang) * a.w) / 4,
         a.y + (Math.cos(ang) * a.w) / 4,
         ang,
-        r < 0.6
+        r < 0.52
           ? 'car'
-          : r < 0.78
-            ? 'van'
-            : r < 0.86
-              ? 'sport'
-              : r < 0.93
-                ? 'tractor'
-                : r < 0.97
-                  ? 'truck'
-                  : 'tipper'
+          : r < 0.6
+            ? 'baby'
+            : r < 0.78
+              ? 'van'
+              : r < 0.86
+                ? 'sport'
+                : r < 0.93
+                  ? 'tractor'
+                  : r < 0.97
+                    ? 'truck'
+                    : 'tipper'
       );
       c.ai = newAI(NODES.indexOf(a), to);
       if (c.kind === 'tractor' && Math.random() < 0.5) {
@@ -5496,7 +5555,13 @@ function parkCars() {
             x,
             y,
             a.ang + Math.PI / 2 + (flip ? Math.PI : 0),
-            kind < 0.8 ? 'car' : kind < 0.93 ? 'van' : 'sport',
+            kind < 0.72
+              ? 'car'
+              : kind < 0.8
+                ? 'baby'
+                : kind < 0.93
+                  ? 'van'
+                  : 'sport',
             COLORS[(r() * COLORS.length) | 0]
           );
         }
@@ -5546,7 +5611,13 @@ function parkCars() {
       x,
       y,
       Math.atan2(s[3] - s[1], s[2] - s[0]) + (flip ? Math.PI : 0),
-      kind < 0.85 ? 'car' : kind < 0.95 ? 'van' : 'sport',
+      kind < 0.77
+        ? 'car'
+        : kind < 0.85
+          ? 'baby'
+          : kind < 0.95
+            ? 'van'
+            : 'sport',
       col
     );
   }
