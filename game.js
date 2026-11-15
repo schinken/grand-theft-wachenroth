@@ -6287,16 +6287,23 @@ function start(save) {
     document.documentElement.requestFullscreen().catch(() => {});
   }
   audio.radio(-1);
-  // index.html?job=koppel, or ?job=12, jumps straight to a job: by its name
-  // in missions.js, or by its number counted from 1
-  const pick = new URLSearchParams(location.search).get('job');
-  const named = MISSIONS.findIndex(m => m.id === pick);
-  const n = named >= 0 ? named : Math.round(Number(pick)) - 1;
-  if (pick && n >= 0) {
-    state.jobN = clamp(n, 0, MISSIONS.length - 1);
+  if (PICKED >= 0) {
+    // straight to the job asked for, without the greeting
+    state.jobN = PICKED;
+    state.nextJob = 0.5;
+    return;
   }
   page(...(save ? TALK.back : TALK.hello));
 }
+
+// index.html?job=koppel, or ?job=12, jumps straight to a job: by its name in
+// missions.js, or by its number counted from 1. -1 when none is asked for.
+const PICKED = (() => {
+  const pick = new URLSearchParams(location.search).get('job');
+  const named = MISSIONS.findIndex(m => m.id === pick);
+  const n = named >= 0 ? named : Math.round(Number(pick)) - 1;
+  return pick && n >= 0 ? clamp(n, 0, MISSIONS.length - 1) : -1;
+})();
 
 /**
  * Pauses or resumes.
@@ -6486,10 +6493,16 @@ byId('how').onclick = () => {
 };
 {
   const save = load();
-  byId('resume').hidden = !(save && save.n > 0 && save.n < MISSIONS.length);
+  byId('resume').hidden =
+    PICKED >= 0 || !(save && save.n > 0 && save.n < MISSIONS.length);
   if (save) {
     byId('resume').textContent =
       `Weiterspielen (Auftrag ${save.n + 1}/${MISSIONS.length})`;
+  }
+  if (PICKED >= 0) {
+    // the link asked for a job: say which one the button starts
+    byId('start').textContent =
+      `Auftrag ${PICKED + 1}: ${MISSIONS[PICKED].title}`;
   }
 }
 

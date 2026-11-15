@@ -40,9 +40,9 @@ starts small and gets bigger:
 | 15  | [Der Winter kommt](https://schinken.github.io/grand-theft-wachenroth/?job=winter)           | Ten trees with the chainsaw, then the wood home on a tractor, past the wood thieves.       |
 | 16  | [Kerwa-Samstag](https://schinken.github.io/grand-theft-wachenroth/?job=finale)              | Flo, the brass band and the police, all on the way to the tent.                            |
 
-Each job name links to the game with that job up next: click _Neues Spiel_ and
-Flo pages you with it. In the address, `?job=` takes the job's name from
-`missions.js` or its number.
+Each job name links to the game with that job up next: the start button names
+it, and it begins as soon as you press it. In the address, `?job=` takes the
+job's name from `missions.js` or its number.
 
 The Kerwa is the village fair, the biggest weekend of the year.
 
