@@ -5746,14 +5746,16 @@ function playRules(dt) {
   if (state.wasted) {
     return;
   }
-  // Hens are caught by hand, trees cut with the saw, rockers met with the
-  // hammer: on foot only. Christmas trees go on the cart of the job's tractor.
+  // A job may want its things fetched on foot (hens caught by hand, trees cut
+  // with the saw, rockers met with the hammer) or with its own vehicle
+  // (Christmas trees onto the cart).
   const job = state.job;
+  const st = job ? job.step : {};
   const got = state.items.filter(
     v =>
       Math.hypot(v.x - player.x, v.y - player.y) < reach &&
-      !(player.car && ['hen', 'tree', 'rocker'].includes(v.kind)) &&
-      !(v.kind === 'xmas' && !(job && player.car === job.veh))
+      !(v.job && st.foot && player.car) &&
+      !(v.job && st.veh && player.car !== job.veh)
   );
   if (got.length) {
     state.items = state.items.filter(v => !got.includes(v));
