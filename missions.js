@@ -14,7 +14,8 @@
 // the pager), drunk (seconds of being drunk), fix (done only once the police
 // have let go), load (what the trailer carries from now on), thieves (cars that
 // ram you), doris (Mama Doris guards her hens), loose (things to collect lie
-// anywhere, not on the road). A mission with sober: true ends the drunkenness.
+// anywhere, not on the road), kerb (they stand at the kerb in front of houses).
+// A mission with sober: true ends the drunkenness.
 
 export const PLACES = {
   hq: 'Flos Hauptquartier',
@@ -57,6 +58,7 @@ export const PLACES = {
   koppel: 'Koppel of Rock',
   warehouse: 'Lagerhaus',
   fairground: 'Kerwa-Festplatz',
+  sammelstelle: 'Christbaum-Sammelstelle',
   linsner: 'Gasthof Linsner',
 };
 
@@ -664,6 +666,55 @@ export const MISSIONS = [
       },
     ],
     outro: ['Der Ofen bullert. Soll der Winter ruhig kommen.'],
+  },
+
+  {
+    id: 'christbaum',
+    title: 'O Tannenbaum',
+    reward: 800,
+    intro: [
+      'Nach Dreikönig sammelt der Schwallclub wie jedes Jahr die Christbäume ein. Die Leute stellen sie vor die Haustür, und für jeden Baum gibt es eine Spende für den Kindergarten.',
+      'Heuer fehlt ihnen ein Fahrer. Der Bulldog mit Anhänger steht am Schwallclub, Hauptstraße 2.',
+    ],
+    steps: [
+      {
+        do: 'steal',
+        veh: 'tractor',
+        trailer: 'cart',
+        at: 'club',
+        obj: 'Hol den Bulldog mit Anhänger am Schwallclub',
+      },
+      {
+        do: 'collect',
+        n: 8,
+        near: 'club',
+        r: 230,
+        item: 'xmas',
+        kerb: true,
+        obj: 'Sammle 8 Christbäume vor den Haustüren ein, mit dem Bulldog',
+        say: 'An jedem Baum hängt ein Kuvert mit 20 € Spende. Fahr die Straßen ab und lad alles auf den Hänger!',
+      },
+      {
+        do: 'bring',
+        to: 'sammelstelle',
+        load: 'xmas',
+        obj: 'Bring die Christbäume zur Sammelstelle am Containerplatz',
+        say: 'Der Hänger ist voll. Ab zur Sammelstelle am Containerplatz, Am Graben!',
+      },
+      {
+        do: 'goto',
+        to: 'kindergarten',
+        foot: true,
+        drop: true,
+        time: 100,
+        obj: 'Bring die 160 € Spenden zur Kita Villa Kunterbunt (zu Fuß rein)',
+        say: '160 € sind zusammengekommen! Die Kita Villa Kunterbunt macht gleich zu. Bring das Geld hin, und nix abzweigen!',
+      },
+    ],
+    outro: [
+      'Die Kinder malen dem Schwallclub ein Dankeschön-Bild.',
+      'Und für dich gibts beim Schwallclub ein Seidla aufs Haus.',
+    ],
   },
 
   {

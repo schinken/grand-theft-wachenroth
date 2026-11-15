@@ -122,7 +122,9 @@ async page => {
         const usable = state.cars.filter(o => {
           return !o.dead && !o.burn && !(o.ai && o.ai.cop) && !o.tr;
         });
-        const ride = nearestOf(usable, player);
+        // The job's own vehicle if it has one: only that one counts.
+        const own = job.veh && !job.veh.dead && !job.veh.burn ? job.veh : null;
+        const ride = own || nearestOf(usable, player);
         if (!ride) {
           return;
         }

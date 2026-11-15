@@ -107,6 +107,7 @@ POIS = {
     'warehouse': (49.75125, 10.71829),  # Lagerhaus, Am Graben 9
     'fairground': (49.7503858, 10.7130321),  # the Kerwa ground behind the parish office, where Google Maps has it
     'linsner': (49.75086, 10.71445),   # Gasthof Linsner, Hauptstraße 7
+    'sammelstelle': (49.75098, 10.71742),  # the recycling containers, where the Christmas trees are collected
 }
 
 # Read off the state's aerial photo, as lat/lon, because no map has them: the five grain silos of the Lagerhaus, and
