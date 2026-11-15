@@ -6803,6 +6803,24 @@ document.addEventListener('visibilitychange', () => {
     audio.mute(!audio.isMuted());
     byId('bM').classList.toggle('off', audio.isMuted());
   });
+  // The volume, remembered in the browser. Square law: the slider feels even.
+  const vol = byId('vol');
+  try {
+    vol.value = localStorage.getItem('gtw-vol') ?? vol.value;
+  } catch {
+    /* private mode */
+  }
+  const setVolume = () => {
+    audio.setVolume((vol.value / 100) ** 2);
+    try {
+      localStorage.setItem('gtw-vol', vol.value);
+    } catch {
+      /* private mode */
+    }
+  };
+  setVolume();
+  vol.addEventListener('input', setVolume);
+  vol.addEventListener('change', () => vol.blur()); // arrows steer, not this
   byId('pause').addEventListener('pointerdown', () => pause(false));
   byId('bMap').addEventListener('pointerdown', e => {
     e.preventDefault();

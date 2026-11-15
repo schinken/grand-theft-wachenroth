@@ -12,6 +12,7 @@ let tap;
 let engineNodes;
 let sirenGain;
 let muted = false;
+let volume = 0.25; // a quarter of full: it was far too loud
 let station = -1;
 let nextTime = 0;
 let stepIndex = 0;
@@ -29,7 +30,7 @@ export function init() {
   }
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   master = audioCtx.createGain();
-  master.gain.value = muted ? 0 : 1;
+  master.gain.value = muted ? 0 : volume;
   master
     .connect(audioCtx.createDynamicsCompressor())
     .connect(audioCtx.destination);
@@ -655,8 +656,14 @@ export function isMuted() {
 export function mute(m) {
   muted = m;
   if (master) {
-    master.gain.value = m ? 0 : 1;
+    master.gain.value = m ? 0 : volume;
   }
+}
+
+/** @param {number} v The volume, 0 to 1. */
+export function setVolume(v) {
+  volume = v;
+  mute(muted);
 }
 
 /**

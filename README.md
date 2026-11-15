@@ -97,6 +97,7 @@ At least not that we know of.
 | H              | HUPE        | Horn                                  |
 | Tab            | Map button  | Map of the village                    |
 | R, M           | ♪ and ♫     | Radio, sound                          |
+|                | Slider      | Volume                                |
 | P or Esc       | II          | Pause                                 |
 
 The game saves after every job.
