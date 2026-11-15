@@ -75,8 +75,10 @@ async page => {
         pad.y = Math.sin(angle) * push;
       };
       // The next point down the road towards a place.
+      // Things at a kerb lie behind the houses as the crow flies: keep to the
+      // roads until close.
       const along = to => {
-        if (dist(player, to) < 45) {
+        if (dist(player, to) < (step.kerb ? 12 : 45)) {
           return to;
         }
         return waypoint(field(to), player, car ? 38 : 22) || to;
