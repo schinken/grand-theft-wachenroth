@@ -1538,8 +1538,9 @@ const pick2 = (a, r) => a[(r() * a.length) | 0];
       tower(b, b.u1 - 2.2, street > 0 ? b.v0 + 2.2 : b.v1 - 2.2, 1.8, 14, 'w');
     }
     if (b.poi === 'townhall' && b.halves) {
-      // The little bell turret on the ridge
-      tower(b, (b.rx0 + b.rx1) / 2, b.ry, 1.2, b.h + b.rh + 0.3, 't');
+      // The little bell turret, at one end of the ridge so the sign stays
+      // readable
+      tower(b, b.rx0 + 1.4, b.ry, 1.2, b.h + b.rh + 0.3, 't');
     }
   }
 }
