@@ -909,6 +909,7 @@ const SEG_MAX = Math.max(...SEGS.map(s => s[5]));
 
 const BUILD = MAP.buildings;
 const buildingGrid = grid();
+let buildingCount = 0;
 const LIGHT = [0.6, 0.8]; // faces turned south-east lie in shadow
 const WALLS = {
   h: [
@@ -1343,6 +1344,12 @@ function prepBuilding(b, r) {
     );
     b.signW = b.signH * aspect;
   }
+  // For the order of drawing: a number, the buildings this one hides in the
+  // current frame, and what it covers on the screen.
+  b.id = ++buildingCount;
+  b.behind = [];
+  b.drawn = false;
+  b.sx0 = b.sy0 = b.sx1 = b.sy1 = 0;
   if (k !== 'o') {
     gridAdd(buildingGrid, b, b.x0 - 3, b.y0 - 3, b.x1 + 3, b.y1 + 3);
   }
@@ -1502,8 +1509,7 @@ const pick2 = (a, r) => a[(r() * a.length) | 0];
     }
   }
 }
-// A tower stands on a building: it is drawn right after it, whichever of the
-// two the camera is closer to.
+// A tower stands on a building: its walls start on that roof.
 for (const b of BUILD) {
   b.on = at(buildingGrid, b.mx, b.my).find(
     o => o !== b && o.a > b.a * 2 && pip(b.mx, b.my, o.p)
@@ -5344,7 +5350,119 @@ function drawShadows(builds, trees, x0, y0, x1, y1) {
 }
 
 const FRAME = '#f1ecde';
-const byDistance = (a, b) => b.d - a.d;
+const byLeftEdge = (a, b) => a.sx0 - b.sx0;
+// The buildings in view, kept between frames so drawing allocates nothing.
+const inView = [];
+// For pairs of buildings, by their ids: the line that keeps them apart.
+const partings = new Map();
+
+/**
+ * Looks for the wall of one building that has the whole other building on its
+ * outside, as far out as possible: the line along it keeps the two apart.
+ * @param {!Building} a
+ * @param {!Building} b
+ * @return {?Array<number>} [nx, ny, c] with `a` where nx * x + ny * y < c, or
+ *     null where no wall does it: a garage in the corner of an L-shaped house.
+ */
+function parting(a, b) {
+  let best = null;
+  // Neighbours that touch are surveyed with small steps in their walls: the
+  // other building may reach this far across the line.
+  let room = -0.8;
+  for (const [own, other, sign] of [
+    [a.p, b.p, 1],
+    [b.p, a.p, -1],
+  ]) {
+    for (let i = 0; i < own.length; i += 2) {
+      const j = (i + 2) % own.length;
+      const len = Math.hypot(own[j] - own[i], own[j + 1] - own[i + 1]) || 1;
+      const nx = (own[j + 1] - own[i + 1]) / len; // outward: outlines run
+      const ny = -(own[j] - own[i]) / len; // clockwise
+      const c = nx * own[i] + ny * own[i + 1];
+      let gap = 1e9;
+      for (let k = 0; k < other.length; k += 2) {
+        gap = Math.min(gap, nx * other[k] + ny * other[k + 1] - c);
+      }
+      // Not a wall in a recess: its own building lies all behind it.
+      const outer = own.every(
+        (v, k) => k % 2 || nx * v + ny * own[k + 1] - c < 0.3
+      );
+      if (gap > room && outer) {
+        room = gap;
+        best = [nx * sign, ny * sign, c * sign];
+      }
+    }
+  }
+  return best;
+}
+
+/**
+ * Whether one building can hide the other from a camera above (cx, cy), and
+ * so has to be drawn after it. A sight line runs from the camera outwards and
+ * downwards: what it passes first is in front, whatever the heights.
+ * @param {!Building} a
+ * @param {!Building} b
+ * @param {number} cx
+ * @param {number} cy
+ * @return {boolean} True for `a` in front, false for `b`.
+ */
+function inFront(a, b, cx, cy) {
+  if (a.on === b || b.on === a) {
+    return a.on === b; // a tower stands on its building
+  }
+  const low = a.id < b.id ? a : b;
+  const key = low.id * 65536 + (low === a ? b : a).id;
+  let line = partings.get(key);
+  if (line === undefined) {
+    line = parting(low, low === a ? b : a);
+    partings.set(key, line);
+  }
+  if (line) {
+    // The camera looks across the line from its own side.
+    return line[0] * cx + line[1] * cy < line[2] === (low === a);
+  }
+  // Nested into each other: in front is the one that hides more walls of the
+  // other.
+  const mine = wallsHidden(a, b, cx, cy);
+  const theirs = wallsHidden(b, a, cx, cy);
+  return mine === theirs ? a.h > b.h : mine > theirs;
+}
+
+/**
+ * Counts the walls of one building that another one hides from a camera
+ * above (cx, cy): those whose middle lies behind the other's outline.
+ * @param {!Building} front
+ * @param {!Building} back
+ * @param {number} cx
+ * @param {number} cy
+ * @return {number}
+ */
+function wallsHidden(front, back, cx, cy) {
+  const p = front.p;
+  const q = back.p;
+  let count = 0;
+  for (let w = 0; w < q.length; w += 2) {
+    const v = (w + 2) % q.length;
+    const len = Math.hypot(q[v] - q[w], q[v + 1] - q[w + 1]) || 1;
+    // A point just inside the wall, so walls that touch do not count
+    const dx = (q[w] + q[v]) / 2 - ((q[v + 1] - q[w + 1]) / len) * 0.6 - cx;
+    const dy = (q[w + 1] + q[v + 1]) / 2 + ((q[v] - q[w]) / len) * 0.6 - cy;
+    for (let i = 0; i < p.length; i += 2) {
+      const j = (i + 2) % p.length;
+      const ex = p[j] - p[i];
+      const ey = p[j + 1] - p[i + 1];
+      const det = dx * ey - dy * ex;
+      const t = ((p[i] - cx) * ey - (p[i + 1] - cy) * ex) / det;
+      const u = ((p[i] - cx) * dy - (p[i + 1] - cy) * dx) / det;
+      if (t > 0 && t < 1 && u > 0 && u < 1) {
+        count++;
+        break;
+      }
+    }
+  }
+  return count;
+}
+
 // Scratch space for one building, so drawing allocates nothing per frame.
 const visibleWalls = [];
 const rowLo = [];
@@ -5741,42 +5859,81 @@ function drawRoof(b, lx, ly, s, s2) {
  */
 function drawBuildings(builds, cx, cy, hc, x0, y0, x1, y1) {
   const base = ctx.getTransform();
-  const z = base.a;
-  for (const b of builds) {
-    const o = b.on || b;
-    b.d = (o.mx - cx) ** 2 + (o.my - cy) ** 2 - (b.on ? 1 : 0);
-  }
-  builds.sort(byDistance);
+  inView.length = 0;
   for (const b of builds) {
     const h = Math.min(b.h, hc * 0.5);
     const top = Math.min(h + (b.rh || b.apex || 0), hc * 0.62);
-    const s = hc / (hc - h);
     const s2 = hc / (hc - top);
-    // Off the screen, even with the roof leaning outwards?
-    const lean = cx * (1 - s2);
-    const leanY = cy * (1 - s2);
-    if (
-      Math.max(b.x1, b.x1 * s2 + lean) < x0 ||
-      Math.min(b.x0, b.x0 * s2 + lean) > x1 ||
-      Math.max(b.y1, b.y1 * s2 + leanY) < y0 ||
-      Math.min(b.y0, b.y0 * s2 + leanY) > y1
-    ) {
+    // What the building covers on the screen, roof leaning outwards
+    b.sx0 = Math.min(b.x0, b.x0 * s2 + cx * (1 - s2));
+    b.sx1 = Math.max(b.x1, b.x1 * s2 + cx * (1 - s2));
+    b.sy0 = Math.min(b.y0, b.y0 * s2 + cy * (1 - s2));
+    b.sy1 = Math.max(b.y1, b.y1 * s2 + cy * (1 - s2));
+    if (b.sx1 < x0 || b.sx0 > x1 || b.sy1 < y0 || b.sy0 > y1) {
       continue;
     }
-    drawWalls(b, cx, cy, hc, h, s);
-    ctx.setTransform(
-      z * b.ca,
-      z * b.sa,
-      -z * b.sa,
-      z * b.ca,
-      base.e + z * b.mx,
-      base.f + z * b.my
-    );
-    const lx = (cx - b.mx) * b.ca + (cy - b.my) * b.sa;
-    const ly = (cy - b.my) * b.ca - (cx - b.mx) * b.sa;
-    drawRoof(b, lx, ly, s, s2);
-    ctx.setTransform(base);
+    b.behind.length = 0;
+    b.drawn = false;
+    inView.push(b);
   }
+  // Every building is drawn after those it can hide. Ordering them by how
+  // far their middle is from the camera got this wrong for long buildings,
+  // and a low roof cut into the taller house next to it. Only buildings that
+  // meet on the screen need comparing: sorted by their left edge, those are
+  // neighbours in the list.
+  inView.sort(byLeftEdge);
+  for (let i = 0; i < inView.length; i++) {
+    const a = inView[i];
+    for (let j = i + 1; j < inView.length && inView[j].sx0 < a.sx1; j++) {
+      const b = inView[j];
+      if (b.sy0 >= a.sy1 || b.sy1 <= a.sy0) {
+        continue;
+      }
+      if (inFront(a, b, cx, cy)) {
+        a.behind.push(b);
+      } else {
+        b.behind.push(a);
+      }
+    }
+  }
+  for (const b of inView) {
+    drawBuilding(b, cx, cy, hc, base);
+  }
+}
+
+/**
+ * Draws a building, after everything it can hide.
+ * @param {!Building} b
+ * @param {number} cx Camera centre, in metres.
+ * @param {number} cy
+ * @param {number} hc Camera height, in metres.
+ * @param {!DOMMatrix} base The transform of the world.
+ */
+function drawBuilding(b, cx, cy, hc, base) {
+  if (b.drawn) {
+    return; // done, or three buildings hide each other in a ring
+  }
+  b.drawn = true;
+  for (const o of b.behind) {
+    drawBuilding(o, cx, cy, hc, base);
+  }
+  const z = base.a;
+  const h = Math.min(b.h, hc * 0.5);
+  const top = Math.min(h + (b.rh || b.apex || 0), hc * 0.62);
+  const s = hc / (hc - h);
+  drawWalls(b, cx, cy, hc, h, s);
+  ctx.setTransform(
+    z * b.ca,
+    z * b.sa,
+    -z * b.sa,
+    z * b.ca,
+    base.e + z * b.mx,
+    base.f + z * b.my
+  );
+  const lx = (cx - b.mx) * b.ca + (cy - b.my) * b.sa;
+  const ly = (cy - b.my) * b.ca - (cx - b.mx) * b.sa;
+  drawRoof(b, lx, ly, s, hc / (hc - top));
+  ctx.setTransform(base);
 }
 
 /**
@@ -6733,6 +6890,7 @@ window.GTW = {
   BUILD,
   PROPS: streetProps,
   TREES,
+  inFront,
   TYPES,
   pad,
   audio,
@@ -6809,6 +6967,32 @@ if (location.search.includes('selftest')) {
       TREES.length > 4000 &&
       BUILD.filter(b => b.c).length > 1000 &&
       MAP.yards.length > 1000,
+    'the house between the camera and another one is drawn last': (() => {
+      const box = (id, x, y) => {
+        const p = [x, y, x + 10, y, x + 10, y + 10, x, y + 10];
+        return {id: -id, p, a: 100, mx: x + 5, my: y + 5};
+      };
+      const west = box(1, 0, 0);
+      const east = box(2, 12, 0);
+      // An L-shaped house with a shed in its corner: no line keeps them apart.
+      const ell = {id: -3, a: 300, mx: 10, my: 10};
+      ell.p = [0, 0, 20, 0, 20, 20, 10, 20, 10, 10, 0, 10];
+      const shed = {
+        id: -4,
+        a: 16,
+        mx: 5,
+        my: 15,
+        p: [3, 13, 7, 13, 7, 17, 3, 17],
+      };
+      return (
+        inFront(west, east, -20, 5) &&
+        !inFront(west, east, 40, 5) &&
+        inFront(east, west, 40, 5) &&
+        parting(ell, shed) === null &&
+        inFront(ell, shed, 5, -20) &&
+        inFront(shed, ell, 5, 40)
+      );
+    })(),
     'the church has its surveyed tower, standing on the church': BUILD.some(
       b => b.k === 't' && b.apex > 10 && b.on && b.on.k === 'c'
     ),
