@@ -1297,6 +1297,7 @@ const LANDMARKS = {
   butcher: {},
   church: {roof: 'tile1'},
   linsner: {roof: 'tile1'},
+  warehouse: {roof: 'tile1'},
   lavite: {wall: '#f1ead8', roof: 'tile2'},
   garage: {plate: ['#15151a', '#f2a01c'], gates: '#5a5d63'},
   no14: {wall: '#f4f2ea', roof: 'slate'},
