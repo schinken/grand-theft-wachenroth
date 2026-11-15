@@ -6513,6 +6513,8 @@ function hud(dt) {
     if (changed('missionLine', line)) {
       el.firstElementChild.textContent = line;
     }
+    // The gauge: the load or the wood that is left, or how far a hold or a
+    // collection has got; other steps have none.
     const bar = j.fragile
       ? j.cargo
       : st.logs
@@ -6521,17 +6523,9 @@ function hud(dt) {
           ? j.hold / st.secs
           : st.do === 'collect'
             ? j.got / j.need
-            : j.timed
-              ? j.left / (st.time || j.left)
-              : 0;
-    const noGauge = !(
-      j.fragile ||
-      st.logs ||
-      st.do === 'hold' ||
-      st.do === 'collect'
-    );
-    if (changed('noGauge', noGauge)) {
-      el.lastElementChild.hidden = noGauge;
+            : null;
+    if (changed('noGauge', bar === null)) {
+      el.lastElementChild.hidden = bar === null;
     }
     const gauge = Math.round(clamp(bar, 0, 1) * 100);
     if (changed('gauge', gauge)) {
