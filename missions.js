@@ -13,8 +13,9 @@
 // wanted (police heat), drop (the mission car is no longer needed), say (Flo on
 // the pager), drunk (seconds of being drunk), fix (done only once the police
 // have let go), load (what the trailer carries from now on), thieves (cars that
-// ram you), doris (Mama Doris guards her hens), loose (things to collect lie
-// anywhere, not on the road), kerb (they stand at the kerb in front of houses).
+// ram you), logs (rams by the thieves the wood on the cart takes), doris (Mama
+// Doris guards her hens), loose (things to collect lie anywhere, not on the
+// road), kerb (they stand at the kerb in front of houses).
 // A mission with sober: true ends the drunkenness.
 
 export const PLACES = {
@@ -660,9 +661,10 @@ export const MISSIONS = [
         do: 'bring',
         to: 'hq',
         load: 'wood',
+        logs: 10,
         thieves: 2,
-        obj: 'Bring das Holz zu Flo. Pass auf die Holzdiebe auf!',
-        say: 'Holzdiebe! Die rammen dich, bis vom Bulldog nix mehr übrig ist. Fahr heim, so schnell er kann.',
+        obj: 'Bring das Holz zu Flo. Lass dich nicht von den Holzdieben rammen!',
+        say: 'Holzdiebe! Jeder Rempler, und Holz fällt vom Hänger. Zehnmal, und er ist leer. Fahr heim, so schnell der Bulldog kann!',
       },
     ],
     outro: ['Der Ofen bullert. Soll der Winter ruhig kommen.'],
