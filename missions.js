@@ -15,7 +15,8 @@
 // have let go), load (what the trailer carries from now on), thieves (cars that
 // ram you), logs (rams by the thieves the wood on the cart takes), doris (Mama
 // Doris guards her hens), loose (things to collect lie anywhere, not on the
-// road), kerb (they stand at the kerb in front of houses).
+// road), kerb (they stand at the kerb in front of houses), db (the noise the
+// rockers make: 10 dB less for each one met).
 // A mission with sober: true ends the drunkenness.
 
 export const PLACES = {
@@ -61,6 +62,7 @@ export const PLACES = {
   fairground: 'Kerwa-Festplatz',
   sammelstelle: 'Christbaum-Sammelstelle',
   streuobst: 'Streuobstwiese',
+  toxicity: 'Toxicity',
   linsner: 'Gasthof Linsner',
 };
 
@@ -764,6 +766,47 @@ export const MISSIONS = [
     outro: [
       'Die Bäume danken es dir. Im Herbst gibts Most für den ganzen Verein.',
       'Der Obst- und Gartenbauverein macht dich zum Ehrenmitglied.',
+    ],
+  },
+
+  {
+    id: 'toxicity',
+    title: 'Zimmerlautstärke',
+    reward: 800,
+    intro: [
+      'Im Toxicity halten sich die Rocker mal wieder net an die Abendruhe. Die ganze Hauptstraße kann net schlafen.',
+      'Der Bernhard hat einen Zerstampfer in der Werkstatt. Damit erinnerst du die Jungs an die erlaubte Dezibel-Obergrenze.',
+    ],
+    steps: [
+      {
+        do: 'goto',
+        to: 'garage',
+        foot: true,
+        obj: 'Hol den Zerstampfer beim Bernhard, Mechanic Monkeys (zu Fuß rein)',
+      },
+      {
+        do: 'goto',
+        to: 'toxicity',
+        obj: 'Fahr zum Toxicity in der Hauptstraße',
+        say: 'Der Bernhard leiht dir seinen Zerstampfer. Ab zum Toxicity, die hört man bis Kleinwachenroth!',
+      },
+      {
+        do: 'collect',
+        n: 5,
+        near: 'toxicity',
+        r: 24,
+        item: 'rocker',
+        loose: true,
+        foot: true,
+        db: 120,
+        time: 120,
+        obj: 'Bring die Rocker mit dem Zerstampfer auf 70 dB, zu Fuß',
+        say: 'Raus aus dem Auto, Zerstampfer in die Hand! Fünf Rocker, ein Bonk pro Kopf, dann ist Zimmerlautstärke.',
+      },
+    ],
+    outro: [
+      '70 dB. Die Hauptstraße schläft, und die Rocker spielen ab jetzt unplugged.',
+      'Den Zerstampfer bringst du dem Bernhard morgen zurück.',
     ],
   },
 

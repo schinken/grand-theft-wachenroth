@@ -242,6 +242,11 @@ const SFX = {
       beep(i % 2 ? 880 : 1175, 0.16, i * 0.17, 0.05);
     }
   },
+  bonk: () => {
+    // a big hammer on a hard head
+    beep(200, 0.16, 0, 0.12, 'square', 70);
+    crack(0.07, 0.35, 800);
+  },
   glass: () => {
     hiss(audioCtx.currentTime, 0.25, 0.25, 'highpass', 5000, sfx);
     beep(2600, 0.08, 0, 0.04, 'triangle', 1800);
