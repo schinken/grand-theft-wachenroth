@@ -5186,6 +5186,10 @@ function page(...msgs) {
   pg.q.push(...msgs);
 }
 
+// A new car at junction a, its nose towards junction b
+const carAt = (a, b, kind, col) =>
+  makeCar(a.x, a.y, Math.atan2(b.y - a.y, b.x - a.x), kind, col);
+
 /**
  * Parks a mission vehicle at a place.
  * @param {string} kind
@@ -5332,13 +5336,7 @@ function spawnThieves(n) {
   for (let i = 0; i < n && spots.length; i++) {
     const a = spots.splice((Math.random() * spots.length) | 0, 1)[0];
     const to = a.car[0].n;
-    const c = makeCar(
-      a.x,
-      a.y,
-      Math.atan2(NODES[to].y - a.y, NODES[to].x - a.x),
-      'car',
-      '#22242a'
-    );
+    const c = carAt(a, NODES[to], 'car', '#22242a');
     c.ai = newAI(NODES.indexOf(a), to, {thief: true});
     out.push(c);
   }
@@ -5509,15 +5507,9 @@ function nextStep() {
     j.to = j.veh;
   }
   if (st.do === 'chase') {
-    const s = SPOT[st.at];
-    const from = nearNode(s, 'car');
+    const from = nearNode(SPOT[st.at], 'car');
     const to = NODES[from].car[0].n;
-    j.prey = makeCar(
-      NODES[from].x,
-      NODES[from].y,
-      Math.atan2(NODES[to].y - NODES[from].y, NODES[to].x - NODES[from].x),
-      st.veh
-    );
+    j.prey = carAt(NODES[from], NODES[to], st.veh);
     if (st.trailer) {
       hitch(j.prey, st.trailer);
     }
@@ -6239,14 +6231,7 @@ function waste(title = 'Erledigt!') {
 function respawn() {
   const player = state.player;
   const best = NODES[nearNode(player, 'car')];
-  const to = NODES[best.car[0].n];
-  player.car = makeCar(
-    best.x,
-    best.y,
-    Math.atan2(to.y - best.y, to.x - best.x),
-    'car',
-    '#e0b21c'
-  );
+  player.car = carAt(best, NODES[best.car[0].n], 'car', '#e0b21c');
   audio.radio(player.car.radio);
   state.wasted = 0;
 }
