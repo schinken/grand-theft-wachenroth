@@ -191,6 +191,9 @@ LOOKS_PLACES = [
     (49.752165, 10.713714, {'faces': 1, 'look': {'roof': 'tile6'}, 'slopes': {19: 'slate'},
                             'panels': [(49.752162, 10.713647, 6.8, 4, False), (49.752138, 10.713799, 7.5, 4, False)],
                             'chimney': (49.752198, 10.713799)}),
+    # Kleinwachenrother Mühle: the long barn south of the mill, solar panels all along its slope to the south-east
+    (49.748045, 10.720742, {'faces': 1, 'look': {'roof': 'tile1'},
+                            'panels': [(49.748014, 10.720738, 22, 2.8, False)]}),
 ]
 LOOKS = [
     (49.753529, 10.714888, {'look': {'roof': 'solar', 'flat': True}}),
