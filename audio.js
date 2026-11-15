@@ -208,6 +208,16 @@ const SFX = {
     beep(330, 0.32, 0, 0.08, 'sawtooth');
   },
   step: () => beep(1175, 0.09, 0, 0.05, 'triangle'),
+  train: () => {
+    // the two-tone horn of a goods engine, a long call and a short one
+    for (const [wait, d] of [
+      [0, 0.9],
+      [1.15, 0.45],
+    ]) {
+      beep(185, d, wait, 0.07, 'sawtooth');
+      beep(233, d, wait, 0.07, 'sawtooth');
+    }
+  },
   splash: () => {
     crack(0.7, 0.5, 1100);
     beep(500, 0.5, 0, 0.06, 'sine', 120);
