@@ -1876,6 +1876,25 @@ function paintLavite(g) {
   g.stroke();
 }
 
+/**
+ * The yard of Bernhard's garage, as the aerial photos show it: the tarmac
+ * drive that comes down from the fork of the street between the stone
+ * garden and the hedge, where the customers' cars wait, and the forecourt
+ * between the hall and the road. Drawn with x along the south-east wall of
+ * the hall and y towards the road.
+ * @param {!CanvasRenderingContext2D} g
+ */
+function paintGarage(g) {
+  fillPoly(
+    g,
+    textures.park,
+    [38.7, -15.5, 45.8, -10.5, 41, -6.9, 39, -7.1, 33.6, -6.3, 28.1, -4.8]
+      .concat([22, -4.2, 16.1, -1.6, 11.2, 2.1, 13.5, 4.7, 13.2, 7.8])
+      .concat([-1.2, 5.9, 0, 0, 12, -11, 15.4, -11.6, 18.7, -9.4, 21.9, -9.6])
+      .concat([27, -10, 32.7, -11, 37.6, -12.5])
+  );
+}
+
 // What the three have: eaves and ridge height, roof slopes, walls above the
 // eaves, where the name goes on the roof [u, v, height of the letters], where
 // the car stands [u, v], and for the garden trees [u, v, size, height], fences
@@ -1973,6 +1992,28 @@ const ROOFS = {
     ],
     plot: [-10.6, -12.3, -9.3, 13, 17.6, 12.8, 18.4, -11.7],
     ground: paintLavite,
+  },
+  // Bernhard's garage keeps the roof of the survey. Its drive is painted,
+  // with the strip of hedge and trees beside it and the cars waiting there.
+  garage: {
+    trees: [
+      [39.5, 5, 2.6, 8],
+      [30.3, 1.9, 2, 6],
+      [24.6, 0.7, 2.1, 6.5],
+      [19.3, -0.6, 2.2, 7],
+      [14.5, -1.7, 1.8, 5.5],
+    ],
+    hedges: [[40, 4.9, 34.3, 3.2, 28.3, 1.6, 22.8, 0.3, 17.4, -1.2]],
+    cars: [
+      [36.5, 6.9, 1.36, '#2b2f36'],
+      [31.1, 6.1, 1.36, '#eeeee8', 'van'],
+      [25.5, 4.2, 1.36, '#d9dcdf'],
+      [18.7, 3.6, 1.36, '#eeeee8'],
+    ],
+    plot: [39.5, 16.9, 47.5, 9.3, 42.4, 1.5, 13.5, -8.2, -1.9, -5.8].concat([
+      -0.8, 0.5, 15.6, 14.4, 19.2, 10.3, 33.9, 12.6,
+    ]),
+    ground: paintGarage,
   },
   // The house no14: a plain gable roof, the garage on its west side,
   // and the garden around it up to the pavement of the bend.

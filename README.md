@@ -112,7 +112,7 @@ A few buildings that matter to the story are modelled by hand: Flo's house, the
 town hall with its square, and a house with its garden. The
 neighbours of Bernhard's garage get their roofs face by face as the survey
 measured them, with the colours, dormers, roof windows and solar panels the
-photos show.
+photos show, and the garage its drive with the cars waiting by the hedge.
 
 Map data © OpenStreetMap contributors, ODbL. Buildings, trees, aerial photo and
 parcels: Bayerische Vermessungsverwaltung – www.geodaten.bayern.de, CC BY 4.0,
