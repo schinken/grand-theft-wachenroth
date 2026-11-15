@@ -4283,6 +4283,33 @@ function collideCars() {
           damage(a, ((-rv * mb) / (ma + mb)) * 1.6);
           damage(b, ((-rv * ma) / (ma + mb)) * 1.6);
           const other = a === player.car ? b : b === player.car ? a : null;
+          const job = state.job;
+          if (
+            other &&
+            -rv > 4 &&
+            other.ai &&
+            other.ai.thief &&
+            job &&
+            job.logs > 0 &&
+            player.car === job.veh &&
+            state.t - (other.ramT || 0) > 1.5
+          ) {
+            // A thief rams the tractor: wood falls off the cart.
+            const c = player.car;
+            const back = c.type.length / 2 + c.tr.type.length / 2;
+            other.ramT = state.t;
+            job.logs--;
+            decal(
+              c.x - Math.cos(c.tr.a) * back,
+              c.y - Math.sin(c.tr.a) * back,
+              'stump'
+            );
+            float(
+              c,
+              job.logs ? `Holz weg! Noch ${job.logs}` : 'Der Hänger ist leer!',
+              '#ff5a1f'
+            );
+          }
           if (other && -rv > 7) {
             if (other.ai && other.ai.cop) {
               crime(0.4);
@@ -5268,10 +5295,10 @@ function kerbSpot(c, r, ok) {
  */
 function spawnThieves(n) {
   const player = state.player;
-  const spots = NODES.filter(o => {
-    const d = dist(o, player);
-    return d > 60 && d < 150 && o.car.length;
-  });
+  // The nearest junctions at least 60 m off; from the wood that is far.
+  const spots = NODES.filter(o => o.car.length && dist(o, player) > 60)
+    .sort((p, q) => dist(p, player) - dist(q, player))
+    .slice(0, 8);
   const out = [];
   for (let i = 0; i < n && spots.length; i++) {
     const a = spots.splice((Math.random() * spots.length) | 0, 1)[0];
@@ -5427,6 +5454,7 @@ function nextStep() {
     state.drunk = Math.max(state.drunk, st.drunk);
     state.hicT = 1;
   }
+  j.logs = st.logs || 0;
   if (st.load && j.veh && j.veh.tr) {
     j.veh.tr.kind = st.load;
     j.veh.tr.type = TRAILERS[st.load];
@@ -5521,6 +5549,10 @@ function jobRules(dt) {
   }
   if (j.fragile && j.cargo <= 0) {
     failJob('cargo');
+    return;
+  }
+  if (st.logs && j.logs <= 0) {
+    failJob('wood');
     return;
   }
   const near = r => j.to && dist(player, j.to) < r;
@@ -5643,6 +5675,7 @@ function failJob(why) {
       time: 'Zeit abgelaufen',
       wreck: 'Fahrzeug Schrott',
       cargo: 'Ladung kaputt',
+      wood: 'Kein Holz mehr am Hänger',
       gone: 'Entkommen',
       busted: '',
       wasted: '',
@@ -6414,6 +6447,7 @@ function hud(dt) {
     !(
       j.timed ||
       j.fragile ||
+      j.logs ||
       j.need ||
       j.step.do === 'hold' ||
       j.step.do === 'chase'
@@ -6438,20 +6472,30 @@ function hud(dt) {
     if (j.fragile) {
       bits.push('Ladung');
     }
+    if (st.logs) {
+      bits.push(`Holz ${j.logs} / ${st.logs}`);
+    }
     const line = bits.join('  ·  ');
     if (changed('missionLine', line)) {
       el.firstElementChild.textContent = line;
     }
     const bar = j.fragile
       ? j.cargo
-      : st.do === 'hold'
-        ? j.hold / st.secs
-        : st.do === 'collect'
-          ? j.got / j.need
-          : j.timed
-            ? j.left / (st.time || j.left)
-            : 0;
-    const noGauge = !(j.fragile || st.do === 'hold' || st.do === 'collect');
+      : st.logs
+        ? j.logs / st.logs
+        : st.do === 'hold'
+          ? j.hold / st.secs
+          : st.do === 'collect'
+            ? j.got / j.need
+            : j.timed
+              ? j.left / (st.time || j.left)
+              : 0;
+    const noGauge = !(
+      j.fragile ||
+      st.logs ||
+      st.do === 'hold' ||
+      st.do === 'collect'
+    );
     if (changed('noGauge', noGauge)) {
       el.lastElementChild.hidden = noGauge;
     }

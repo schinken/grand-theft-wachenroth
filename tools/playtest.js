@@ -236,6 +236,7 @@ async page => {
         missions: stats.missions,
         wasted: stats.wasted,
         busted: stats.busted,
+        logs: job ? job.logs : 0,
       };
       const was = bot.seen || now;
       const where = `${state.player.x | 0},${state.player.y | 0}`;
@@ -245,6 +246,9 @@ async page => {
       }
       if (now.busted > was.busted) {
         say(`  busted at ${where}`);
+      }
+      if (now.logs < was.logs && now.step === was.step) {
+        say(`  rammed at ${where}: wood left ${now.logs}`);
       }
       if (now.missions > was.missions) {
         say(`DONE ${was.job}`);
