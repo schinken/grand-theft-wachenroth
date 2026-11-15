@@ -9,7 +9,8 @@
 //   goto     reach place `to`: foot = walk in, else within r (7 m); fix = done
 //            only once the police have let go
 //   steal    get into vehicle `veh` (with `trailer`) waiting at place `at`
-//   bring    park the mission vehicle at place `to`
+//   bring    park the mission vehicle at place `to`, or with house at a
+//            customer's house far off, whose street fills in {street}
 //   collect  pick up n things of kind `item` within r of place `near`: on the
 //            roads, or anywhere off them (loose), or at the kerb in front of
 //            houses (kerb); trees to cut stand where they grow. foot = on foot
@@ -688,6 +689,52 @@ export const MISSIONS = [
     ],
     outro: [
       'Alle wieder im Stall. Der Michi gibt einen aus, und Mama Doris legt den Besen weg.',
+    ],
+  },
+
+  {
+    id: 'heizoel',
+    title: 'Heizöl Lindner',
+    reward: 800,
+    intro: [
+      'Beim Heizöl Lindner ist der Fahrer krank, und der Winter steht vor der Tür.',
+      'Der Tankwagen steht schon vor deinem Hauptquartier. Drei Kunden warten auf ihr Heizöl.',
+    ],
+    steps: [
+      {
+        do: 'steal',
+        veh: 'tanker',
+        at: 'hq',
+        obj: 'Steig in den Heizöl-Laster vorm Hauptquartier',
+      },
+      {
+        do: 'bring',
+        house: true,
+        time: 150,
+        tip: true,
+        obj: 'Heizöl für: {street}',
+        say: 'Erster Kunde: {street}. Der Pfeil zeigt dir das Haus. Je schneller, desto mehr Trinkgeld!',
+      },
+      {
+        do: 'bring',
+        house: true,
+        time: 150,
+        tip: true,
+        obj: 'Heizöl für: {street}',
+        say: 'Tank voll! Weiter zum nächsten: {street}.',
+      },
+      {
+        do: 'bring',
+        house: true,
+        time: 150,
+        tip: true,
+        obj: 'Heizöl für: {street}',
+        say: 'Noch einer: {street}. Dann ist Feierabend.',
+      },
+    ],
+    outro: [
+      'Alle Tanks voll, keiner friert. Der Lindner ist zufrieden.',
+      'Das Trinkgeld behältst du. Ausnahmsweise.',
     ],
   },
 
