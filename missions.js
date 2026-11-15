@@ -93,6 +93,7 @@ export const PLACES = {
   dentist: 'Zahnarzt Mickoleit',
   xmasfarm: 'Weihnachtsbaumkultur am Weißen Berg',
   fichte: 'Die Festtags-Fichte',
+  schreinerei: 'Schreinerei Wichert',
   linsner: 'Gasthof Linsner',
 };
 
@@ -1045,6 +1046,71 @@ export const MISSIONS = [
     outro: [
       '70 dB. Die Hauptstraße schläft, und die Rocker spielen ab jetzt unplugged.',
       'Den Zerstampfer bringst du dem Bernhard morgen zurück.',
+    ],
+  },
+
+  {
+    id: 'flyhigh',
+    title: 'Fly High',
+    reward: 1300,
+    intro: [
+      'So ein Helikopter, das ist schon ganz geil. Da hätt ich mal Bock drauf.',
+      'Beim Josef in der Schreinerei steht ein Flügeldreher. Schnapp ihn dir und flieg über Wachenroth.',
+    ],
+    steps: [
+      {
+        do: 'steal',
+        veh: 'heli',
+        at: 'schreinerei',
+        obj: 'Schnapp dir den Flügeldreher beim Josef in der Schreinerei',
+      },
+      {
+        do: 'hold',
+        to: 'church',
+        r: 30,
+        secs: 1,
+        veh: true,
+        time: 240,
+        obj: 'Flieg über den Kirchturm von St. Gertrud',
+        say: 'Gas geben, dann hebt er ab. Mit der Bremse setzt du ihn wieder auf. Erst rüber zur Kirche!',
+      },
+      {
+        do: 'hold',
+        to: 'warehouse',
+        r: 30,
+        secs: 1,
+        veh: true,
+        obj: 'Flieg über die Silos am Lagerhaus Grönert',
+        say: 'Schön von oben, gell? Jetzt über die Silos am Lagerhaus.',
+      },
+      {
+        do: 'hold',
+        to: 'murk',
+        r: 35,
+        secs: 1,
+        veh: true,
+        obj: 'Flieg über das Bekleidungshaus Murk',
+        say: 'Weiter zum Murk!',
+      },
+      {
+        do: 'hold',
+        to: 'koppel',
+        r: 35,
+        secs: 1,
+        veh: true,
+        obj: 'Flieg über die Koppel of Rock',
+        say: 'Und eine Runde über die Koppel, die Rocker winken!',
+      },
+      {
+        do: 'bring',
+        to: 'schreinerei',
+        obj: 'Stell den Flügeldreher zurück in die Schreinerei, bevor es einer merkt',
+        say: 'Jetzt aber schnell zurück und hinstellen, als wär nix gewesen!',
+      },
+    ],
+    outro: [
+      'Steht wieder da, als wär nix gewesen. Der Josef wundert sich nur über die Fliegen an der Scheibe.',
+      'Fly high, Wachenroth!',
     ],
   },
 

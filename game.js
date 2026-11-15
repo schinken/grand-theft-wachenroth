@@ -3609,6 +3609,15 @@ const TYPES = {
     hp: 250,
     mass: 3.2,
   },
+  heli: {
+    name: ['Flügeldreher'],
+    length: 9,
+    width: 2.4,
+    max: 42,
+    acc: 12,
+    hp: 260,
+    mass: 3,
+  },
   digger: {
     name: ['Mini-Bagger'],
     length: 3.6,
@@ -3673,6 +3682,7 @@ const PAINT = {
   mixer: '#284d98',
   tanker: '#c8201c',
   digger: '#e8b21c',
+  heli: '#c8201c',
   fire: '#c8201c',
   van: '#eeeee8',
 };
@@ -3806,6 +3816,16 @@ function carSprite(kind, col, frame = 0, extras = '') {
       }
     }
     cab(15);
+  } else if (kind === 'heli') {
+    // the tail boom with its fin, the cabin with the glass in front, skids
+    rect(0, mid - 1, w * 0.5, 3, shade(body, 0.75));
+    rect(0, mid - 4, 4, 8, shade(body, 0.75));
+    rect(1, mid - 6, 2, 12, '#2b2b2e');
+    rect(w * 0.42, 0, w * 0.48, 2, '#2b2b2e');
+    rect(w * 0.42, h - 2, w * 0.48, 2, '#2b2b2e');
+    box((w * 0.38) | 0, w, body);
+    rect(w - 13, 3, 10, h - 6, glass);
+    rect(w * 0.55, mid - 1, 4, 2, '#f4f4ef');
   } else if (kind === 'digger') {
     // tracks, the yellow house with its cab, the arm and the bucket in
     // front, full of earth when extras says e
@@ -4515,9 +4535,18 @@ function stepCar(c, dt) {
   }
   c.a += c.spin * dt;
   c.spin *= Math.exp(-3 * dt);
+  if (c.kind === 'heli') {
+    // up when you give it gas, down when you brake it slow
+    const up =
+      c === state.player.car &&
+      (c.thr > 0 || (c.alt > 0 && !(c.hb && Math.abs(c.vf) < 5)));
+    c.alt = clamp((c.alt || 0) + (up ? 0.7 : -0.7) * dt, 0, 1);
+  }
+  // Up there no water, wall or tree can touch it.
+  const air = c.alt > 0.3;
   const ground = surfAt(c.x, c.y);
-  const road = ground & 1 || c.ai;
-  if ((ground & 9) === 8 && !c.dead) {
+  const road = ground & 1 || c.ai || air;
+  if ((ground & 9) === 8 && !c.dead && !air) {
     sink(c);
     return;
   }
@@ -4546,7 +4575,11 @@ function stepCar(c, dt) {
     );
   }
   const boost = (c.boost || 1) * (nos ? 1.45 : 1);
-  const max = type.max * boost * (road ? 1 : 0.7);
+  const max =
+    type.max *
+    boost *
+    (road ? 1 : 0.7) *
+    (c.kind === 'heli' && !air ? 0.15 : 1);
   if (c.thr > 0 && vf < max) {
     vf +=
       type.acc *
@@ -4588,6 +4621,9 @@ function stepCar(c, dt) {
         1.3
       );
   } // the trailer swings in behind
+  if (air) {
+    return;
+  }
   for (const off of type.offs) {
     // walls and tree trunks
     const px = c.x + fx * off;
@@ -4672,7 +4708,12 @@ function collideCars() {
         j = awake[k];
       }
       const b = cs[j];
-      if (Math.abs(a.x - b.x) > 12 || Math.abs(a.y - b.y) > 12) {
+      if (
+        Math.abs(a.x - b.x) > 12 ||
+        Math.abs(a.y - b.y) > 12 ||
+        a.alt > 0.3 ||
+        b.alt > 0.3
+      ) {
         continue;
       }
       const ma = a.type.mass * (a.dead ? 2 : 1);
@@ -5240,6 +5281,9 @@ function walkersVsCars() {
     y1 = Math.max(y1, p.y);
   }
   for (const c of state.cars) {
+    if (c.alt > 0.3) {
+      continue; // flying over their heads
+    }
     const sp = Math.hypot(c.vx, c.vy);
     // Pedestrians see a car coming a second and a half ahead, and at least
     // within 12 m; one more for the box keeps rounding out of it
@@ -6681,6 +6725,7 @@ function toggleCar() {
       car: null,
     });
     c.thr = c.steer = 0;
+    c.alt = 0; // a helicopter sets down at once
     c.hb = false;
     c.siren = false;
     c.boosting = false;
@@ -6808,7 +6853,8 @@ function camera(dt) {
     ty = player.y + (c ? c.vy * 0.45 : 0);
     tz =
       (c ? lerp(11.5, 7.5, clamp(Math.hypot(c.vx, c.vy) / 40, 0, 1)) : 13) *
-      tall; // pull up when going fast
+      tall * // pull up when going fast, and more when flying
+      (c && c.alt ? 1 - 0.4 * c.alt : 1);
   }
   const k = 1 - Math.exp(-dt * 4);
   cam.x += (tx - cam.x) * k;
@@ -9054,6 +9100,70 @@ function drawFestival(x, y) {
   ctx.restore();
 }
 
+/**
+ * The main rotor of a helicopter, in its own frame: two blades turned by a,
+ * and the blur of their disc while they spin.
+ * @param {!Object} type
+ * @param {number} a
+ * @param {boolean} spin
+ */
+function drawRotor(type, a, spin) {
+  const hub = type.length * 0.15;
+  if (spin) {
+    ctx.fillStyle = 'rgba(20,20,24,.18)';
+    ctx.beginPath();
+    ctx.arc(hub, 0, 5, 0, TAU);
+    ctx.fill();
+  }
+  ctx.strokeStyle = '#2b2b2e';
+  ctx.lineWidth = 0.3;
+  ctx.beginPath();
+  for (const k of [a, a + Math.PI / 2]) {
+    ctx.moveTo(hub + Math.cos(k) * 5, Math.sin(k) * 5);
+    ctx.lineTo(hub - Math.cos(k) * 5, -Math.sin(k) * 5);
+  }
+  ctx.stroke();
+}
+
+/**
+ * Whatever flies, above roofs and trees: its shadow far below, the body a
+ * little larger the higher it is, and the rotor turning over it.
+ */
+function drawAir() {
+  for (const c of state.cars) {
+    if (!(c.alt > 0.3)) {
+      continue;
+    }
+    const type = c.type;
+    const lift = c.alt * 5;
+    for (const sh of [lift, 0]) {
+      ctx.save();
+      ctx.translate(c.x + sh, c.y + sh);
+      ctx.rotate(c.a);
+      if (sh) {
+        ctx.fillStyle = 'rgba(0,0,0,.25)';
+        ctx.fillRect(
+          -type.length / 2,
+          -type.width / 2,
+          type.length,
+          type.width
+        );
+      } else {
+        ctx.scale(1 + 0.5 * c.alt, 1 + 0.5 * c.alt);
+        ctx.drawImage(
+          c.spr,
+          -type.length / 2,
+          -type.width / 2,
+          type.length,
+          type.width
+        );
+        drawRotor(type, state.t * 25, true);
+      }
+      ctx.restore();
+    }
+  }
+}
+
 /** Mission scenery: bonfires, tents, people waiting for a lift. */
 function drawProps() {
   const j = state.job;
@@ -9250,7 +9360,7 @@ function drawSprites(x0, y0, x1, y1) {
     drawPerson(dz, '#c85aa8', '#d8d4cc');
   }
   for (const c of state.cars) {
-    if (!seen(c)) {
+    if (!seen(c) || c.alt > 0.3) {
       continue;
     }
     const type = c.type;
@@ -9302,6 +9412,9 @@ function drawSprites(x0, y0, x1, y1) {
           type.length,
           type.width
         );
+        if (c.kind === 'heli') {
+          drawRotor(type, 0.6, false); // standing still
+        }
         if (c.siren && !c.dead) {
           // blue lights
           const on = ((state.t * 6) | 0) % 2;
@@ -9428,6 +9541,7 @@ function render() {
   drawFurniture(gridFind(propGrid, x0 - 9, y0 - 9, x1 + 9, y1 + 9), ex, ey, hc);
   drawParticles();
   drawTrees(trees, ex, ey, hc, x0, y0, x1, y1);
+  drawAir();
   // the world ends here
   ctx.fillStyle = 'rgba(8,10,14,.7)';
   const m = v => Math.max(0, v);

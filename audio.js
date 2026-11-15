@@ -297,6 +297,9 @@ export function babble() {
 
 const ENGINES = {
   tractor: [26, 3.2, 300],
+  digger: [28, 2.6, 280],
+  tanker: [32, 3.6, 320],
+  heli: [18, 0.6, 260], // the low thrum of the rotor
   mixer: [30, 3.4, 300],
   truck: [32, 3.6, 320],
   fire: [34, 3.8, 340],

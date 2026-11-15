@@ -116,6 +116,7 @@ POIS = {
     # south, and the finest spruce, deep in the northern block
     'xmasfarm': (49.757777, 10.712546),
     'fichte': (49.758622, 10.712936),
+    'schreinerei': (49.750342, 10.714942),  # Schreinerei Joseph Wichert, Hauptstraße 18
 }
 
 # Read off the state's aerial photo, as lat/lon, because no map has them: the five grain silos of the Lagerhaus, and
