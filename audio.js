@@ -205,6 +205,11 @@ const SFX = {
   },
   step: () => beep(1175, 0.09, 0, 0.05, 'triangle'),
   hic: () => beep(480, 0.1, 0, 0.07, 'triangle', 900),
+  nos: () => {
+    // the bottle opens: a hiss and a rising whine
+    hiss(audioCtx.currentTime, 0.7, 0.18, 'highpass', 2500, sfx);
+    beep(300, 0.6, 0, 0.05, 'sawtooth', 900);
+  },
   saw: () => {
     beep(150, 0.9, 0, 0.05, 'sawtooth', 210);
     hiss(audioCtx.currentTime, 0.9, 0.1, 'bandpass', 2400, sfx);
