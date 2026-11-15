@@ -3509,6 +3509,7 @@ const TRAILERS = {
   cart: {length: 5.2, width: 2.3},
   wood: {length: 5.2, width: 2.3},
   xmas: {length: 5.2, width: 2.3},
+  fert: {length: 5.2, width: 2.3},
 };
 for (const [kind, type] of Object.entries(TRAILERS)) {
   const w = (type.length * PX_PER_M) | 0;
@@ -3519,9 +3520,14 @@ for (const [kind, type] of Object.entries(TRAILERS)) {
     g.fillStyle = f;
     g.fillRect(x, y, ww, hh);
   };
-  if (kind === 'cart' || kind === 'wood' || kind === 'xmas') {
-    // a farm cart, empty, with logs stacked crosswise, or with Christmas trees
-    // lying lengthwise
+  if (
+    kind === 'cart' ||
+    kind === 'wood' ||
+    kind === 'xmas' ||
+    kind === 'fert'
+  ) {
+    // a farm cart, empty, with logs stacked crosswise, with Christmas trees
+    // lying lengthwise, or with sacks of fertiliser
     rect(4, 0, 8, h, '#101012');
     rect(w - 14, 0, 8, h, '#101012');
     rect(0, 1, w - 3, h - 2, '#0b0b0d');
@@ -3535,6 +3541,12 @@ for (const [kind, type] of Object.entries(TRAILERS)) {
       rect(4, y, w - 14, 4, y % 8 > 3 ? '#2a7a3a' : '#1f5e2d');
       rect(w - 10, y + 1, 3, 2, '#6b4a2a');
       rect(8 + (y % 5) * 4, y + 1, 1, 1, '#d9dde2'); // tinsel left on
+    }
+    for (let x = 4; kind === 'fert' && x < w - 10; x += 6) {
+      for (let y = 3; y < h - 6; y += 6) {
+        rect(x, y, 5, 5, '#ecebe4');
+        rect(x + 1, y + 2, 3, 1, '#3c7a30');
+      }
     }
     rect(w - 3, h / 2 - 1, 3, 2, '#333');
   } else if (kind === 'grain') {
@@ -3828,7 +3840,7 @@ function puff(x, y, kind) {
   const sp =
     kind === 'spark'
       ? rand(4, 12)
-      : kind === 'blood' || kind === 'water'
+      : kind === 'blood' || kind === 'water' || kind === 'dung'
         ? rand(1, 6)
         : rand(0.2, 1.5);
   state.parts.push({
@@ -3838,7 +3850,14 @@ function puff(x, y, kind) {
     vy: Math.sin(a) * sp,
     kind,
     life: 0,
-    max: {spark: 0.3, smoke: 1.4, blood: 0.35, fire: 0.5, water: 0.6}[kind],
+    max: {
+      spark: 0.3,
+      smoke: 1.4,
+      blood: 0.35,
+      fire: 0.5,
+      water: 0.6,
+      dung: 0.6,
+    }[kind],
   });
 }
 /**
@@ -5593,6 +5612,11 @@ function jobRules(dt) {
           }
           if (Math.random() < dt * 5) {
             audio.play('spray');
+          }
+        }
+        if (st.fx === 'spread') {
+          for (let i = 0; i < 3; i++) {
+            puff(player.x + rand(-3, 3), player.y + rand(-3, 3), 'dung');
           }
         }
         if (j.hold >= st.secs) {
@@ -8627,13 +8651,20 @@ function drawSprites(x0, y0, x1, y1) {
 function drawParticles() {
   for (const p of state.parts) {
     const k = p.life / p.max;
-    if (p.kind === 'spark' || p.kind === 'blood' || p.kind === 'water') {
+    if (
+      p.kind === 'spark' ||
+      p.kind === 'blood' ||
+      p.kind === 'water' ||
+      p.kind === 'dung'
+    ) {
       ctx.fillStyle =
         p.kind === 'spark'
           ? '#ffd23e'
           : p.kind === 'blood'
             ? '#b0121a'
-            : '#9fd0f0';
+            : p.kind === 'dung'
+              ? '#ecebe4'
+              : '#9fd0f0';
       ctx.fillRect(p.x, p.y, 0.35, 0.35);
       continue;
     }

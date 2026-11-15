@@ -108,6 +108,7 @@ POIS = {
     'fairground': (49.7503858, 10.7130321),  # the Kerwa ground behind the parish office, where Google Maps has it
     'linsner': (49.75086, 10.71445),   # Gasthof Linsner, Hauptstraße 7
     'sammelstelle': (49.75098, 10.71742),  # the recycling containers, where the Christmas trees are collected
+    'streuobst': (49.755250, 10.704037),  # the orchard meadow of the Obst- und Gartenbauverein, above the pitch
 }
 
 # Read off the state's aerial photo, as lat/lon, because no map has them: the five grain silos of the Lagerhaus, and
@@ -187,10 +188,14 @@ POOLS = [(49.75277, 10.714879, 4.0, 7.0), (49.752167, 10.719626, 7.0, 4.0),
          (49.753636, 10.721236, 5.5, 3.5), (49.755039, 10.7105, 6.0, 4.5)]
 
 # Areas OSM lacks, read off the same photo: their kind and their corners as lat/lon. The meadow of the Koppel of Rock
-# is mapped as a part of one big field.
+# and the orchard meadow north-east of the sports ground are mapped as parts of big fields; the orchard's trees are in
+# the tree survey.
 PATCHES = [
     ('meadow', [(49.74614, 10.723502), (49.746158, 10.723697), (49.745583, 10.72442),
                 (49.745511, 10.724462), (49.743991, 10.724573), (49.743955, 10.723613)]),
+    ('meadow', [(49.755407, 10.704133), (49.755442, 10.704525), (49.755526, 10.704890), (49.755594, 10.705308),
+                (49.755627, 10.705542), (49.755407, 10.705333), (49.755121, 10.704994), (49.754885, 10.704630),
+                (49.754648, 10.704237), (49.754564, 10.703925), (49.754885, 10.703665), (49.755138, 10.703847)]),
 ]
 
 # Ways OSM lacks, read off the same photo: their tags, the OSM node they start at, and where they go as lat/lon: the

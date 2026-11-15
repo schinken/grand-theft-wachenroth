@@ -57,9 +57,10 @@ export const PLACES = {
   schul22: 'Michi, Schulstraße 22',
   muehle: 'Kleinwachenrother Mühle',
   koppel: 'Koppel of Rock',
-  warehouse: 'Lagerhaus',
+  warehouse: 'Lagerhaus Grönert',
   fairground: 'Kerwa-Festplatz',
   sammelstelle: 'Christbaum-Sammelstelle',
+  streuobst: 'Streuobstwiese',
   linsner: 'Gasthof Linsner',
 };
 
@@ -720,6 +721,49 @@ export const MISSIONS = [
     outro: [
       'Die Kinder malen dem Schwallclub ein Dankeschön-Bild.',
       'Und für dich gibts beim Schwallclub ein Seidla aufs Haus.',
+    ],
+  },
+
+  {
+    id: 'duenger',
+    title: 'Dünger für die Obstwiese',
+    reward: 700,
+    props: [{k: 'person', at: 'streuobst', col: '#3c7a30'}],
+    intro: [
+      'Notruf vom Obst- und Gartenbauverein: Die Apfelbäume auf der Streuobstwiese oberhalb vom Sportplatz brauchen dringend Dünger.',
+      'Beim Lagerhaus Grönert Am Graben steht ein Bulldog mit einem Hänger voll Düngersäcke.',
+    ],
+    steps: [
+      {
+        do: 'steal',
+        veh: 'tractor',
+        trailer: 'fert',
+        at: 'warehouse',
+        obj: 'Hol den Bulldog mit dem Dünger am Lagerhaus Grönert',
+      },
+      {
+        do: 'bring',
+        to: 'streuobst',
+        time: 210,
+        fragile: true,
+        obj: 'Bring den Dünger zur Streuobstwiese oberhalb vom Sportplatz',
+        say: 'Die Säcke sind net festgezurrt. Jeder Rempler kostet Dünger! Ab zur Streuobstwiese, oberhalb vom Sportplatz.',
+      },
+      {
+        do: 'hold',
+        to: 'streuobst',
+        r: 25,
+        secs: 8,
+        veh: true,
+        fx: 'spread',
+        time: 0,
+        fragile: false,
+        obj: 'Fahr über die Wiese und streu den Dünger aus',
+      },
+    ],
+    outro: [
+      'Die Bäume danken es dir. Im Herbst gibts Most für den ganzen Verein.',
+      'Der Obst- und Gartenbauverein macht dich zum Ehrenmitglied.',
     ],
   },
 
