@@ -7477,6 +7477,10 @@ function drawParticles() {
   }
 }
 
+// Where the camera looks from, when not from above the middle of the
+// screen: for the picture of the whole map.
+let eye = null;
+
 /** Draws one frame. */
 function render() {
   const z = state.cam.z;
@@ -7488,7 +7492,10 @@ function render() {
   const y0 = cy - hh;
   const x1 = cx + hw;
   const y1 = cy + hh;
-  const hc = 520 / z; // hc = camera height in metres
+  // The eye: x, y and the camera height hc, in metres
+  const ex = eye ? eye.x : cx;
+  const ey = eye ? eye.y : cy;
+  const hc = eye ? eye.h : 520 / z;
   ctx.setTransform(
     z,
     0,
@@ -7508,10 +7515,10 @@ function render() {
   drawGround(x0, y0, x1, y1);
   drawShadows(builds, trees, x0, y0, x1, y1);
   drawSprites(x0, y0, x1, y1);
-  drawBuildings(builds, cx, cy, hc, x0, y0, x1, y1);
-  drawFurniture(gridFind(propGrid, x0 - 9, y0 - 9, x1 + 9, y1 + 9), cx, cy, hc);
+  drawBuildings(builds, ex, ey, hc, x0, y0, x1, y1);
+  drawFurniture(gridFind(propGrid, x0 - 9, y0 - 9, x1 + 9, y1 + 9), ex, ey, hc);
   drawParticles();
-  drawTrees(trees, cx, cy, hc);
+  drawTrees(trees, ex, ey, hc);
   // the world ends here
   ctx.fillStyle = 'rgba(8,10,14,.7)';
   const m = v => Math.max(0, v);
@@ -8049,6 +8056,44 @@ function drawMap() {
 
 // ---------- main loop
 
+/**
+ * Offers a picture of the whole map as a download: seen from high above its
+ * middle, like an aerial photo. It is drawn in pieces, all from the same eye,
+ * so they fit together.
+ * @param {number=} z Pixels per metre.
+ * @param {number=} height How high the eye is, in metres.
+ */
+async function poster(z = 4, height = 1000) {
+  const big = canvas(Math.round(WORLD_W * z), Math.round(WORLD_H * z));
+  const g = big.getContext('2d');
+  const piece = 1024;
+  const mode = state.mode;
+  state.mode = 'poster'; // no labels, no arrows, no player
+  eye = {x: WORLD_W / 2, y: WORLD_H / 2, h: height};
+  viewW = viewH = gameCanvas.width = gameCanvas.height = piece;
+  ctx.imageSmoothingEnabled = false;
+  for (let y = 0; y < big.height; y += piece) {
+    for (let x = 0; x < big.width; x += piece) {
+      Object.assign(state.cam, {
+        x: (x + piece / 2) / z,
+        y: (y + piece / 2) / z,
+      });
+      state.cam.z = z;
+      state.shake = 0;
+      render();
+      g.drawImage(gameCanvas, x, y);
+    }
+  }
+  eye = null;
+  state.mode = mode;
+  resize();
+  const blob = await new Promise(done => big.toBlob(done, 'image/jpeg', 0.9));
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = 'grand-theft-wachenroth.jpg';
+  link.click();
+}
+
 /** Fits the canvas to the window. */
 function resize() {
   const a = innerWidth / innerHeight;
@@ -8115,6 +8160,7 @@ window.GTW = {
   PROPS: streetProps,
   TREES,
   inFront,
+  poster,
   TRAIN,
   CROSSINGS,
   TYPES,
