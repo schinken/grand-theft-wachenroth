@@ -94,7 +94,7 @@ POIS = {
     'roadworks': (49.75245, 10.71595),  # Schulstraße is being rebuilt
     'drinks': (49.74719, 10.72087),  # Getränke Braun, Kleinwachenroth 25
     'warehouse': (49.75125, 10.71829),  # Lagerhaus, Am Graben 9
-    'fairground': (49.74950, 10.71430),  # Kerwa tent in the Frühmessgarten off Kirchstraße
+    'fairground': (49.7503858, 10.7130321),  # the Kerwa ground behind the parish office, where Google Maps has it
     'linsner': (49.75086, 10.71445),   # Gasthof Linsner, Hauptstraße 7
 }
 
@@ -109,6 +109,14 @@ BARE = [
      (49.75566, 10.701024)],
     [(49.755312, 10.701187), (49.755223, 10.701412), (49.755029, 10.701187), (49.754899, 10.701162),
      (49.754794, 10.701099), (49.754907, 10.700724), (49.755142, 10.700937)],
+]
+
+# Ways OSM lacks, read off the same photo: their tags, the OSM node they start at, and where they go as lat/lon. The
+# one so far is the gravel drive from the bend of Kirchstraße to the Kerwa ground.
+WAYS = [
+    ({'highway': 'track'}, 269367677,
+     [(49.749883, 10.714128), (49.749875, 10.71392), (49.749928, 10.713735), (49.75001, 10.713572),
+      (49.7501, 10.713446), (49.750212, 10.713342), (49.750317, 10.713272)]),
 ]
 
 KX = 111320 * math.cos(math.radians((S + N) / 2))
@@ -575,6 +583,12 @@ else:
     req = urllib.request.Request('https://overpass-api.de/api/interpreter',
                                  urllib.parse.urlencode({'data': QUERY}).encode(), {'User-Agent': 'osm2map/1.0'})
     els = json.load(urllib.request.urlopen(req, timeout=120))['elements']
+
+spot = {nid: q for e in els if e['type'] == 'way' for nid, q in zip(e.get('nodes', ()), e.get('geometry', ()))}
+for i, (tags, start, pts) in enumerate(WAYS):
+    # The new nodes get made-up numbers below zero, where OSM has none.
+    els.append({'type': 'way', 'tags': tags, 'nodes': [start] + [-100 * i - j for j in range(1, len(pts) + 1)],
+                'geometry': [spot[start]] + [{'lat': lat, 'lon': lon} for lat, lon in pts]})
 
 roads, areas, buildings, trees, hedges, fences = [], [], [], [], [], []
 node_ix, nodes, edges = {}, [], []
