@@ -190,9 +190,6 @@ export const textures = {
   ind: slabs('#8b8b86', '#7b7b76', ['#84847f', '#93938e', '#7e7e79'], 32),
   com: slabs('#9c9a92', '#8c8a82', ['#94928a', '#a6a49c'], 16),
   school: slabs('#b3a98f', '#a09679', ['#a99f85', '#bdb399'], 8),
-  yard: tex('#94896c', (g, r) =>
-    dots(g, r, 600, ['#857a5e', '#a39878', '#7a7056', '#8b8b86'], 2)
-  ),
   dump: tex('#8d867a', (g, r) =>
     dots(g, r, 700, ['#6f6a60', '#a59e90', '#b56a4a', '#c9c5b9', '#5a564e'], 2)
   ),
