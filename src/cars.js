@@ -400,9 +400,14 @@ export function rollCar(c, vf, slip, dt, road) {
   c.x += fx * dx - fy * dy;
   c.y += fy * dx + fx * dy;
   c.a += yaw;
-  c.vx = Math.cos(c.a) * vf - Math.sin(c.a) * lateral;
-  c.vy = Math.sin(c.a) * vf + Math.cos(c.a) * lateral;
-  c.vf = vf;
+  // The body turns at once, its momentum does not: the car drifts to the
+  // outside of the bend until the tyres have scrubbed that off.
+  const along = vf * Math.cos(yaw) + slip * Math.sin(yaw);
+  const drift = slip * Math.cos(yaw) - vf * Math.sin(yaw);
+  const side = drift + (along * Math.tan(c.wheelAngle)) / 2;
+  c.vx = Math.cos(c.a) * along - Math.sin(c.a) * side;
+  c.vy = Math.sin(c.a) * along + Math.cos(c.a) * side;
+  c.vf = along;
 }
 
 /**
