@@ -211,57 +211,48 @@ function paintCemetery(g, a) {
 }
 
 /**
- * Paints land, roads, hedges and fences: everything on the ground that never
- * changes. Water is left as a hole, so the drifting water shows through.
+ * Paints one area of land: water is left as a hole, a field is filled along
+ * its furrows, a cemetery gets its graves and a car park its bays.
+ * @param {!CanvasRenderingContext2D} g
+ * @param {!Object} a
+ */
+function paintArea(g, a) {
+  g.fillStyle = a.fill;
+  if (a.k === 'water') {
+    g.globalCompositeOperation = 'destination-out';
+    g.fill(a.path);
+    g.globalCompositeOperation = 'source-over';
+  } else if (a.k === 'farm') {
+    g.save();
+    g.transform(a.ca, a.sa, -a.sa, a.ca, a.mx, a.my);
+    g.fill(a.lpath);
+    g.restore();
+  } else {
+    g.fill(a.path);
+  }
+  if (a.k === 'cem') {
+    paintCemetery(g, a);
+  }
+  if (a.bays) {
+    g.save();
+    g.clip(a.path);
+    g.strokeStyle = 'rgba(236,236,226,.5)';
+    g.lineWidth = 0.14;
+    g.lineCap = 'butt';
+    g.stroke(a.bays);
+    g.restore();
+  }
+}
+
+/**
+ * The bare earth around the houses of the new estate.
  * @param {!CanvasRenderingContext2D} g
  * @param {number} x0
  * @param {number} y0
  * @param {number} x1
  * @param {number} y1
  */
-function paintGround(g, x0, y0, x1, y1) {
-  g.fillStyle = textures.grass;
-  g.fillRect(x0 - 1, y0 - 1, x1 - x0 + 2, y1 - y0 + 2);
-  const seen = a => a.x1 > x0 && a.x0 < x1 && a.y1 > y0 && a.y0 < y1;
-  for (const a of AREAS) {
-    if (seen(a) && a.fill) {
-      g.fillStyle = a.fill;
-      if (a.k === 'water') {
-        g.globalCompositeOperation = 'destination-out';
-        g.fill(a.path);
-        g.globalCompositeOperation = 'source-over';
-      } else if (a.k === 'farm') {
-        g.save();
-        g.transform(a.ca, a.sa, -a.sa, a.ca, a.mx, a.my);
-        g.fill(a.lpath);
-        g.restore();
-      } // furrows run along the field
-      else {
-        g.fill(a.path);
-      }
-      if (a.k === 'cem') {
-        paintCemetery(g, a);
-      }
-      if (a.bays) {
-        g.save();
-        g.clip(a.path);
-        g.strokeStyle = 'rgba(236,236,226,.5)';
-        g.lineWidth = 0.14;
-        g.lineCap = 'butt';
-        g.stroke(a.bays);
-        g.restore();
-      }
-    }
-  }
-  fieldMasks.forEach((mask, i) => {
-    paintMask(g, mask, 0.5, textures[`field${i + 1}`], FURROWS[i], x0, y0);
-  });
-  paintMask(g, yardMask, 1, textures.yard, 0, x0, y0);
-  for (const a of AREAS) {
-    if (seen(a) && a.k === 'pitch') {
-      drawPitch(g, a);
-    }
-  }
+function paintPlots(g, x0, y0, x1, y1) {
   for (const b of NEW_HOUSES) {
     if (b.x1 < x0 - 30 || b.x0 > x1 + 30 || b.y1 < y0 - 30 || b.y0 > y1 + 30) {
       continue;
@@ -272,8 +263,14 @@ function paintGround(g, x0, y0, x1, y1) {
     g.fillRect(b.u0 - 6, b.v0 - 6, b.u1 - b.u0 + 12, b.v1 - b.v0 + 12);
     g.restore();
   }
+}
+
+/**
+ * Garden pools: a pale rim around the water.
+ * @param {!CanvasRenderingContext2D} g
+ */
+function paintPools(g) {
   for (let i = 0; i < MAP.pools.length; i += 4) {
-    // Garden pools: a pale rim around the water
     const [px, py, across, down] = MAP.pools.slice(i, i + 4);
     g.fillStyle = '#d9d6cc';
     g.fillRect(
@@ -287,6 +284,18 @@ function paintGround(g, x0, y0, x1, y1) {
     g.fillStyle = 'rgba(255,255,255,.35)';
     g.fillRect(px - across / 2 + 0.5, py - down / 2 + 0.5, across * 0.4, 0.3);
   }
+}
+
+/**
+ * The yards that are painted by hand: those of the modelled buildings, and
+ * those of places without one.
+ * @param {!CanvasRenderingContext2D} g
+ * @param {number} x0
+ * @param {number} y0
+ * @param {number} x1
+ * @param {number} y1
+ */
+function paintYards(g, x0, y0, x1, y1) {
   for (const b of MODELLED) {
     if (b.x1 < x0 - 40 || b.x0 > x1 + 40 || b.y1 < y0 - 40 || b.y0 > y1 + 40) {
       continue;
@@ -305,6 +314,13 @@ function paintGround(g, x0, y0, x1, y1) {
       g.restore();
     }
   }
+}
+
+/**
+ * The paved drives of the new estate, from each house down to the street.
+ * @param {!CanvasRenderingContext2D} g
+ */
+function paintDrives(g) {
   g.lineCap = 'butt';
   g.strokeStyle = textures.school;
   for (const b of NEW_HOUSES) {
@@ -318,6 +334,14 @@ function paintGround(g, x0, y0, x1, y1) {
     g.stroke();
   }
   g.lineCap = 'round';
+}
+
+/**
+ * Streams and the river, the rail, then tracks, paths and roads, one layer
+ * over the other.
+ * @param {!CanvasRenderingContext2D} g
+ */
+function paintWays(g) {
   strokeLayer(g, ROADS.stream, '#3a72a2');
   strokeLayer(g, ROADS.bank, '#3c6829');
   g.globalCompositeOperation = 'destination-out';
@@ -345,36 +369,49 @@ function paintGround(g, x0, y0, x1, y1) {
   strokeLayer(g, ROADS.line, '#d8d4c0', 0.28);
   g.setLineDash([]);
   g.lineCap = 'round';
-  {
-    // the building site in Schulstraße: torn-up road, barriers, a heap of
-    // gravel
-    const b = SPOT.roadworks;
-    g.save();
-    g.translate(b.x, b.y);
-    g.rotate(b.a);
-    g.fillStyle = textures.constr;
-    g.fillRect(-16, -1, 32, 7);
-    g.fillStyle = '#6f6a60';
-    g.beginPath();
-    g.arc(11, 3.4, 2.4, 0, TAU);
-    g.fill();
-    g.fillStyle = '#8f897d';
-    g.beginPath();
-    g.arc(10.5, 3, 1.5, 0, TAU);
-    g.fill();
-    for (const x of [-16, 15.4]) {
-      for (let i = 0; i < 7; i++) {
-        g.fillStyle = i % 2 ? '#f4f4ef' : '#c8201c';
-        g.fillRect(x, -1 + i, 0.6, 1);
-      }
-    }
-    for (let i = 0; i < 16; i++) {
+}
+
+/**
+ * The building site in Schulstraße: torn-up road, barriers, a heap of
+ * gravel.
+ * @param {!CanvasRenderingContext2D} g
+ */
+function paintRoadworks(g) {
+  const b = SPOT.roadworks;
+  g.save();
+  g.translate(b.x, b.y);
+  g.rotate(b.a);
+  g.fillStyle = textures.constr;
+  g.fillRect(-16, -1, 32, 7);
+  g.fillStyle = '#6f6a60';
+  g.beginPath();
+  g.arc(11, 3.4, 2.4, 0, TAU);
+  g.fill();
+  g.fillStyle = '#8f897d';
+  g.beginPath();
+  g.arc(10.5, 3, 1.5, 0, TAU);
+  g.fill();
+  for (const x of [-16, 15.4]) {
+    for (let i = 0; i < 7; i++) {
       g.fillStyle = i % 2 ? '#f4f4ef' : '#c8201c';
-      g.fillRect(-16 + i * 2, 5.6, 2, 0.5);
+      g.fillRect(x, -1 + i, 0.6, 1);
     }
-    g.restore();
   }
-  paintDecor(g, x0, y0, x1, y1);
+  for (let i = 0; i < 16; i++) {
+    g.fillStyle = i % 2 ? '#f4f4ef' : '#c8201c';
+    g.fillRect(-16 + i * 2, 5.6, 2, 0.5);
+  }
+  g.restore();
+}
+
+/**
+ * The hedges and garden fences of one tile, along the borders of the
+ * parcels.
+ * @param {!CanvasRenderingContext2D} g
+ * @param {number} x0 Where the tile begins.
+ * @param {number} y0
+ */
+function paintBorders(g, x0, y0) {
   const tile = tileKey(Math.round(x0 / TILE_M), Math.round(y0 / TILE_M));
   const hedges = HEDGE_TILES.get(tile);
   if (hedges) {
@@ -386,25 +423,63 @@ function paintGround(g, x0, y0, x1, y1) {
     g.stroke(hedges);
   }
   const fences = FENCE_TILES.get(tile);
-  if (fences) {
-    // Garden fences: a rail with pale pickets, and a thin shadow
-    g.lineCap = 'butt';
-    g.save();
-    g.translate(0.25, 0.25);
-    g.strokeStyle = 'rgba(0,0,0,.22)';
-    g.lineWidth = 0.3;
-    g.stroke(fences);
-    g.restore();
-    g.strokeStyle = '#4a3826';
-    g.lineWidth = 0.24;
-    g.stroke(fences);
-    g.setLineDash([0.2, 0.5]);
-    g.strokeStyle = '#dccfae';
-    g.lineWidth = 0.44;
-    g.stroke(fences);
-    g.setLineDash([]);
-    g.lineCap = 'round';
+  if (!fences) {
+    return;
   }
+  // Garden fences: a rail with pale pickets, and a thin shadow
+  g.lineCap = 'butt';
+  g.save();
+  g.translate(0.25, 0.25);
+  g.strokeStyle = 'rgba(0,0,0,.22)';
+  g.lineWidth = 0.3;
+  g.stroke(fences);
+  g.restore();
+  g.strokeStyle = '#4a3826';
+  g.lineWidth = 0.24;
+  g.stroke(fences);
+  g.setLineDash([0.2, 0.5]);
+  g.strokeStyle = '#dccfae';
+  g.lineWidth = 0.44;
+  g.stroke(fences);
+  g.setLineDash([]);
+  g.lineCap = 'round';
+}
+
+/**
+ * Paints land, roads, hedges and fences: everything on the ground that never
+ * changes. Water is left as a hole, so the drifting water shows through.
+ * @param {!CanvasRenderingContext2D} g
+ * @param {number} x0
+ * @param {number} y0
+ * @param {number} x1
+ * @param {number} y1
+ */
+function paintGround(g, x0, y0, x1, y1) {
+  g.fillStyle = textures.grass;
+  g.fillRect(x0 - 1, y0 - 1, x1 - x0 + 2, y1 - y0 + 2);
+  const seen = a => a.x1 > x0 && a.x0 < x1 && a.y1 > y0 && a.y0 < y1;
+  for (const a of AREAS) {
+    if (seen(a) && a.fill) {
+      paintArea(g, a);
+    }
+  }
+  fieldMasks.forEach((mask, i) => {
+    paintMask(g, mask, 0.5, textures[`field${i + 1}`], FURROWS[i], x0, y0);
+  });
+  paintMask(g, yardMask, 1, textures.yard, 0, x0, y0);
+  for (const a of AREAS) {
+    if (seen(a) && a.k === 'pitch') {
+      drawPitch(g, a);
+    }
+  }
+  paintPlots(g, x0, y0, x1, y1);
+  paintPools(g);
+  paintYards(g, x0, y0, x1, y1);
+  paintDrives(g);
+  paintWays(g);
+  paintRoadworks(g);
+  paintDecor(g, x0, y0, x1, y1);
+  paintBorders(g, x0, y0);
 }
 
 // The ground never changes, so it is painted once into tiles of 64 m and the
