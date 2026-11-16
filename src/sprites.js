@@ -49,6 +49,17 @@ export const TYPES = {
     hp: 140,
     mass: 1.7,
   },
+  n1000: {
+    name: ['n1000'],
+    length: 5.6,
+    width: 2.3,
+    variantOf: 'van',
+    variantShare: 0.45,
+    max: 25,
+    acc: 9,
+    hp: 140,
+    mass: 1.7,
+  },
   pizza: {
     name: ['Pizza-Flitzer'],
     length: 3.9,
@@ -175,6 +186,7 @@ export const PAINT = {
   heli: '#c8201c',
   fire: '#c8201c',
   van: '#eeeee8',
+  n1000: '#eeeee8',
 };
 const spriteCache = new Map();
 
@@ -350,6 +362,20 @@ function paintVan(p) {
   rect(3, 2, w - 17, h - 4, shade(body, 1.06));
   if (!wreck) {
     rect(3, mid - 1, w - 17, 3, COLORS[frame % COLORS.length]);
+  }
+}
+
+/**
+ * The n1000: a van shell with a thin, slightly bowed windscreen at the nose.
+ * @param {!Pen} p
+ */
+function paintN1000(p) {
+  const {w, h, body, glass, rect, box} = p;
+  box(0, w, body);
+  rect(3, 2, w - 10, h - 4, shade(body, 1.06));
+  for (let y = 2; y < h - 2; y++) {
+    const edge = y === 2 || y === h - 3;
+    rect(edge ? w - 6 : w - 5, y, 2, 1, glass);
   }
 }
 
@@ -546,6 +572,9 @@ function paintBody(p) {
       break;
     case 'van':
       paintVan(p);
+      break;
+    case 'n1000':
+      paintN1000(p);
       break;
     case 'tractor':
       paintTractor(p);
