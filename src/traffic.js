@@ -14,7 +14,7 @@ import {spawnPed} from './people.js';
 import {MODELLED, SPOT, downhill, field} from './places.js';
 import {ROOFS, fromFrame} from './roofs.js';
 import {blocked, treeGrid} from './scenery.js';
-import {COLORS} from './sprites.js';
+import {COLORS, TYPES} from './sprites.js';
 import {fmt, state} from './state.js';
 import {CROSSINGS} from './train.js';
 import {WORLD_H, WORLD_W, clamp, dist, lerp, pick, rng, wrap} from './util.js';
@@ -372,16 +372,52 @@ function dropFar(f) {
 }
 
 /**
+ * A variant of a standard vehicle, using its share of that vehicle's pool.
+ * @param {string} kind The standard type.
+ * @param {number} r A random number between 0 and 1 within that pool.
+ * @return {string}
+ */
+function variantKind(kind, r) {
+  let share = 0;
+  for (const [key, type] of Object.entries(TYPES)) {
+    if (type.variantOf === kind) {
+      share += type.variantShare;
+      if (r < share) {
+        return key;
+      }
+    }
+  }
+  return kind;
+}
+
+/**
+ * The kind of a parked car, with variants sharing the existing pools.
+ * @param {number} r A random number between 0 and 1.
+ * @param {number} cars End of the ordinary car pool.
+ * @param {number} vans End of the van pool.
+ * @return {string}
+ */
+function parkedKind(r, cars, vans) {
+  if (r < cars) {
+    return variantKind('car', r / cars);
+  }
+  if (r < vans) {
+    return variantKind('van', (r - cars) / (vans - cars));
+  }
+  return 'sport';
+}
+
+/**
  * What kind of vehicle joins the traffic: mostly cars.
  * @param {number} r A random number.
  * @return {string}
  */
 function trafficKind(r) {
   if (r < 0.6) {
-    return 'car';
+    return variantKind('car', r / 0.6);
   }
   if (r < 0.78) {
-    return 'van';
+    return variantKind('van', (r - 0.6) / 0.18);
   }
   if (r < 0.86) {
     return 'sport';
@@ -488,7 +524,7 @@ function fillCarPark(a, r) {
         x,
         y,
         a.ang + Math.PI / 2 + (flip ? Math.PI : 0),
-        kind < 0.8 ? 'car' : kind < 0.93 ? 'van' : 'sport',
+        parkedKind(kind, 0.8, 0.93),
         COLORS[(r() * COLORS.length) | 0]
       );
     }
@@ -523,7 +559,7 @@ function lineKerbs(r) {
       x,
       y,
       Math.atan2(s[3] - s[1], s[2] - s[0]) + (flip ? Math.PI : 0),
-      kind < 0.85 ? 'car' : kind < 0.95 ? 'van' : 'sport',
+      parkedKind(kind, 0.85, 0.95),
       col
     );
   }
