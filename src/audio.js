@@ -8,6 +8,7 @@ let music;
 let voiceBus;
 let drive;
 let noiseBuf;
+let dieselNodes;
 let tap;
 let engineNodes;
 let sirenGain;
@@ -62,6 +63,38 @@ export function init() {
   for (let i = 0; i < ch.length; i++) {
     ch[i] = Math.random() * 2 - 1;
   }
+
+  // Four slightly uneven combustion strokes: low exhaust thumps with a
+  // short metallic injection clatter, looping at 750 rpm for an old diesel.
+  const dieselBuf = audioCtx.createBuffer(
+    1,
+    Math.round(audioCtx.sampleRate * 0.16),
+    audioCtx.sampleRate
+  );
+  const dieselSamples = dieselBuf.getChannelData(0);
+  for (const [i, at] of [0, 0.041, 0.079, 0.121].entries()) {
+    for (let n = 0; n < audioCtx.sampleRate * 0.039; n++) {
+      const index = Math.round(at * audioCtx.sampleRate) + n;
+      if (index >= dieselSamples.length) {
+        break;
+      }
+      const t = n / audioCtx.sampleRate;
+      const thump = Math.sin(2 * Math.PI * 78 * t) * Math.exp(-t * 100);
+      const clatter = (Math.random() * 2 - 1) * Math.exp(-t * 650) * 0.7;
+      dieselSamples[index] += (thump + clatter) * (i % 2 ? 0.8 : 1);
+    }
+  }
+  const diesel = audioCtx.createBufferSource();
+  diesel.buffer = dieselBuf;
+  diesel.loop = true;
+  const dieselFilter = audioCtx.createBiquadFilter();
+  dieselFilter.type = 'lowpass';
+  dieselFilter.frequency.value = 1800;
+  const dieselGain = audioCtx.createGain();
+  dieselGain.gain.value = 0;
+  diesel.connect(dieselFilter).connect(dieselGain).connect(sfx);
+  diesel.start();
+  dieselNodes = {diesel, dieselGain};
 
   const o = audioCtx.createOscillator();
   const o2 = audioCtx.createOscillator();
@@ -306,6 +339,7 @@ const ENGINES = {
   sport: [55, 6.5, 520],
   v6: [30, 3.6, 230], // from the garage: a deep burble
   turbo: [66, 8.2, 1100], // and a screaming 300 hp petrol engine
+  n1000: [32, 3, 300],
 };
 /**
  * Tunes the engine drone to the speed.
@@ -317,6 +351,16 @@ export function engine(speed, on, kind) {
   if (!engineNodes) {
     return;
   }
+  dieselNodes.diesel.playbackRate.setTargetAtTime(
+    1 + Math.abs(speed) * 0.07,
+    audioCtx.currentTime,
+    0.08
+  );
+  dieselNodes.dieselGain.gain.setTargetAtTime(
+    on && kind === 'n1000' ? 0.12 : 0,
+    audioCtx.currentTime,
+    0.05
+  );
   const [base, k, cut] = ENGINES[kind] || [45, 5.5, 380];
   const f = base + Math.abs(speed) * k;
   const t = audioCtx.currentTime;
