@@ -60,6 +60,66 @@ function nextNode(from, to, ai) {
 }
 
 /**
+ * Whether a level crossing ahead of a car is shut.
+ * @param {!Car} c
+ * @param {number} reach How far ahead, in metres.
+ * @return {boolean}
+ */
+function gateShut(c, reach) {
+  const fx = Math.cos(c.a);
+  const fy = Math.sin(c.a);
+  return CROSSINGS.some(k => {
+    const rx = k.x - c.x;
+    const ry = k.y - c.y;
+    const f = rx * fx + ry * fy;
+    return k.shut && f > 0 && f < reach && Math.abs(ry * fx - rx * fy) < 4;
+  });
+}
+
+/**
+ * Whether a car, a pedestrian or the player on foot is right in front of a
+ * car.
+ * @param {!Car} c
+ * @param {number} reach How far ahead, in metres.
+ * @return {boolean}
+ */
+function inTheWay(c, reach) {
+  const player = state.player;
+  const fx = Math.cos(c.a);
+  const fy = Math.sin(c.a);
+  const ahead = o => {
+    const rx = o.x - c.x;
+    const ry = o.y - c.y;
+    const f = rx * fx + ry * fy;
+    return f > 0 && f < reach && Math.abs(ry * fx - rx * fy) < 1.7;
+  };
+  return (
+    state.cars.some(o => o !== c && ahead(o)) ||
+    state.peds.some(ahead) ||
+    (state.mode === 'play' && !player.car && ahead(player))
+  );
+}
+
+/**
+ * How an AI car uses its pedals: it brakes when something is in the way,
+ * gives gas below the speed it wants, and eases off well above it.
+ * @param {number} vf Its speed, in metres a second.
+ * @param {number} want The speed it wants.
+ * @param {boolean} block Whether something is in the way.
+ * @param {boolean} fast Whether it is in a hurry.
+ * @return {number} From -1, full brake, to 1, full throttle.
+ */
+function throttle(vf, want, block, fast) {
+  if (block) {
+    return vf > 0.3 ? -1 : 0;
+  }
+  if (vf < want) {
+    return fast ? 1 : 0.7;
+  }
+  return vf > want + 2 ? -0.4 : 0;
+}
+
+/**
  * Steers a computer-driven car: traffic, police and getaway drivers.
  * @param {!Car} c
  * @param {number} dt
@@ -102,47 +162,18 @@ export function driveAI(c, dt) {
     (2 + Math.min(a.w, b.w) * 1.6) *
     (hunt || ai.flee ? 2 : ai.rage > 0 ? 1.6 : 1) *
     (1 - 0.7 * Math.min(1, Math.abs(err)));
-  const fx = Math.cos(c.a);
-  const fy = Math.sin(c.a);
   const reach = 5 + c.vf * 0.9;
-  const ahead = o => {
-    const rx = o.x - c.x;
-    const ry = o.y - c.y;
-    const f = rx * fx + ry * fy;
-    return f > 0 && f < reach && Math.abs(ry * fx - rx * fy) < 1.7;
-  };
   // A level crossing ahead is shut while the train passes: everybody waits,
   // the police too, and nobody gets tired of waiting.
-  const gate = CROSSINGS.some(k => {
-    const rx = k.x - c.x;
-    const ry = k.y - c.y;
-    const f = rx * fx + ry * fy;
-    return k.shut && f > 0 && f < reach + 6 && Math.abs(ry * fx - rx * fy) < 4;
-  });
-  const block =
-    gate ||
-    (!fast &&
-      !(ai.push > 0) &&
-      (state.cars.some(o => o !== c && ahead(o)) ||
-        state.peds.some(ahead) ||
-        (state.mode === 'play' && !player.car && ahead(player))));
+  const gate = gateShut(c, reach + 6);
+  const block = gate || (!fast && !(ai.push > 0) && inTheWay(c, reach));
   ai.wait = block && !gate ? ai.wait + dt : 0;
   if (ai.wait > 5) {
     ai.push = 2;
   } // tired of waiting: shove through
   ai.push -= dt;
   ai.rage -= dt;
-  c.thr = block
-    ? c.vf > 0.3
-      ? -1
-      : 0
-    : c.vf < want
-      ? fast
-        ? 1
-        : 0.7
-      : c.vf > want + 2
-        ? -0.4
-        : 0;
+  c.thr = throttle(c.vf, want, block, fast);
   c.hb = block && c.vf < 1;
   c.steer = clamp(err * 2.2, -1, 1);
   if (
@@ -182,6 +213,43 @@ export const newAI = (from, to, more) =>
 export function crime(heat) {
   state.wanted = Math.min(4, state.wanted + heat);
   state.seen = 8;
+}
+
+/**
+ * A patrol car sets off at a junction some way off, down the road to the
+ * player.
+ */
+function sendPatrol() {
+  const player = state.player;
+  const spots = NODES.filter(n => {
+    const d = dist(n, player);
+    return (
+      d > 110 &&
+      d < 230 &&
+      n.gps.length &&
+      n.x > 0 &&
+      n.y > 0 &&
+      n.x < WORLD_W &&
+      n.y < WORLD_H
+    );
+  });
+  const a = pick(spots);
+  if (!a) {
+    return;
+  }
+  const i = NODES.indexOf(a);
+  const to = downhill(state.copF, i);
+  if (to < 0) {
+    return;
+  }
+  const c = makeCar(
+    a.x,
+    a.y,
+    Math.atan2(NODES[to].y - a.y, NODES[to].x - a.x),
+    'police'
+  );
+  c.ai = newAI(i, to, {cop: true});
+  c.siren = true;
 }
 
 /**
@@ -228,33 +296,7 @@ export function police(dt) {
     cops < Math.min(3, Math.floor(state.wanted)) &&
     Math.random() < dt * 1.2
   ) {
-    const spots = NODES.filter(n => {
-      const d = dist(n, player);
-      return (
-        d > 110 &&
-        d < 230 &&
-        n.gps.length &&
-        n.x > 0 &&
-        n.y > 0 &&
-        n.x < WORLD_W &&
-        n.y < WORLD_H
-      );
-    });
-    const a = pick(spots);
-    if (a) {
-      const i = NODES.indexOf(a);
-      const to = downhill(state.copF, i);
-      if (to >= 0) {
-        const c = makeCar(
-          a.x,
-          a.y,
-          Math.atan2(NODES[to].y - a.y, NODES[to].x - a.x),
-          'police'
-        );
-        c.ai = newAI(i, to, {cop: true});
-        c.siren = true;
-      }
-    }
+    sendPatrol();
   }
   // caught: a patrol car right next to you while you are slow
   const slow = (player.car ? Math.hypot(player.car.vx, player.car.vy) : 0) < 3;
