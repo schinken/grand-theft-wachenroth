@@ -81,6 +81,7 @@ export function makeCar(x, y, a, kind, col = PAINT[kind] || pick(COLORS)) {
     spin: 0,
     thr: 0,
     steer: 0,
+    wheelAngle: 0,
     hb: false,
     type,
     kind,
@@ -368,6 +369,43 @@ function swingTrailer(c, vf, dt) {
 }
 
 /**
+ * Rolls a wheeled vehicle along the arc set by its front wheels. The rear
+ * axle follows the body heading; its midpoint has no sideways tyre motion.
+ * The body centre follows a different arc, so the nose swings out naturally.
+ * @param {!Car} c
+ * @param {number} vf Forward speed at the rear axle, metres per second.
+ * @param {number} slip Sideways speed in excess of the rolling motion.
+ * @param {number} dt
+ * @param {boolean} road
+ */
+export function rollCar(c, vf, slip, dt, road) {
+  const wheelbase = c.type.wheelbase;
+  // Ease the limit at speed for responsive game handling, while retaining
+  // full lock for manoeuvring and less grip off the road.
+  const grip =
+    ((road ? 14 : 8) + Math.abs(vf) * (road ? 1 : 0.6)) * (c.boost ? 1.2 : 1);
+  const limit = Math.min(0.62, Math.atan((grip * wheelbase) / (vf * vf || 1)));
+  const target = clamp(c.steer, -1, 1) * limit;
+  c.wheelAngle += clamp(target - c.wheelAngle, -2.8 * dt, 2.8 * dt);
+  const curvature = Math.tan(c.wheelAngle) / wheelbase;
+  const yaw = vf * curvature * dt;
+  const lateral = slip + (vf * Math.tan(c.wheelAngle)) / 2;
+  // Integrate the arc exactly rather than rotating the body in place.
+  const sinc = Math.abs(yaw) < 1e-6 ? 1 : Math.sin(yaw) / yaw;
+  const cosc = Math.abs(yaw) < 1e-6 ? yaw / 2 : (1 - Math.cos(yaw)) / yaw;
+  const dx = (vf * sinc - lateral * cosc) * dt;
+  const dy = (vf * cosc + lateral * sinc) * dt;
+  const fx = Math.cos(c.a);
+  const fy = Math.sin(c.a);
+  c.x += fx * dx - fy * dy;
+  c.y += fy * dx + fx * dy;
+  c.a += yaw;
+  c.vx = Math.cos(c.a) * vf - Math.sin(c.a) * lateral;
+  c.vy = Math.sin(c.a) * vf + Math.cos(c.a) * lateral;
+  c.vf = vf;
+}
+
+/**
  * Moves one vehicle: engine, steering, grip, walls, trees and street furniture.
  * @param {!Car} c
  * @param {number} dt
@@ -394,14 +432,22 @@ export function stepCar(c, dt) {
   let fx = Math.cos(c.a);
   let fy = Math.sin(c.a);
   let vf = c.vx * fx + c.vy * fy;
-  c.a +=
-    ((c.steer * (c.hb ? 3.5 : c.boost ? 3.2 : 2.8)) / (1 + Math.abs(vf) / 26)) *
-    clamp(vf / 5, -1, 1) *
-    dt;
-  fx = Math.cos(c.a);
-  fy = Math.sin(c.a);
-  vf = c.vx * fx + c.vy * fy;
-  let vl = c.vy * fx - c.vx * fy; // sideways slip
+  if (!type.wheelbase) {
+    c.a +=
+      ((c.steer * (c.hb ? 3.5 : c.boost ? 3.2 : 2.8)) /
+        (1 + Math.abs(vf) / 26)) *
+      clamp(vf / 5, -1, 1) *
+      dt;
+    fx = Math.cos(c.a);
+    fy = Math.sin(c.a);
+    vf = c.vx * fx + c.vy * fy;
+  }
+  c.wheelAngle ??= 0;
+  // Separate genuine skid/collision motion from the centre's rolling arc.
+  let vl =
+    c.vy * fx -
+    c.vx * fy -
+    (type.wheelbase ? (vf * Math.tan(c.wheelAngle)) / 2 : 0);
   // Tuned at the garage: faster, quicker off the mark, and it takes bends.
   const nos = burnNos(c, dt);
   const boost = (c.boost || 1) * (nos ? 1.45 : 1);
@@ -418,11 +464,17 @@ export function stepCar(c, dt) {
       c.spin = 0;
     }
   }
-  c.vx = fx * vf - fy * vl;
-  c.vy = fy * vf + fx * vl;
-  c.vf = vf;
-  c.x += c.vx * dt;
-  c.y += c.vy * dt;
+  if (type.wheelbase) {
+    rollCar(c, vf, vl, dt, !!road);
+    fx = Math.cos(c.a);
+    fy = Math.sin(c.a);
+  } else {
+    c.vx = fx * vf - fy * vl;
+    c.vy = fy * vf + fx * vl;
+    c.vf = vf;
+    c.x += c.vx * dt;
+    c.y += c.vy * dt;
+  }
   if (c.tr) {
     swingTrailer(c, vf, dt);
   }
