@@ -4,6 +4,7 @@
 
 import {MAP} from '../map.js';
 import {BUILD} from './buildings.js';
+import {rollCar} from './cars.js';
 import {inFront, parting} from './draw-buildings.js';
 import {FENCE_TILES, FURROWS, fieldMasks} from './draw-ground.js';
 import {pushOut} from './geometry.js';
@@ -55,7 +56,70 @@ export function selftest() {
       ...(m.props || []).map(p => p.at),
     ]).filter(Boolean)
   );
+  const rolling = (kind, steer = 1) => ({
+    x: 0,
+    y: 0,
+    a: 0,
+    wheelAngle: 0,
+    steer,
+    type: TYPES[kind],
+  });
+  const driveCircle = (c, speed, seconds = 2) => {
+    for (let i = 0; i < seconds * 120; i++) {
+      rollCar(c, speed, 0, 1 / 120, true);
+    }
+    return c;
+  };
   const checks = {
+    'steering at rest turns the wheels without rotating the vehicle': (() => {
+      const c = driveCircle(rolling('car'), 0);
+      return c.x === 0 && c.y === 0 && c.a === 0 && c.wheelAngle > 0.6;
+    })(),
+    'short wheelbases turn tighter and reversing reverses the turn': (() => {
+      const compact = rolling('car');
+      compact.type = {...compact.type, wheelbase: 1.84};
+      const small = driveCircle(compact, 4);
+      const normal = driveCircle(rolling('car'), 4);
+      const large = driveCircle(rolling('truck'), 4);
+      const reverse = driveCircle(rolling('car'), -4);
+      return (
+        small.a > normal.a &&
+        normal.a > large.a &&
+        Math.abs(reverse.a + normal.a) < 1e-9
+      );
+    })(),
+    'the rear axle rolls around its turn centre without sliding sideways':
+      (() => {
+        const c = rolling('car', 0.4 / 0.62);
+        c.wheelAngle = 0.4;
+        const rear = c.type.wheelbase / 2;
+        const radius = c.type.wheelbase / Math.tan(c.wheelAngle);
+        driveCircle(c, 4);
+        const x = c.x - Math.cos(c.a) * rear;
+        const y = c.y - Math.sin(c.a) * rear;
+        const sideSpeed =
+          c.vy * Math.cos(c.a) -
+          c.vx * Math.sin(c.a) -
+          (4 * Math.tan(c.wheelAngle)) / 2;
+        return (
+          Math.abs(Math.hypot(x + rear, y - radius) - radius) < 1e-8 &&
+          Math.abs(sideSpeed) < 1e-9
+        );
+      })(),
+    'fast steering remains responsive and stays straight with no input':
+      (() => {
+        const fast = driveCircle(rolling('car'), 38);
+        const straight = driveCircle(rolling('car', 0), 10);
+        const radius = fast.type.wheelbase / Math.tan(fast.wheelAngle);
+        return (
+          radius > 20 &&
+          radius < 35 &&
+          fast.wheelAngle < 0.2 &&
+          Math.abs(straight.x - 20) < 1e-8 &&
+          straight.y === 0 &&
+          straight.a === 0
+        );
+      })(),
     'clear of a wall: no push': pushOut(20, 5, 1, sq) === null,
     'touching a wall: pushed straight out':
       a && a[0] === 1 && Math.abs(a[2] - 0.5) < 1e-9,

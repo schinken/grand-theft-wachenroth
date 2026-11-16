@@ -128,7 +128,11 @@ export const TYPES = {
     mass: 3,
   },
 };
-for (const type of Object.values(TYPES)) {
+for (const [kind, type] of Object.entries(TYPES)) {
+  // Axles are centred about the body. Aircraft and tracked vehicles keep
+  // their own steering; longer wheeled vehicles need more room to turn.
+  type.wheelbase ??=
+    kind === 'heli' || kind === 'digger' ? 0 : type.length * 0.62;
   // a row of collision circles along the body
   type.r = type.width / 2;
   const e = type.length / 2 - type.r;
