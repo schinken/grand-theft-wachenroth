@@ -235,6 +235,148 @@ function addWindows(b, look) {
 }
 
 /**
+ * The outward normal of every wall, and its colour by how the sun falls on
+ * it.
+ * @param {!Building} b
+ * @param {string} base The colour of the walls.
+ */
+function prepWalls(b, base) {
+  b.nx = [];
+  b.ny = [];
+  b.wall = [];
+  for (let i = 0; i < b.p.length; i += 2) {
+    const j = (i + 2) % b.p.length;
+    const ex = b.p[j] - b.p[i];
+    const ey = b.p[j + 1] - b.p[i + 1];
+    const l = Math.hypot(ex, ey) || 1;
+    b.nx.push(ey / l);
+    b.ny.push(-ex / l); // outward, polygons are clockwise
+    b.wall.push(
+      shade(base, 0.78 - 0.22 * ((ey / l) * LIGHT[0] - (ex / l) * LIGHT[1]))
+    );
+  }
+}
+
+// A first guess at the roof of a building, by its kind: the texture, if it
+// has one, and whether it gets a ridge. v is a random number, simple says
+// whether the outline suits a ridge, big whether it is a hall. Towers and
+// silos (t, s) get an apex instead of a texture.
+const GUESS = {
+  s: () => [null, false],
+  t: () => [null, false],
+  w: () => [textures.metalRed, false],
+  x: () => [textures.slab, false],
+  d: (b, v) => [
+    v < 0.5 ? textures.tar : v < 0.8 ? textures.tile3 : textures.metal,
+    v >= 0.25,
+  ],
+  o: () => [textures.flatLight, false],
+  c: (b, v, simple) => [textures.slate, simple],
+  m: b => [b.a > 1500 ? textures.flatLight : textures.flat, false],
+  i(b, v, simple, big) {
+    const roof = big
+      ? [textures.solar, textures.flatLight, textures.metal, textures.flat][
+          (v * 4) | 0
+        ]
+      : textures.metal;
+    return [roof, !big || roof === textures.metal];
+  },
+  g: (b, v, simple) => [
+    v < 0.5 ? textures.tar : v < 0.75 ? textures.flat : textures.tile3,
+    simple && v >= 0.75,
+  ],
+  y: (b, v, simple) => [
+    b.a > 350
+      ? [textures.metalRed, textures.metal, textures.tile3][(v * 3) | 0]
+      : [textures.tile3, textures.tile2, textures.tile4][(v * 3) | 0],
+    simple,
+  ],
+};
+
+/**
+ * A first guess at a roof, for where the survey and the photo say nothing.
+ * @param {!Building} b
+ * @param {number} v A random number.
+ * @param {boolean} simple Whether the outline suits a ridge.
+ * @return {!Array} The texture, or null, and whether it gets a ridge.
+ */
+function guessRoof(b, v, simple) {
+  const big = b.a > 900;
+  if (GUESS[b.k]) {
+    return GUESS[b.k](b, v, simple, big);
+  }
+  if (big) {
+    return [v < 0.5 ? textures.flat : textures.flatLight, false];
+  }
+  const tiles =
+    b.a > 350
+      ? [textures.tile3, textures.tile4, textures.metalRed, textures.slate]
+      : [
+          textures.tile1,
+          textures.tile1,
+          textures.tile2,
+          textures.tile4,
+          textures.tile3,
+          textures.slate,
+        ];
+  return [tiles[(v * tiles.length) | 0], simple];
+}
+
+/**
+ * A flat roof has a rim, and bigger ones vents and air conditioning.
+ * @param {!Building} b
+ * @param {!Rng} r
+ */
+function prepFlatRoof(b, r) {
+  const rim = [];
+  for (let i = 0; i < b.lp.length; i += 2) {
+    const d = Math.hypot(b.lp[i], b.lp[i + 1]) || 1;
+    const pull = Math.min(0.7, d * 0.3) / d;
+    rim.push(b.lp[i] * (1 - pull), b.lp[i + 1] * (1 - pull));
+  }
+  b.rim = new Path2D(`M${rim.join(' ')}Z`);
+  if (b.a <= 400 || b.k === 'o') {
+    return;
+  }
+  b.units = Array.from({length: Math.min(6, (b.a / 500) | 0) + 1}, () => [
+    lerp(b.u0, b.u1, 0.15 + r() * 0.7),
+    lerp(b.v0, b.v1, 0.2 + r() * 0.6),
+    1.5 + r() * 2,
+  ]);
+  if (b.a > 2500) {
+    // A big hall has skylights in rows, as the roof of Murk does.
+    b.units = [];
+    for (let u = b.u0 + 7; u < b.u1; u += 14) {
+      for (let v = b.v0 + 7; v < b.v1; v += 14) {
+        b.units.push([u, v, 2.2]);
+      }
+    }
+  }
+  // Only what stands on the roof: the outline is seldom a rectangle.
+  b.units = b.units.filter(([u, v, size]) =>
+    [-1, 0, size, size + 1].every(
+      d => pip(u + d, v + d * 0.7, b.lp) && pip(u + size - d, v + d * 0.7, b.lp)
+    )
+  );
+}
+
+/**
+ * The sign on the roof, and how big it is.
+ * @param {!Building} b
+ * @param {!Object} look
+ */
+function prepSign(b, look) {
+  b.sign = makeSign(b.label, look.plate || null);
+  const aspect = b.sign.width / b.sign.height;
+  b.signH = clamp(
+    Math.min((b.u1 - b.u0) / (aspect * 1.15), (b.v1 - b.v0) * 0.42),
+    2,
+    9
+  );
+  b.signW = b.signH * aspect;
+}
+
+/**
  * Picks walls and a roof for a building and files it in the grid.
  * @param {!Building} b
  * @param {!Rng} r
@@ -254,77 +396,15 @@ function prepBuilding(b, r) {
     base = pick2(NEW_WALLS, r);
   }
   const wide = b.v1 - b.v0;
-  b.nx = [];
-  b.ny = [];
-  b.wall = [];
-  for (let i = 0; i < b.p.length; i += 2) {
-    const j = (i + 2) % b.p.length;
-    const ex = b.p[j] - b.p[i];
-    const ey = b.p[j + 1] - b.p[i + 1];
-    const l = Math.hypot(ex, ey) || 1;
-    b.nx.push(ey / l);
-    b.ny.push(-ex / l); // outward, polygons are clockwise
-    b.wall.push(
-      shade(base, 0.78 - 0.22 * ((ey / l) * LIGHT[0] - (ex / l) * LIGHT[1]))
-    );
-  }
+  prepWalls(b, base);
   b.lpath = new Path2D(`M${b.lp.join(' ')}Z`);
-  const big = b.a > 900;
-  const v = r();
   const simple = b.p.length <= 28 && wide > 2.5;
-  let gable = simple;
+  let [roof, gable] = guessRoof(b, r(), simple);
+  if (roof) {
+    b.roof = roof;
+  }
   if (k === 's' || k === 't') {
     b.apex = lift || (k === 's' ? 2 : b.a < 20 ? 2.6 : 9);
-    gable = false;
-  } else if (k === 'w') {
-    b.roof = textures.metalRed;
-    gable = false;
-  } else if (k === 'x') {
-    b.roof = textures.slab;
-    gable = false;
-  } else if (k === 'd') {
-    b.roof = v < 0.5 ? textures.tar : v < 0.8 ? textures.tile3 : textures.metal;
-    gable = v >= 0.25;
-  } else if (k === 'o') {
-    b.roof = textures.flatLight;
-    gable = false;
-  } else if (k === 'c') {
-    b.roof = textures.slate;
-  } else if (k === 'm') {
-    b.roof = b.a > 1500 ? textures.flatLight : textures.flat;
-    gable = false;
-  } else if (k === 'i') {
-    b.roof = big
-      ? [textures.solar, textures.flatLight, textures.metal, textures.flat][
-          (v * 4) | 0
-        ]
-      : textures.metal;
-    gable = !big || b.roof === textures.metal;
-  } else if (k === 'g') {
-    b.roof = v < 0.5 ? textures.tar : v < 0.75 ? textures.flat : textures.tile3;
-    gable = gable && v >= 0.75;
-  } else if (k === 'y') {
-    b.roof =
-      b.a > 350
-        ? [textures.metalRed, textures.metal, textures.tile3][(v * 3) | 0]
-        : [textures.tile3, textures.tile2, textures.tile4][(v * 3) | 0];
-  } else if (big) {
-    b.roof = v < 0.5 ? textures.flat : textures.flatLight;
-    gable = false;
-  } else {
-    b.roof =
-      b.a > 350
-        ? [textures.tile3, textures.tile4, textures.metalRed, textures.slate][
-            (v * 4) | 0
-          ]
-        : [
-            textures.tile1,
-            textures.tile1,
-            textures.tile2,
-            textures.tile4,
-            textures.tile3,
-            textures.slate,
-          ][(v * 6) | 0];
   }
   const real = !'stwxo'.includes(k); // towers, silos and the like are made up
   if (b.r && real) {
@@ -377,50 +457,12 @@ function prepBuilding(b, r) {
       shade(lid, 0.9 - 0.3 * (nx * LIGHT[0] + b.ny[i] * LIGHT[1]))
     );
   } else if (!b.halves) {
-    // A flat roof has a rim, and bigger ones vents and air conditioning.
-    const rim = [];
-    for (let i = 0; i < b.lp.length; i += 2) {
-      const d = Math.hypot(b.lp[i], b.lp[i + 1]) || 1;
-      const pull = Math.min(0.7, d * 0.3) / d;
-      rim.push(b.lp[i] * (1 - pull), b.lp[i + 1] * (1 - pull));
-    }
-    b.rim = new Path2D(`M${rim.join(' ')}Z`);
-    if (b.a > 400 && k !== 'o') {
-      b.units = Array.from({length: Math.min(6, (b.a / 500) | 0) + 1}, () => [
-        lerp(b.u0, b.u1, 0.15 + r() * 0.7),
-        lerp(b.v0, b.v1, 0.2 + r() * 0.6),
-        1.5 + r() * 2,
-      ]);
-      if (b.a > 2500) {
-        // A big hall has skylights in rows, as the roof of Murk does.
-        b.units = [];
-        for (let u = b.u0 + 7; u < b.u1; u += 14) {
-          for (let v = b.v0 + 7; v < b.v1; v += 14) {
-            b.units.push([u, v, 2.2]);
-          }
-        }
-      }
-      // Only what stands on the roof: the outline is seldom a rectangle.
-      b.units = b.units.filter(([u, v, size]) =>
-        [-1, 0, size, size + 1].every(
-          d =>
-            pip(u + d, v + d * 0.7, b.lp) &&
-            pip(u + size - d, v + d * 0.7, b.lp)
-        )
-      );
-    }
+    prepFlatRoof(b, r);
   }
   b.floors = clamp(Math.round(b.h / 3), 1, 3);
   addWindows(b, look);
   if (b.label) {
-    b.sign = makeSign(b.label, look.plate || null);
-    const aspect = b.sign.width / b.sign.height;
-    b.signH = clamp(
-      Math.min((b.u1 - b.u0) / (aspect * 1.15), (b.v1 - b.v0) * 0.42),
-      2,
-      9
-    );
-    b.signW = b.signH * aspect;
+    prepSign(b, look);
   }
   // A surveyed roof keeps its faces under a plot that is painted.
   const spec = b.f ? {...ROOFS[b.poi], ...surveyedRoof(b)} : ROOFS[b.poi];
