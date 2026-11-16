@@ -43,53 +43,52 @@ export function shove(o, r) {
 }
 
 /**
- * Turns keys and the thumb stick into driving and walking.
+ * Steers the car the player sits in.
+ * @param {!Car} c
+ * @param {number} thr What the keys say: -1 back, 1 forward.
+ * @param {number} steer What the keys say: -1 left, 1 right.
+ */
+function driveCar(c, thr, steer) {
+  const stick = Math.hypot(pad.x, pad.y);
+  if (stick > 0.15) {
+    // thumb stick: point where you want to go
+    const err = wrap(Math.atan2(pad.y, pad.x) - c.a);
+    steer = clamp(err * 2.2, -1, 1) * (c.vf < -1 ? -1 : 1);
+    thr = Math.min(1, stick * 1.3) * (Math.abs(err) > 1.4 ? 0.55 : 1);
+  }
+  if (pad.brake) {
+    thr = -1;
+  }
+  const tipsy = clamp(state.drunk / 4, 0, 1);
+  if (tipsy) {
+    // drunk: the wheel wanders
+    steer +=
+      (Math.sin(state.t * 1.7) * 0.4 + Math.sin(state.t * 4.3) * 0.15) * tipsy;
+  }
+  c.thr = thr;
+  c.steer = clamp(steer, -1, 1);
+  // NoS from Bernhard's garage: Shift, or the NOS button, while on the gas
+  const nos = !!(keys.ShiftLeft || keys.ShiftRight || pad.nos);
+  const firing = nos && c.nos > 0 && thr > 0;
+  if (firing && !c.boosting) {
+    audio.play('nos');
+  }
+  c.boosting = firing;
+  c.hb = !!keys.Space;
+  c.siren =
+    (c.kind === 'police' || c.kind === 'fire') && (keys.KeyH || pad.horn);
+}
+
+/**
+ * Walks the player.
+ * @param {number} thr What the keys say: -1 back, 1 forward.
+ * @param {number} steer What the keys say: -1 left, 1 right.
  * @param {number} dt
  */
-export function controlPlayer(dt) {
+function walk(thr, steer, dt) {
   const player = state.player;
-  const c = player.car;
   const stick = Math.hypot(pad.x, pad.y);
-  if (state.wasted) {
-    if ((state.wasted -= dt) <= 0) {
-      respawn();
-    }
-    return;
-  }
-  let thr = axis(['ArrowDown', 'KeyS'], ['ArrowUp', 'KeyW']);
-  let steer = axis(['ArrowLeft', 'KeyA'], ['ArrowRight', 'KeyD']);
   const wet = (surfAt(player.x, player.y) & 9) === 8;
-  if (c) {
-    if (stick > 0.15) {
-      // thumb stick: point where you want to go
-      const err = wrap(Math.atan2(pad.y, pad.x) - c.a);
-      steer = clamp(err * 2.2, -1, 1) * (c.vf < -1 ? -1 : 1);
-      thr = Math.min(1, stick * 1.3) * (Math.abs(err) > 1.4 ? 0.55 : 1);
-    }
-    if (pad.brake) {
-      thr = -1;
-    }
-    const tipsy = clamp(state.drunk / 4, 0, 1);
-    if (tipsy) {
-      // drunk: the wheel wanders
-      steer +=
-        (Math.sin(state.t * 1.7) * 0.4 + Math.sin(state.t * 4.3) * 0.15) *
-        tipsy;
-    }
-    c.thr = thr;
-    c.steer = clamp(steer, -1, 1);
-    // NoS from Bernhard's garage: Shift, or the NOS button, while on the gas
-    const nos = !!(keys.ShiftLeft || keys.ShiftRight || pad.nos);
-    const firing = nos && c.nos > 0 && thr > 0;
-    if (firing && !c.boosting) {
-      audio.play('nos');
-    }
-    c.boosting = firing;
-    c.hb = !!keys.Space;
-    c.siren =
-      (c.kind === 'police' || c.kind === 'fire') && (keys.KeyH || pad.horn);
-    return;
-  }
   // Shift, or the brake button on a phone, makes you run
   const run = keys.ShiftLeft || keys.ShiftRight || pad.brake ? 1.7 : 1;
   let sp = thr * (thr > 0 ? 4.5 * run : 2);
@@ -115,6 +114,26 @@ export function controlPlayer(dt) {
   }
   player.t += Math.abs(sp) * dt;
   shove(player, 0.4);
+}
+
+/**
+ * Turns keys and the thumb stick into driving and walking.
+ * @param {number} dt
+ */
+export function controlPlayer(dt) {
+  if (state.wasted) {
+    if ((state.wasted -= dt) <= 0) {
+      respawn();
+    }
+    return;
+  }
+  const thr = axis(['ArrowDown', 'KeyS'], ['ArrowUp', 'KeyW']);
+  const steer = axis(['ArrowLeft', 'KeyA'], ['ArrowRight', 'KeyD']);
+  if (state.player.car) {
+    driveCar(state.player.car, thr, steer);
+    return;
+  }
+  walk(thr, steer, dt);
 }
 
 /** Gets into the nearest car, or out of this one. */

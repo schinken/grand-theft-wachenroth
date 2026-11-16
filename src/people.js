@@ -194,22 +194,101 @@ function touching(o, c, r) {
   return false;
 }
 
+// The box around all pedestrians: most cars are far away from it and have
+// nothing to do with them. One box, used again in every round.
+const pedBox = {x0: 0, y0: 0, x1: 0, y1: 0};
+
+/**
+ * Makes the box around the pedestrians hold one more of them.
+ * @param {!Ped} p
+ */
+function widenBox(p) {
+  pedBox.x0 = Math.min(pedBox.x0, p.x);
+  pedBox.y0 = Math.min(pedBox.y0, p.y);
+  pedBox.x1 = Math.max(pedBox.x1, p.x);
+  pedBox.y1 = Math.max(pedBox.y1, p.y);
+}
+
+/**
+ * A pedestrian near a car: jumps aside when it comes for them, is thrown
+ * ahead when it hits them fast, and pushed away when it is slow.
+ * @param {!Car} c
+ * @param {!Ped} p
+ * @param {number} sp The speed of the car, in metres a second.
+ * @param {number} reach How far ahead of the car pedestrians see it.
+ */
+function carVsPed(c, p, sp, reach) {
+  const player = state.player;
+  const dx = p.x - c.x;
+  const dy = p.y - c.y;
+  if (Math.abs(dx) > reach || Math.abs(dy) > reach) {
+    return;
+  }
+  // Which side of the car's path the walker is on
+  const side = dx * c.vy - dy * c.vx;
+  const coming =
+    sp > 4 &&
+    p.flee <= 0 &&
+    dx * c.vx + dy * c.vy > 0 &&
+    Math.abs(side) / sp < 1.9;
+  if (coming) {
+    p.flee = 0.8;
+    // Everybody in the way of the car jumps aside
+    p.a = Math.atan2(c.vy, c.vx) + ((side > 0 ? -1 : 1) * Math.PI) / 2;
+    if (c === player.car && Math.random() < 0.5) {
+      audio.play('scream');
+    }
+  }
+  if (!touching(p, c, 0.35)) {
+    return;
+  }
+  if (sp > 3) {
+    // Thrown ahead of the car, faster than it, and to the side the walker
+    // stood on, so it does not run them over in the air
+    const away = Math.sign(dx * -c.vy + dy * c.vx) || 1;
+    knockPed(
+      p,
+      c.vx * 1.15 - (c.vy / sp) * away * 9,
+      c.vy * 1.15 + (c.vx / sp) * away * 9,
+      c === player.car
+    );
+    c.vx *= 0.92; // the bump is felt
+    c.vy *= 0.92;
+    return;
+  }
+  const d = Math.hypot(dx, dy) || 1;
+  p.x += (dx / d) * 0.2;
+  p.y += (dy / d) * 0.2;
+  widenBox(p); // it was pushed, maybe out of the box
+}
+
+/**
+ * A car touches the player on foot: fast, and that is it; slow, and it
+ * pushes them away.
+ * @param {!Car} c
+ * @param {number} sp The speed of the car, in metres a second.
+ */
+function carVsPlayer(c, sp) {
+  const player = state.player;
+  if (!touching(player, c, 0.35)) {
+    return;
+  }
+  if (sp > 4) {
+    waste();
+    return;
+  }
+  const d = dist(player, c) || 1;
+  player.x += ((player.x - c.x) / d) * 0.2;
+  player.y += ((player.y - c.y) / d) * 0.2;
+}
+
 /** Pedestrians and the player on foot against cars. */
 export function walkersVsCars() {
   const player = state.player;
   const peds = state.peds;
-  // The box around all pedestrians: most cars are far away from it and have
-  // nothing to do here
-  let x0 = Infinity;
-  let y0 = Infinity;
-  let x1 = -Infinity;
-  let y1 = -Infinity;
-  for (const p of peds) {
-    x0 = Math.min(x0, p.x);
-    y0 = Math.min(y0, p.y);
-    x1 = Math.max(x1, p.x);
-    y1 = Math.max(y1, p.y);
-  }
+  pedBox.x0 = pedBox.y0 = Infinity;
+  pedBox.x1 = pedBox.y1 = -Infinity;
+  peds.forEach(widenBox);
   for (const c of state.cars) {
     if (c.alt > 0.3) {
       continue; // flying over their heads
@@ -219,10 +298,10 @@ export function walkersVsCars() {
     // within 12 m; one more for the box keeps rounding out of it
     const reach = Math.max(12, sp * 1.5 + 4);
     const far =
-      c.x < x0 - reach - 1 ||
-      c.x > x1 + reach + 1 ||
-      c.y < y0 - reach - 1 ||
-      c.y > y1 + reach + 1;
+      c.x < pedBox.x0 - reach - 1 ||
+      c.x > pedBox.x1 + reach + 1 ||
+      c.y < pedBox.y0 - reach - 1 ||
+      c.y > pedBox.y1 + reach + 1;
     // On foot and within 12 m, more than any car is long
     const afoot =
       state.mode === 'play' &&
@@ -230,65 +309,11 @@ export function walkersVsCars() {
       !state.wasted &&
       Math.abs(player.x - c.x) < 12 &&
       Math.abs(player.y - c.y) < 12;
-    if (far && !afoot) {
-      continue;
-    }
     for (let i = 0; !far && i < peds.length; i++) {
-      const p = peds[i];
-      const dx = p.x - c.x;
-      const dy = p.y - c.y;
-      if (Math.abs(dx) > reach || Math.abs(dy) > reach) {
-        continue;
-      }
-      // Which side of the car's path the walker is on
-      const side = dx * c.vy - dy * c.vx;
-      if (
-        sp > 4 &&
-        p.flee <= 0 &&
-        dx * c.vx + dy * c.vy > 0 &&
-        Math.abs(side) / sp < 1.9
-      ) {
-        p.flee = 0.8;
-        // Everybody in the way of the car jumps aside
-        p.a = Math.atan2(c.vy, c.vx) + ((side > 0 ? -1 : 1) * Math.PI) / 2;
-        if (c === player.car && Math.random() < 0.5) {
-          audio.play('scream');
-        }
-      }
-      if (!touching(p, c, 0.35)) {
-        continue;
-      }
-      if (sp > 3) {
-        // Thrown ahead of the car, faster than it, and to the side the walker
-        // stood on, so it does not run them over in the air
-        const side = Math.sign(dx * -c.vy + dy * c.vx) || 1;
-        knockPed(
-          p,
-          c.vx * 1.15 - (c.vy / sp) * side * 9,
-          c.vy * 1.15 + (c.vx / sp) * side * 9,
-          c === player.car
-        );
-        c.vx *= 0.92; // the bump is felt
-        c.vy *= 0.92;
-      } else {
-        const d = Math.hypot(dx, dy) || 1;
-        p.x += (dx / d) * 0.2;
-        p.y += (dy / d) * 0.2;
-        // It was pushed, maybe out of the box
-        x0 = Math.min(x0, p.x);
-        y0 = Math.min(y0, p.y);
-        x1 = Math.max(x1, p.x);
-        y1 = Math.max(y1, p.y);
-      }
+      carVsPed(c, peds[i], sp, reach);
     }
-    if (afoot && touching(player, c, 0.35)) {
-      if (sp > 4) {
-        waste();
-      } else {
-        const d = dist(player, c) || 1;
-        player.x += ((player.x - c.x) / d) * 0.2;
-        player.y += ((player.y - c.y) / d) * 0.2;
-      }
+    if (afoot) {
+      carVsPlayer(c, sp);
     }
   }
 }
