@@ -296,6 +296,78 @@ function smoulder(c, dt) {
 }
 
 /**
+ * The helicopter: up when you give it gas, down when you brake it slow.
+ * @param {!Car} c
+ * @param {number} dt
+ */
+function liftHeli(c, dt) {
+  const up =
+    c === state.player.car &&
+    (c.thr > 0 || (c.alt > 0 && !(c.hb && Math.abs(c.vf) < 5)));
+  c.alt = clamp((c.alt || 0) + (up ? 0.7 : -0.7) * dt, 0, 1);
+}
+
+/**
+ * NoS from the garage: much more push and top speed while the bottle lasts,
+ * some six seconds, and a flame out of the exhaust.
+ * @param {!Car} c
+ * @param {number} dt
+ * @return {boolean} Whether it is firing.
+ */
+function burnNos(c, dt) {
+  if (!(c.boosting && c.nos > 0)) {
+    return false;
+  }
+  c.nos = Math.max(0, c.nos - dt / 6);
+  state.shake = Math.max(state.shake, 0.15);
+  puff(
+    c.x - Math.cos(c.a) * (c.type.length / 2 + 0.4),
+    c.y - Math.sin(c.a) * (c.type.length / 2 + 0.4),
+    'fire'
+  );
+  return true;
+}
+
+/**
+ * The speed of a vehicle along its nose after throttle, brake and drag: a
+ * punchy launch, tapering to top speed.
+ * @param {!Car} c
+ * @param {number} vf The speed so far, in metres a second.
+ * @param {number} max Its top speed here.
+ * @param {number} push How hard the engine pushes.
+ * @param {number} dt
+ * @return {number}
+ */
+function pedals(c, vf, max, push, dt) {
+  if (c.thr > 0 && vf < max) {
+    vf += push * (vf < 0 ? 2.5 : 1 - (vf / max) ** 2) * c.thr * dt;
+  }
+  if (c.thr < 0 && vf > -max * 0.35) {
+    vf += (vf > 0 ? 30 : c.type.acc * 0.7) * c.thr * dt;
+  }
+  const drag =
+    (c.thr ? 0 : 4) +
+    (c.hb ? 12 : 0) +
+    (Math.abs(vf) > max ? 6 : 0) +
+    (c.dead ? 8 : 0);
+  return vf - Math.sign(vf) * Math.min(Math.abs(vf), drag * dt);
+}
+
+/**
+ * The trailer swings in behind its vehicle.
+ * @param {!Car} c
+ * @param {number} vf The speed of the vehicle, in metres a second.
+ * @param {number} dt
+ */
+function swingTrailer(c, vf, dt) {
+  const tr = c.tr;
+  const bend = wrap(
+    c.a - tr.a - (vf / tr.type.length) * Math.sin(c.a - tr.a) * dt
+  );
+  tr.a = c.a - clamp(bend, -1.3, 1.3);
+}
+
+/**
  * Moves one vehicle: engine, steering, grip, walls, trees and street furniture.
  * @param {!Car} c
  * @param {number} dt
@@ -309,11 +381,7 @@ export function stepCar(c, dt) {
   c.a += c.spin * dt;
   c.spin *= Math.exp(-3 * dt);
   if (c.kind === 'heli') {
-    // up when you give it gas, down when you brake it slow
-    const up =
-      c === state.player.car &&
-      (c.thr > 0 || (c.alt > 0 && !(c.hb && Math.abs(c.vf) < 5)));
-    c.alt = clamp((c.alt || 0) + (up ? 0.7 : -0.7) * dt, 0, 1);
+    liftHeli(c, dt);
   }
   // Up there no water, wall or tree can touch it.
   const air = c.alt > 0.3;
@@ -335,42 +403,14 @@ export function stepCar(c, dt) {
   vf = c.vx * fx + c.vy * fy;
   let vl = c.vy * fx - c.vx * fy; // sideways slip
   // Tuned at the garage: faster, quicker off the mark, and it takes bends.
-  // NoS on top: much more push and top speed while the bottle lasts, some six
-  // seconds.
-  const nos = c.boosting && c.nos > 0;
-  if (nos) {
-    c.nos = Math.max(0, c.nos - dt / 6);
-    state.shake = Math.max(state.shake, 0.15);
-    puff(
-      c.x - Math.cos(c.a) * (type.length / 2 + 0.4),
-      c.y - Math.sin(c.a) * (type.length / 2 + 0.4),
-      'fire'
-    );
-  }
+  const nos = burnNos(c, dt);
   const boost = (c.boost || 1) * (nos ? 1.45 : 1);
   const max =
     type.max *
     boost *
     (road ? 1 : 0.7) *
     (c.kind === 'heli' && !air ? 0.15 : 1);
-  if (c.thr > 0 && vf < max) {
-    vf +=
-      type.acc *
-      boost *
-      (nos ? 1.5 : 1) *
-      (vf < 0 ? 2.5 : 1 - (vf / max) ** 2) *
-      c.thr *
-      dt;
-  } // punchy launch, tapering to top speed
-  if (c.thr < 0 && vf > -max * 0.35) {
-    vf += (vf > 0 ? 30 : type.acc * 0.7) * c.thr * dt;
-  }
-  const drag =
-    (c.thr ? 0 : 4) +
-    (c.hb ? 12 : 0) +
-    (Math.abs(vf) > max ? 6 : 0) +
-    (c.dead ? 8 : 0);
-  vf -= Math.sign(vf) * Math.min(Math.abs(vf), drag * dt);
+  vf = pedals(c, vf, max, type.acc * boost * (nos ? 1.5 : 1), dt);
   vl *= Math.exp(-(c.hb ? 1.6 : road ? 8 : 4.5) * dt);
   if (!c.thr && Math.abs(vf) < 0.05 && Math.abs(vl) < 0.05) {
     vf = vl = 0;
@@ -384,16 +424,8 @@ export function stepCar(c, dt) {
   c.x += c.vx * dt;
   c.y += c.vy * dt;
   if (c.tr) {
-    c.tr.a =
-      c.a -
-      clamp(
-        wrap(
-          c.a - c.tr.a - (vf / c.tr.type.length) * Math.sin(c.a - c.tr.a) * dt
-        ),
-        -1.3,
-        1.3
-      );
-  } // the trailer swings in behind
+    swingTrailer(c, vf, dt);
+  }
   if (!air) {
     hitScenery(c, fx, fy);
   }
