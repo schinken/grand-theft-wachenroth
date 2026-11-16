@@ -5,16 +5,6 @@
 
 import {textures} from './textures.js';
 import {clamp, shade} from './util.js';
-import {
-  paintButcher,
-  paintClub,
-  paintGarage,
-  paintGarden,
-  paintLavite,
-  paintSchul22,
-  paintShop,
-  paintSquare,
-} from './yards.js';
 
 export const LIGHT = [0.6, 0.8]; // faces turned south-east lie in shadow
 
@@ -124,13 +114,7 @@ export const ROOFS = {
     gables: HOME_GABLES,
     sign: [10.7, 7.5, 2.4], // on the garden side, where the roof is plain
     park: [15.3, -2.6], // in front of the wing, as on the aerial photo
-    ground(g) {
-      // The paved drive runs from the wing down to the street, and a
-      // terrace lies along the front of the main block.
-      g.fillStyle = textures.school;
-      g.fillRect(10.6, -1.94, 8.4, 18);
-      g.fillRect(0.6, 0, 10, 2.6);
-    },
+    yard: true,
   },
   townhall: {
     eaves: 7,
@@ -140,7 +124,7 @@ export const ROOFS = {
     sign: [10.75, 2.9, 2],
     trees: [[-0.2, 12.1, 1.6, 5]], // at the entrance of the car park
     plot: [-7.4, -8.6, 60.6, -11.4, 61.9, 19.5, -6.1, 22.4],
-    ground: paintSquare,
+    yard: true,
   },
   // Schulstraße 22: a gable roof along the street with solar panels to the
   // south and roof windows to the north, the carport and the garage in front
@@ -178,7 +162,7 @@ export const ROOFS = {
     fences: [[-4.65, -13.9, -4.45, 3]],
     cars: [[18.3, -11.4, 0, '#2b2f36']],
     plot: [-5.9, 24.2, 6.9, 25, 21.7, 24.6, 21.2, -13.8, -4.7, -14.4],
-    ground: paintSchul22,
+    yard: true,
   },
   // Edeka Claudia keeps the gable roof of the survey; the plot is painted.
   shop: {
@@ -191,10 +175,10 @@ export const ROOFS = {
     hedges: [[-3, 21.1, 22.4, 21]],
     cars: [[17, -1, 0, '#eeeee8', 'van']],
     plot: [-3.2, 21.4, 22.6, 21.3, 25.1, -5, -2.3, -4.7, -2.1, 2.4, -2.5, 12.5],
-    ground: paintShop,
+    yard: true,
   },
   // The Schwallclub keeps the roof of the survey; its beer garden is painted.
-  club: {ground: paintClub},
+  club: {yard: true},
   // St. Gertrud: the row of four trees on the square in front of it.
   church: {
     trees: [
@@ -219,7 +203,7 @@ export const ROOFS = {
       [-11, 7.8, 0, '#2b2f36'],
       [-6.7, 8.8, 0, '#e8e6df'],
     ],
-    ground: paintButcher,
+    yard: true,
   },
   // Pizzeria La Vite keeps the five parts of the survey; the plot is painted.
   lavite: {
@@ -234,7 +218,7 @@ export const ROOFS = {
       [16.8, -8.1, 0, '#e8e6df'],
     ],
     plot: [-10.6, -12.3, -9.3, 13, 17.6, 12.8, 18.4, -11.7],
-    ground: paintLavite,
+    yard: true,
   },
   // Bernhard's garage keeps the roof of the survey. Its drive is painted,
   // with the strip of hedge and trees beside it and the cars waiting there.
@@ -256,7 +240,7 @@ export const ROOFS = {
     plot: [39.5, 16.9, 47.5, 9.3, 42.4, 1.5, 13.5, -8.2, -1.9, -5.8].concat([
       -0.8, 0.5, 15.6, 14.4, 19.2, 10.3, 33.9, 12.6,
     ]),
-    ground: paintGarage,
+    yard: true,
   },
   // The house no14: a plain gable roof, the garage on its west side,
   // and the garden around it up to the pavement of the bend.
@@ -283,7 +267,7 @@ export const ROOFS = {
     ],
     hedges: [[-8.1, -24.2, -8.1, -2.7]],
     plot: [-9.5, -26.5, -9.5, 13, 7, 13, 23, 9.5, 20.5, 2.5, -6.5, -26.5],
-    ground: paintGarden,
+    yard: true,
   },
 };
 

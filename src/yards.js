@@ -34,7 +34,7 @@ function flowerBed(g, r, x, y, w, h) {
  * street in the south.
  * @param {!CanvasRenderingContext2D} g
  */
-export function paintGarden(g) {
+function paintGarden(g) {
   const r = rng(14);
   // The drive to the garage and the path to the front door
   g.fillStyle = textures.school;
@@ -149,7 +149,7 @@ export function paintGarden(g) {
  * @param {!CanvasRenderingContext2D} g
  * @param {!Building} b The town hall.
  */
-export function paintSquare(g, b) {
+function paintSquare(g, b) {
   const r = rng(23);
   g.rotate(-Math.atan2(b.sa, b.ca)); // the photo is read north up
   g.fillStyle = textures.school;
@@ -251,7 +251,7 @@ export function paintSquare(g, b) {
  * y towards the street in the south.
  * @param {!CanvasRenderingContext2D} g
  */
-export function paintSchul22(g) {
+function paintSchul22(g) {
   const r = rng(22);
   const fill = (style, pts) => fillPoly(g, style, pts);
   // The whole plot is garden, mown in stripes in front of the house
@@ -353,7 +353,7 @@ function fillPoly(g, style, pts) {
  * x east along the front of the shop and y towards the street.
  * @param {!CanvasRenderingContext2D} g
  */
-export function paintShop(g) {
+function paintShop(g) {
   fillPoly(g, textures.resi, [-3.2, -21.4, 22.6, -21.3, 25.1, 5, -2.3, 4.7]);
   fillPoly(
     g,
@@ -442,7 +442,7 @@ export function box(g, x, y, w, h, a, col) {
  * @param {!CanvasRenderingContext2D} g
  * @param {!Building} b
  */
-export function paintClub(g, b) {
+function paintClub(g, b) {
   onMap(g, b);
   const turn = 0.35; // the tables and trailers stand square to the house
   fillPoly(
@@ -513,7 +513,7 @@ export function paintClub(g, b) {
  * @param {!CanvasRenderingContext2D} g
  * @param {!Building} b
  */
-export function paintButcher(g, b) {
+function paintButcher(g, b) {
   onMap(g, b);
   for (let i = 0; i < 6; i++) {
     const x = 1334 - i * 0.85;
@@ -625,7 +625,7 @@ function swings(g, x, y, a) {
  * Drawn on the map.
  * @param {!CanvasRenderingContext2D} g
  */
-function paintPlayground(g) {
+export function paintPlayground(g) {
   sand(g, 1134.4, 750.9, 4.4, 4.6, 0.35);
   // the ship in the sand, bow to the west
   fillPoly(
@@ -686,7 +686,7 @@ function paintPlayground(g) {
  * the map.
  * @param {!CanvasRenderingContext2D} g
  */
-function paintKita(g) {
+export function paintKita(g) {
   sand(g, 1436, 775.5, 11, 6, 0.05);
   sand(g, 1448.5, 772, 6, 5, 0);
   box(g, 1427, 778, 3.8, 3.3, 0.05, '#8a5a2a');
@@ -700,7 +700,7 @@ function paintKita(g) {
  * Drawn on the map.
  * @param {!CanvasRenderingContext2D} g
  */
-function paintXmasFarm(g) {
+export function paintXmasFarm(g) {
   const edge = [1240.8, 127.8, 1247.8, 97.9, 1257.2, 62.6, 1266.7, 27.7]
     .concat([1285.8, 27.2, 1307.7, 35, 1327, 55.2, 1335.8, 67.2, 1341.9, 80.8])
     .concat([1342.5, 96.4, 1337.6, 133.7, 1336.9, 155.8, 1333.1, 155.3]);
@@ -728,14 +728,6 @@ function paintXmasFarm(g) {
   g.restore();
 }
 
-// Places without a building of their own that are painted on the map:
-// the playgrounds and the Christmas tree plantation.
-export const GROUNDS = {
-  playground: paintPlayground,
-  kindergarten: paintKita,
-  xmasfarm: paintXmasFarm,
-};
-
 /**
  * The plot of Pizzeria La Vite, as the aerial photos show it: the terrace
  * with tables and parasols to the street, the paved forecourt where the
@@ -744,7 +736,7 @@ export const GROUNDS = {
  * block and y towards the street.
  * @param {!CanvasRenderingContext2D} g
  */
-export function paintLavite(g) {
+function paintLavite(g) {
   const r = rng(5);
   fillPoly(g, textures.resi, [-10.6, 12.3, -9.3, -13, 17.6, -12.8, 18.4, 11.7]);
   fillPoly(g, textures.gravel, [-10.3, 6.8, -9.4, -7.7, -5.4, -7.4, -6, 7]);
@@ -818,7 +810,7 @@ export function paintLavite(g) {
  * the hall and y towards the road.
  * @param {!CanvasRenderingContext2D} g
  */
-export function paintGarage(g) {
+function paintGarage(g) {
   fillPoly(
     g,
     textures.park,
@@ -827,4 +819,57 @@ export function paintGarage(g) {
       .concat([-1.2, 5.9, 0, 0, 12, -11, 15.4, -11.6, 18.7, -9.4, 21.9, -9.6])
       .concat([27, -10, 32.7, -11, 37.6, -12.5])
   );
+}
+
+/**
+ * The plot of Flo's house: the paved drive runs from the wing down to the
+ * street, and a terrace lies along the front of the main block.
+ * @param {!CanvasRenderingContext2D} g
+ */
+function paintHome(g) {
+  g.fillStyle = textures.school;
+  g.fillRect(10.6, -1.94, 8.4, 18);
+  g.fillRect(0.6, 0, 10, 2.6);
+}
+
+/**
+ * Paints the plot of a modelled building as the aerial photos show it: the
+ * buildings whose entry in ROOFS says yard.
+ * @param {!CanvasRenderingContext2D} g
+ * @param {!Building} b
+ * @return {boolean} Whether there is a painter for this building.
+ */
+export function paintYard(g, b) {
+  switch (b.poi) {
+    case 'hq':
+      paintHome(g);
+      break;
+    case 'townhall':
+      paintSquare(g, b);
+      break;
+    case 'schul22':
+      paintSchul22(g);
+      break;
+    case 'shop':
+      paintShop(g);
+      break;
+    case 'club':
+      paintClub(g, b);
+      break;
+    case 'butcher':
+      paintButcher(g, b);
+      break;
+    case 'lavite':
+      paintLavite(g);
+      break;
+    case 'garage':
+      paintGarage(g);
+      break;
+    case 'no14':
+      paintGarden(g);
+      break;
+    default:
+      return false;
+  }
+  return true;
 }

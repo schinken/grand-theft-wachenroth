@@ -10,7 +10,7 @@ import {pushOut} from './geometry.js';
 import {ROADS, surfAt} from './land.js';
 import {MISSIONS} from './missions.js';
 import {knockPed, stepPed} from './people.js';
-import {HOME, SPOT, field, nearNode, waypoint} from './places.js';
+import {HOME, MODELLED, SPOT, field, nearNode, waypoint} from './places.js';
 import {HOME_GABLES, HOME_SLOPES, ROOFS} from './roofs.js';
 import {TREES, blocked} from './scenery.js';
 import {TYPES, carSprite} from './sprites.js';
@@ -23,7 +23,8 @@ import {
   TRAIN_DUE,
   placeTrain,
 } from './train.js';
-import {dist} from './util.js';
+import {canvas, dist} from './util.js';
+import {paintYard} from './yards.js';
 
 /** Runs the checks: the page title says how they went. */
 export function selftest() {
@@ -146,6 +147,11 @@ export function selftest() {
         (ride(SPOT.hq, s) && ride(s, SPOT.hq)) ||
         console.error('arrow lost', s.key)
     ),
+    'the plots that ROOFS says are painted are the ones paintYard() paints':
+      BUILD.filter(b => ROOFS[b.poi]).every(
+        b =>
+          MODELLED.includes(b) === paintYard(canvas(1, 1).getContext('2d'), b)
+      ),
     'every kind of vehicle has its picture': Object.keys(TYPES).every(
       k => carSprite(k, '#e8e6df').width > 0
     ),
