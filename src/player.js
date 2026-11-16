@@ -12,9 +12,10 @@ import {carAt, failJob} from './jobs.js';
 import {NODES, surfAt} from './land.js';
 import {TALK} from './missions.js';
 import {nearNode} from './places.js';
+import {blocked} from './scenery.js';
 import {fmt, state} from './state.js';
 import {crime} from './traffic.js';
-import {clamp, dist, pick, wrap} from './util.js';
+import {WORLD_H, WORLD_W, clamp, dist, pick, wrap} from './util.js';
 
 export const keys = {};
 export const pad = {x: 0, y: 0, brake: false, horn: false, nos: false};
@@ -67,16 +68,133 @@ function driveCar(c, thr, steer) {
   }
   c.thr = thr;
   c.steer = clamp(steer, -1, 1);
+  c.hb = !!keys.Space;
   // NoS from Bernhard's garage: Shift, or the NOS button, while on the gas
   const nos = !!(keys.ShiftLeft || keys.ShiftRight || pad.nos);
-  const firing = nos && c.nos > 0 && thr > 0;
+  const firing = nos && c.nos > 0 && thr > 0 && !c.hb;
   if (firing && !c.boosting) {
     audio.play('nos');
   }
   c.boosting = firing;
-  c.hb = !!keys.Space;
   c.siren =
     (c.kind === 'police' || c.kind === 'fire') && (keys.KeyH || pad.horn);
+}
+
+/**
+ * Where the player's facing ray crosses the expanded outline of a nearby car.
+ * @param {!Point} player With heading a.
+ * @param {!Car} c
+ * @return {?Object} Entry distance and distance to a clear landing point.
+ */
+export function slidePath(player, c) {
+  if (
+    !c.type.wheelbase ||
+    c.type.length > 5.8 ||
+    c.dead ||
+    c.burn ||
+    c.alt > 0.3 ||
+    Math.hypot(c.vx, c.vy) > 2
+  ) {
+    return null;
+  }
+  const fx = Math.cos(c.a);
+  const fy = Math.sin(c.a);
+  const dx = player.x - c.x;
+  const dy = player.y - c.y;
+  const axes = [
+    [dx * fx + dy * fy, Math.cos(player.a - c.a), c.type.length / 2 + 0.6],
+    [dy * fx - dx * fy, Math.sin(player.a - c.a), c.type.width / 2 + 0.6],
+  ];
+  let enter = -Infinity;
+  let exit = Infinity;
+  for (const [position, direction, half] of axes) {
+    if (Math.abs(direction) < 1e-6) {
+      if (Math.abs(position) > half) {
+        return null;
+      }
+      continue;
+    }
+    const a = (-half - position) / direction;
+    const b = (half - position) / direction;
+    enter = Math.max(enter, Math.min(a, b));
+    exit = Math.min(exit, Math.max(a, b));
+  }
+  return enter <= exit && enter <= 1.4 && exit > 0 && exit < 7.5
+    ? {enter: Math.max(0, enter), distance: exit + 0.1}
+    : null;
+}
+
+/** Slides over the nearby car in front, if the way and landing are clear. */
+export function startSlide() {
+  const player = state.player;
+  if (
+    state.mode !== 'play' ||
+    state.paused ||
+    state.map ||
+    state.shop ||
+    state.wasted ||
+    player.car ||
+    player.slide ||
+    player.slideCool > 0
+  ) {
+    return;
+  }
+  let best = null;
+  for (const car of state.cars) {
+    const path = slidePath(player, car);
+    if (path && (!best || path.enter < best.enter)) {
+      best = {...path, car};
+    }
+  }
+  if (!best) {
+    return;
+  }
+  const dx = Math.cos(player.a) * best.distance;
+  const dy = Math.sin(player.a) * best.distance;
+  const steps = Math.ceil(best.distance / 0.2);
+  for (let i = 0; i <= steps; i++) {
+    const d = (i * best.distance) / steps;
+    const x = player.x + (dx * d) / best.distance;
+    const y = player.y + (dy * d) / best.distance;
+    if (
+      x < 6 ||
+      y < 6 ||
+      x > WORLD_W - 6 ||
+      y > WORLD_H - 6 ||
+      blocked(x, y, 0.4) ||
+      (surfAt(x, y) & 9) === 8
+    ) {
+      return;
+    }
+  }
+  player.slide = {
+    car: best.car,
+    x: player.x,
+    y: player.y,
+    dx,
+    dy,
+    t: 0,
+    duration: clamp(best.distance / 9, 0.35, 0.85),
+  };
+  audio.play('slide');
+}
+
+/**
+ * Moves a slide to its landing and then returns control to walking.
+ * @param {!Object} player
+ * @param {number} dt
+ */
+export function stepSlide(player, dt) {
+  const slide = player.slide;
+  slide.t = Math.min(slide.duration, slide.t + dt);
+  const p = slide.t / slide.duration;
+  const distance = p * (2 - p);
+  player.x = slide.x + slide.dx * distance;
+  player.y = slide.y + slide.dy * distance;
+  if (p >= 1) {
+    player.slide = null;
+    player.slideCool = 0.45;
+  }
 }
 
 /**
@@ -121,10 +239,16 @@ function walk(thr, steer, dt) {
  * @param {number} dt
  */
 export function controlPlayer(dt) {
+  const player = state.player;
+  player.slideCool = Math.max(0, (player.slideCool || 0) - dt);
   if (state.wasted) {
     if ((state.wasted -= dt) <= 0) {
       respawn();
     }
+    return;
+  }
+  if (player.slide) {
+    stepSlide(player, dt);
     return;
   }
   const thr = axis(['ArrowDown', 'KeyS'], ['ArrowUp', 'KeyW']);
@@ -140,7 +264,7 @@ export function controlPlayer(dt) {
 export function toggleCar() {
   const player = state.player;
   const c = player.car;
-  if (state.wasted || state.paused || state.mode !== 'play') {
+  if (state.wasted || state.paused || state.mode !== 'play' || player.slide) {
     return;
   }
   if (c) {
@@ -232,6 +356,7 @@ export function waste(title = 'Erledigt!') {
   }
   const lost = Math.round((state.money * 0.1) / 5) * 5;
   state.wasted = 3.2;
+  player.slide = null;
   state.money -= lost;
   state.stats.wasted++;
   state.wanted = 0;

@@ -4,14 +4,16 @@
 
 import {MAP} from '../map.js';
 import {BUILD} from './buildings.js';
-import {rollCar} from './cars.js';
+import {pedals, rollCar} from './cars.js';
 import {inFront, parting} from './draw-buildings.js';
 import {FENCE_TILES, FURROWS, fieldMasks} from './draw-ground.js';
+import {tyreMarks} from './effects.js';
 import {pushOut} from './geometry.js';
 import {ROADS, surfAt} from './land.js';
 import {MISSIONS} from './missions.js';
 import {knockPed, stepPed} from './people.js';
 import {HOME, MODELLED, SPOT, field, nearNode, waypoint} from './places.js';
+import {slidePath, stepSlide} from './player.js';
 import {HOME_GABLES, HOME_SLOPES, ROOFS} from './roofs.js';
 import {TREES, blocked} from './scenery.js';
 import {TYPES, carSprite} from './sprites.js';
@@ -71,6 +73,79 @@ export function selftest() {
     return c;
   };
   const checks = {
+    'the handbrake stops strongly even with throttle and never reverses speed':
+      (() => {
+        const brake = {thr: 1, hb: true, type: TYPES.car};
+        const coast = {thr: 0, hb: false, type: TYPES.car};
+        let stopped = 30;
+        let rollingSpeed = 30;
+        for (let i = 0; i < 120; i++) {
+          stopped = pedals(brake, stopped, 38, 15, 1 / 120);
+          rollingSpeed = pedals(coast, rollingSpeed, 38, 15, 1 / 120);
+        }
+        return (
+          stopped < rollingSpeed * 0.4 &&
+          pedals(brake, 0.1, 38, 15, 0.1) === 0 &&
+          pedals(brake, -0.1, 38, 15, 0.1) === 0
+        );
+      })(),
+    'a car slide crosses the body and rejects cars behind or moving fast':
+      (() => {
+        const car = {x: 0, y: 0, a: 0, vx: 0, vy: 0, type: TYPES.car};
+        const player = {x: 0, y: -2, a: Math.PI / 2};
+        const path = slidePath(player, car);
+        return (
+          path &&
+          player.y + path.distance > car.type.width / 2 + 0.4 &&
+          slidePath({...player, a: -Math.PI / 2}, car) === null &&
+          slidePath(player, {...car, vx: 8}) === null &&
+          slidePath(player, {...car, type: TYPES.heli}) === null
+        );
+      })(),
+    'a slide lands once, keeps the player on foot and has a cooldown': (() => {
+      const player = {
+        x: 1,
+        y: 2,
+        car: null,
+        slide: {x: 1, y: 2, dx: 3, dy: 4, t: 0, duration: 0.5},
+      };
+      stepSlide(player, 0.25);
+      const midway =
+        player.x > 1 && player.x < 4 && player.y > 2 && player.y < 6;
+      stepSlide(player, 1);
+      return (
+        midway &&
+        player.x === 4 &&
+        player.y === 6 &&
+        !player.slide &&
+        !player.car &&
+        player.slideCool > 0
+      );
+    })(),
+    'tyre marks form two bounded tracks and stop when grip returns': (() => {
+      const saved = state.skids;
+      state.skids = [];
+      try {
+        const car = {x: 0, y: 0, a: 0, skid: 1, type: TYPES.car};
+        tyreMarks(car);
+        car.x += 0.5;
+        tyreMarks(car);
+        const pair =
+          state.skids.length === 2 && state.skids[0].y * state.skids[1].y < 0;
+        for (let i = 0; i < 1000; i++) {
+          car.x += 0.5;
+          tyreMarks(car);
+        }
+        const bounded = state.skids.length <= 1600;
+        const count = state.skids.length;
+        car.skid = 0;
+        car.x++;
+        tyreMarks(car);
+        return pair && bounded && state.skids.length === count && !car.skidFrom;
+      } finally {
+        state.skids = saved;
+      }
+    })(),
     'steering at rest turns the wheels without rotating the vehicle': (() => {
       const c = driveCircle(rolling('car'), 0);
       return c.x === 0 && c.y === 0 && c.a === 0 && c.wheelAngle > 0.6;

@@ -5,7 +5,54 @@
 
 import * as audio from './audio.js';
 import {state} from './state.js';
-import {TAU, byId, rand} from './util.js';
+import {TAU, byId, clamp, rand} from './util.js';
+
+/**
+ * Leaves two short rubber streaks behind the rear tyres while they skid.
+ * @param {!Car} c
+ */
+export function tyreMarks(c) {
+  if (!(c.skid > 0.05)) {
+    c.skidFrom = null;
+    return;
+  }
+  const width = clamp(c.type.width * 0.15, 0.2, 0.36);
+  const rear = -c.type.wheelbase / 2;
+  const track = c.type.width - width * 0.5;
+  const fx = Math.cos(c.a);
+  const fy = Math.sin(c.a);
+  const points = [-1, 1].map(side => ({
+    x: c.x + fx * rear - (fy * side * track) / 2,
+    y: c.y + fy * rear + (fx * side * track) / 2,
+  }));
+  const from = c.skidFrom;
+  if (from) {
+    const distance = Math.hypot(
+      points[0].x - from[0].x,
+      points[0].y - from[0].y
+    );
+    if (distance < 0.2) {
+      return;
+    }
+    if (distance < 3) {
+      for (let i = 0; i < 2; i++) {
+        state.skids.push({
+          x: from[i].x,
+          y: from[i].y,
+          x1: points[i].x,
+          y1: points[i].y,
+          width: width * 0.8,
+          alpha: 0.25 + c.skid * 0.3,
+          born: state.t,
+        });
+      }
+      if (state.skids.length > 1600) {
+        state.skids.splice(0, state.skids.length - 1600);
+      }
+    }
+  }
+  c.skidFrom = points;
+}
 
 /**
  * Emits one particle.

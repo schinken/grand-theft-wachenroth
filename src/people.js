@@ -270,6 +270,9 @@ function carVsPed(c, p, sp, reach) {
  */
 function carVsPlayer(c, sp) {
   const player = state.player;
+  if (player.slide && player.slide.car === c) {
+    return;
+  }
   if (!touching(player, c, 0.35)) {
     return;
   }

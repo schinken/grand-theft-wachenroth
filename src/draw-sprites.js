@@ -59,7 +59,11 @@ function drawPerson(p, shirt, hair, mane = false) {
     ctx.fillRect(x, y, w, h);
   };
   // Knocked over: how high in the air, 0 to 1
-  const up = p.fly > 0 ? Math.sin(Math.PI * (1 - p.fly / p.flyT)) : 0;
+  const up = p.slide
+    ? Math.sin((Math.PI * p.slide.t) / p.slide.duration) * 0.6
+    : p.fly > 0
+      ? Math.sin(Math.PI * (1 - p.fly / p.flyT))
+      : 0;
   if (up) {
     ctx.fillStyle = 'rgba(0,0,0,.3)';
     ctx.beginPath();
@@ -70,6 +74,17 @@ function drawPerson(p, shirt, hair, mane = false) {
   ctx.translate(p.x, p.y - up * 0.9);
   ctx.rotate(p.a + (p.spin || 0));
   ctx.scale(1.3 + up * 0.6, 1.3 + up * 0.6); // a bit larger than life
+  if (p.slide) {
+    // Feet first, on one hip, one arm stretched out over the car.
+    rect(0.05, -0.28, 0.65, 0.2, '#1c1c22');
+    rect(0.12, 0.08, 0.65, 0.2, '#1c1c22');
+    rect(-0.45, -0.32, 0.65, 0.64, shirt);
+    rect(-0.58, -0.55, 0.7, 0.14, '#e0b08a');
+    rect(-0.12, 0.32, 0.45, 0.14, '#e0b08a');
+    rect(-0.72, -0.2, 0.35, 0.4, hair);
+    ctx.restore();
+    return;
+  }
   rect(-0.15 + sw, -0.34, 0.34, 0.22, '#1c1c22');
   rect(-0.15 - sw, 0.12, 0.34, 0.22, '#1c1c22'); // feet
   rect(-0.08 - sw, -0.6, 0.3, 0.16, '#e0b08a');
@@ -530,6 +545,18 @@ export function drawSprites(x0, y0, x1, y1) {
   const job = state.job;
   const seen = o =>
     o.x > x0 - 14 && o.x < x1 + 14 && o.y > y0 - 14 && o.y < y1 + 14;
+  for (const mark of state.skids) {
+    if (seen(mark)) {
+      // A minute at full strength, then ten seconds fading away.
+      const fade = clamp((70 - (state.t - mark.born)) / 10, 0, 1);
+      ctx.strokeStyle = `rgba(24,24,27,${mark.alpha * fade})`;
+      ctx.lineWidth = mark.width;
+      ctx.beginPath();
+      ctx.moveTo(mark.x, mark.y);
+      ctx.lineTo(mark.x1, mark.y1);
+      ctx.stroke();
+    }
+  }
   for (const d of state.decals) {
     if (seen(d)) {
       drawDecal(d);
@@ -541,7 +568,12 @@ export function drawSprites(x0, y0, x1, y1) {
       drawItem(v);
     }
   }
-  if (state.mode === 'play' && !state.player.car && !state.wasted) {
+  if (
+    state.mode === 'play' &&
+    !state.player.car &&
+    !state.wasted &&
+    !state.player.slide
+  ) {
     drawPlayer();
   }
   for (const p of state.peds) {
@@ -568,6 +600,14 @@ export function drawSprites(x0, y0, x1, y1) {
     }
   }
   drawTrain(x0, y0, x1, y1);
+  if (
+    state.mode === 'play' &&
+    !state.player.car &&
+    !state.wasted &&
+    state.player.slide
+  ) {
+    drawPlayer(); // the sliding player passes above the car body
+  }
   for (const p of state.peds) {
     if (seen(p) && p.fly > 0) {
       drawPerson(p, p.shirt, p.hair, p.mane); // up in the air, above the cars

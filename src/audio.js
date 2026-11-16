@@ -233,6 +233,7 @@ const beep = (f, d, wait = 0, vol = 0.06, type = 'square', to = 0) =>
 const crack = (d, vol, freq = 900, wait = 0) =>
   hiss(audioCtx.currentTime + wait, d, vol, 'lowpass', freq, sfx);
 const SFX = {
+  slide: () => crack(0.22, 0.12, 1200),
   coin: () => {
     beep(988, 0.07);
     beep(1319, 0.2, 0.08);
