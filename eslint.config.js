@@ -7,7 +7,28 @@
 import jsdoc from 'eslint-plugin-jsdoc';
 import globals from 'globals';
 
+// Slips that still run: the checks of ESLint's recommended set that say
+// something about a bug, not about style.
+const bugs = `
+  array-callback-return for-direction getter-return no-async-promise-executor
+  no-case-declarations no-compare-neg-zero no-cond-assign no-const-assign
+  no-constant-binary-expression no-constant-condition no-debugger
+  no-dupe-args no-dupe-else-if no-dupe-keys no-duplicate-case
+  no-duplicate-imports no-empty no-empty-pattern no-ex-assign no-func-assign
+  no-global-assign no-import-assign no-loop-func no-loss-of-precision
+  no-prototype-builtins no-redeclare no-self-assign no-self-compare
+  no-shadow-restricted-names no-sparse-arrays no-template-curly-in-string
+  no-unreachable no-unreachable-loop no-unsafe-finally no-unsafe-negation
+  no-unsafe-optional-chaining no-useless-assignment no-useless-catch
+  use-isnan valid-typeof`;
+
 const rules = {
+  ...Object.fromEntries(
+    bugs
+      .split(/\s+/)
+      .filter(Boolean)
+      .map(n => [n, 'error'])
+  ),
   // 5.1 Local variable declarations
   'no-var': 'error',
   'prefer-const': ['error', {destructuring: 'all'}],
