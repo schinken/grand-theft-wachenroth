@@ -21,9 +21,9 @@ for (const old of readdirSync('_site')) {
 }
 renameSync('_site/game.js', `_site/${name}`);
 const page = readFileSync('index.html', 'utf8');
-const stamped = page.replace('src="game.js"', `src="${name}"`);
+const stamped = page.replace('src="src/main.js"', `src="${name}"`);
 if (stamped === page) {
-  throw new Error('index.html does not load game.js any more');
+  throw new Error('index.html does not load src/main.js any more');
 }
 writeFileSync('_site/index.html', stamped);
 console.log(`_site/index.html loads ${name}`);
