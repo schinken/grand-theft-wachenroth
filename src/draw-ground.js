@@ -13,7 +13,7 @@ import {state} from './state.js';
 import {textures} from './textures.js';
 import {DEBUG, PX_PER_M, TAU, WORLD_W, canvas} from './util.js';
 import {ctx} from './view.js';
-import {GROUNDS} from './yards.js';
+import {paintKita, paintPlayground, paintXmasFarm, paintYard} from './yards.js';
 
 /**
  * Strokes every path of a road layer.
@@ -287,8 +287,24 @@ function paintPools(g) {
 }
 
 /**
+ * Paints a place that has no building of its own, if it is near the view.
+ * @param {!CanvasRenderingContext2D} g
+ * @param {string} key The place.
+ * @param {function(!CanvasRenderingContext2D)} paint
+ * @param {!Array<number>} view x0, y0, x1 and y1.
+ */
+function paintPlace(g, key, paint, [x0, y0, x1, y1]) {
+  const [px, py] = MAP.pois[key];
+  if (px > x0 - 130 && px < x1 + 130 && py > y0 - 130 && py < y1 + 130) {
+    g.save();
+    paint(g);
+    g.restore();
+  }
+}
+
+/**
  * The yards that are painted by hand: those of the modelled buildings, and
- * those of places without one.
+ * the playgrounds and the Christmas tree plantation, which have no building.
  * @param {!CanvasRenderingContext2D} g
  * @param {number} x0
  * @param {number} y0
@@ -303,17 +319,13 @@ function paintYards(g, x0, y0, x1, y1) {
     g.save();
     g.transform(b.ca, b.sa, -b.sa, b.ca, b.mx, b.my);
     g.translate(b.at[0], b.at[1]);
-    ROOFS[b.poi].ground(g, b);
+    paintYard(g, b);
     g.restore();
   }
-  for (const [key, paint] of Object.entries(GROUNDS)) {
-    const [px, py] = MAP.pois[key];
-    if (px > x0 - 130 && px < x1 + 130 && py > y0 - 130 && py < y1 + 130) {
-      g.save();
-      paint(g);
-      g.restore();
-    }
-  }
+  const view = [x0, y0, x1, y1];
+  paintPlace(g, 'playground', paintPlayground, view);
+  paintPlace(g, 'kindergarten', paintKita, view);
+  paintPlace(g, 'xmasfarm', paintXmasFarm, view);
 }
 
 /**

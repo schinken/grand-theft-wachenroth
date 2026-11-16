@@ -49,8 +49,8 @@ export function driveSpot(b) {
   return {x: qx + ux * along, y: qy + uy * along, a: Math.atan2(-uy, -ux)};
 }
 export const HOME = BUILD.find(b => b.poi === 'hq');
-// The modelled buildings that have a ground of their own
-export const MODELLED = BUILD.filter(b => ROOFS[b.poi] && ROOFS[b.poi].ground);
+// The modelled buildings whose plot is painted by hand, see paintYard()
+export const MODELLED = BUILD.filter(b => ROOFS[b.poi] && ROOFS[b.poi].yard);
 
 /**
  * Index of the junction closest to a point.

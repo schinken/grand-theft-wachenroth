@@ -110,7 +110,7 @@ function layOutCemetery(a) {
 AREAS.forEach((a, i) => {
   prepPoly(a);
   // School grounds and playgrounds are lawn; the photo adds what is paved
-  // there, GROUNDS the sand and what children play on.
+  // there, paintPlayground() the sand and what children play on.
   a.fill =
     a.k === 'farm'
       ? FARM[i % 4]
