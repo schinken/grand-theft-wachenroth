@@ -519,51 +519,90 @@ function itemSpot(st, c, free) {
   return roadPoint(free) || c;
 }
 
-// What a step sets up as it starts, by its kind. The other kinds need
-// nothing.
-const BEGIN = {
-  steal(j, st) {
-    j.veh = spawnAt(st.veh, st.at, st.trailer);
-    j.to = j.veh;
-  },
-  chase(j, st) {
-    const from = nearNode(SPOT[st.at], 'car');
-    const to = NODES[from].car[0].n;
-    j.prey = carAt(NODES[from], NODES[to], st.veh);
-    if (st.trailer) {
-      hitch(j.prey, st.trailer);
-    }
-    j.prey.ai = newAI(from, to, {flee: true});
-    j.to = j.prey;
-  },
-  take(j) {
-    j.veh = j.prey;
-    j.prey = null;
-    j.to = j.veh;
-  },
-  collect(j, st) {
-    const c = SPOT[st.near];
-    j.got = 0;
-    j.need = st.n;
-    const free = (x, y) =>
-      Math.hypot(x - c.x, y - c.y) < st.r &&
-      !state.items.some(
-        v => Math.hypot(v.x - x, v.y - y) < (st.loose ? 5 : 25)
-      );
-    for (let i = 0; i < st.n; i++) {
-      const spot = itemSpot(st, c, free);
-      state.items.push({
-        x: spot.x,
-        y: spot.y,
-        tree: spot.tree,
-        kind: st.item,
-        job: true,
-        ph: rand(0, TAU),
-        hair: pick(['#2a1d14', '#15151a', '#d8c08a', '#6b3a1e']),
-      });
-    }
-  },
-};
+/**
+ * A vehicle to get into waits at its place.
+ * @param {!Object} j
+ * @param {!Object} st The step.
+ */
+function beginSteal(j, st) {
+  j.veh = spawnAt(st.veh, st.at, st.trailer);
+  j.to = j.veh;
+}
+
+/**
+ * A getaway car sets off near a place.
+ * @param {!Object} j
+ * @param {!Object} st The step.
+ */
+function beginChase(j, st) {
+  const from = nearNode(SPOT[st.at], 'car');
+  const to = NODES[from].car[0].n;
+  j.prey = carAt(NODES[from], NODES[to], st.veh);
+  if (st.trailer) {
+    hitch(j.prey, st.trailer);
+  }
+  j.prey.ai = newAI(from, to, {flee: true});
+  j.to = j.prey;
+}
+
+/**
+ * The car that was just stopped is the one to get into.
+ * @param {!Object} j
+ */
+function beginTake(j) {
+  j.veh = j.prey;
+  j.prey = null;
+  j.to = j.veh;
+}
+
+/**
+ * The things to collect are put out near their place.
+ * @param {!Object} j
+ * @param {!Object} st The step.
+ */
+function beginCollect(j, st) {
+  const c = SPOT[st.near];
+  j.got = 0;
+  j.need = st.n;
+  const free = (x, y) =>
+    Math.hypot(x - c.x, y - c.y) < st.r &&
+    !state.items.some(v => Math.hypot(v.x - x, v.y - y) < (st.loose ? 5 : 25));
+  for (let i = 0; i < st.n; i++) {
+    const spot = itemSpot(st, c, free);
+    state.items.push({
+      x: spot.x,
+      y: spot.y,
+      tree: spot.tree,
+      kind: st.item,
+      job: true,
+      ph: rand(0, TAU),
+      hair: pick(['#2a1d14', '#15151a', '#d8c08a', '#6b3a1e']),
+    });
+  }
+}
+
+/**
+ * What a step sets up as it starts, by its kind.
+ * @param {!Object} j
+ * @param {!Object} st The step.
+ */
+function beginStep(j, st) {
+  switch (st.do) {
+    case 'steal':
+      beginSteal(j, st);
+      break;
+    case 'chase':
+      beginChase(j, st);
+      break;
+    case 'take':
+      beginTake(j);
+      break;
+    case 'collect':
+      beginCollect(j, st);
+      break;
+    default: // the other kinds need nothing
+  }
+}
 
 /** Moves the mission on to its next step, or ends it. */
 export function nextStep() {
@@ -592,44 +631,51 @@ export function nextStep() {
     page(fill(st.say));
   }
   state.pager.idle = fill(st.obj);
-  if (BEGIN[st.do]) {
-    BEGIN[st.do](j, st);
-  }
+  beginStep(j, st);
   state.gps = null;
 }
 
-// What holding a place looks like while the seconds count.
-const HOLD_FX = {
-  water(j, dt) {
-    const player = state.player;
-    for (let i = 0; i < 3; i++) {
-      puff(
-        lerp(player.x, j.to.x, Math.random()),
-        lerp(player.y, j.to.y, Math.random()),
-        'water'
-      );
-    }
-    if (Math.random() < dt * 5) {
-      audio.play('spray');
-    }
-  },
-  dig(j, dt) {
-    const player = state.player;
-    puff(player.x + rand(-2, 2), player.y + rand(-2, 2), 'dirt');
-    // the garden gets dug up, not the street
-    const x = j.to.x + rand(-12, 12);
-    const y = j.to.y + rand(-12, 12);
-    if (Math.random() < dt * 8 && !(surfAt(x, y) & 4) && !blocked(x, y, 0.5)) {
-      decal(x, y, 'dirt');
-    }
-  },
-  spread() {
-    const player = state.player;
-    for (let i = 0; i < 3; i++) {
-      puff(player.x + rand(-3, 3), player.y + rand(-3, 3), 'dung');
-    }
-  },
-};
+/**
+ * Water from the hose, between the player and the target.
+ * @param {!Object} j
+ * @param {number} dt
+ */
+function sprayWater(j, dt) {
+  const player = state.player;
+  for (let i = 0; i < 3; i++) {
+    puff(
+      lerp(player.x, j.to.x, Math.random()),
+      lerp(player.y, j.to.y, Math.random()),
+      'water'
+    );
+  }
+  if (Math.random() < dt * 5) {
+    audio.play('spray');
+  }
+}
+
+/**
+ * The digger throws up dirt: the garden gets dug up, not the street.
+ * @param {!Object} j
+ * @param {number} dt
+ */
+function digEarth(j, dt) {
+  const player = state.player;
+  puff(player.x + rand(-2, 2), player.y + rand(-2, 2), 'dirt');
+  const x = j.to.x + rand(-12, 12);
+  const y = j.to.y + rand(-12, 12);
+  if (Math.random() < dt * 8 && !(surfAt(x, y) & 4) && !blocked(x, y, 0.5)) {
+    decal(x, y, 'dirt');
+  }
+}
+
+/** Dung flies off the cart. */
+function spreadDung() {
+  const player = state.player;
+  for (let i = 0; i < 3; i++) {
+    puff(player.x + rand(-3, 3), player.y + rand(-3, 3), 'dung');
+  }
+}
 
 /**
  * How fast the player drives, in metres a second.
@@ -640,45 +686,98 @@ function speed() {
   return c ? Math.hypot(c.vx, c.vy) : 0;
 }
 
-// Whether a step is done, by its kind. near(r) tells whether the target is
-// within r metres.
-const DONE = {
-  steal: j => state.player.car === j.veh,
-  take: j => state.player.car === j.veh,
-  bring: (j, st, near) => state.player.car === j.veh && near(7) && speed() < 8,
-  goto(j, st, near) {
-    const car = state.player.car;
-    if (st.foot && car && near(14) && !j.told) {
-      j.told = true;
-      info('Aussteigen und zu Fuß reingehen');
-    }
-    const there = st.foot ? !car && near(3.5) : near(st.r || 7) && speed() < 9;
-    return there && !(st.fix && state.wanted >= 1);
-  },
-  hold(j, st, near, dt) {
-    if (!near(st.r || 10) || (st.veh && state.player.car !== j.veh)) {
-      j.hold = Math.max(0, j.hold - dt);
-      return false;
-    }
-    j.hold += dt;
-    if (HOLD_FX[st.fx]) {
-      HOLD_FX[st.fx](j, dt);
-    }
-    return j.hold >= st.secs;
-  },
-  collect: j => j.got >= j.need,
-  lose: () => state.wanted < 1,
-  chase(j, st) {
-    const prey = j.prey;
-    const stopped =
-      (prey.hits || 0) >= st.hits || prey.hp < prey.type.hp * 0.35;
-    if (stopped) {
-      bail(prey);
-      Object.assign(prey, {thr: 0, hb: true});
-    }
-    return stopped;
-  },
-};
+/**
+ * Whether a goto step is done: you are there, on foot if it says so, and
+ * the police have let go if it says so.
+ * @param {!Object} j
+ * @param {!Object} st The step.
+ * @param {function(number): boolean} near Whether the target is that close.
+ * @return {boolean}
+ */
+function gotoDone(j, st, near) {
+  const car = state.player.car;
+  if (st.foot && car && near(14) && !j.told) {
+    j.told = true;
+    info('Aussteigen und zu Fuß reingehen');
+  }
+  const there = st.foot ? !car && near(3.5) : near(st.r || 7) && speed() < 9;
+  return there && !(st.fix && state.wanted >= 1);
+}
+
+/**
+ * Counts the seconds of a hold step while you stay at its place, and shows
+ * what it does there.
+ * @param {!Object} j
+ * @param {!Object} st The step.
+ * @param {function(number): boolean} near Whether the target is that close.
+ * @param {number} dt
+ * @return {boolean} Whether it is done.
+ */
+function holdDone(j, st, near, dt) {
+  if (!near(st.r || 10) || (st.veh && state.player.car !== j.veh)) {
+    j.hold = Math.max(0, j.hold - dt);
+    return false;
+  }
+  j.hold += dt;
+  if (st.fx === 'water') {
+    sprayWater(j, dt);
+  }
+  if (st.fx === 'dig') {
+    digEarth(j, dt);
+  }
+  if (st.fx === 'spread') {
+    spreadDung();
+  }
+  return j.hold >= st.secs;
+}
+
+/**
+ * Whether the getaway car has been rammed often enough, or is badly dented:
+ * then its driver runs.
+ * @param {!Object} j
+ * @param {!Object} st The step.
+ * @return {boolean}
+ */
+function chaseDone(j, st) {
+  const prey = j.prey;
+  const stopped = (prey.hits || 0) >= st.hits || prey.hp < prey.type.hp * 0.35;
+  if (stopped) {
+    bail(prey);
+    Object.assign(prey, {thr: 0, hb: true});
+  }
+  return stopped;
+}
+
+/**
+ * Whether the current step is done, by its kind.
+ * @param {!Object} j
+ * @param {number} dt
+ * @return {boolean}
+ */
+function stepDone(j, dt) {
+  const st = j.step;
+  const player = state.player;
+  const near = r => j.to && dist(player, j.to) < r;
+  switch (st.do) {
+    case 'steal':
+    case 'take':
+      return player.car === j.veh;
+    case 'bring':
+      return player.car === j.veh && near(7) && speed() < 8;
+    case 'goto':
+      return gotoDone(j, st, near);
+    case 'hold':
+      return holdDone(j, st, near, dt);
+    case 'collect':
+      return j.got >= j.need;
+    case 'lose':
+      return state.wanted < 1;
+    case 'chase':
+      return chaseDone(j, st);
+    default:
+      throw new Error(`unknown step: ${st.do}`);
+  }
+}
 
 /**
  * Why the mission is lost, or '' while it is not. The clock runs here.
@@ -717,12 +816,7 @@ export function jobRules(dt) {
     failJob(why);
     return;
   }
-  const done = DONE[j.step.do];
-  if (!done) {
-    throw new Error(`unknown step: ${j.step.do}`);
-  }
-  const near = r => j.to && dist(state.player, j.to) < r;
-  if (done(j, j.step, near, dt)) {
+  if (stepDone(j, dt)) {
     nextStep();
   }
 }
