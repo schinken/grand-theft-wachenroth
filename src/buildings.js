@@ -407,34 +407,20 @@ function prepSign(b, look) {
 }
 
 /**
- * Picks walls and a roof for a building and files it in the grid.
+ * Picks the roof of a building: a guess by its kind, which the surveyed roof
+ * shape, the colour on the aerial photo and the look of a landmark overrule.
  * @param {!Building} b
  * @param {!Rng} r
+ * @param {!Object} look
+ * @param {boolean} fresh Whether it stands in the new estate.
+ * @return {boolean} Whether the roof gets a ridge.
  */
-function prepBuilding(b, r) {
-  // A sign needs the long side of the roof, whichever way the ridge runs.
-  prepPoly(b, b.label ? undefined : b.dir);
+function pickRoof(b, r, look, fresh) {
   const k = b.k;
-  // The surveyed height of the ridge or the spire above the walls, or 0.
-  const lift = b.t || 0;
-  const fresh = k === 'h' && !!b.rd && b.rd[2][6].n === NEW_ESTATE;
-  const look = b.look || LANDMARKS[b.poi] || {};
-  let base = pick2(WALLS[k] || WALLS.h, r);
-  if (look.wall) {
-    base = look.wall;
-  } else if (fresh) {
-    base = pick2(NEW_WALLS, r);
-  }
-  const wide = b.v1 - b.v0;
-  prepWalls(b, base);
-  b.lpath = new Path2D(`M${b.lp.join(' ')}Z`);
-  const simple = b.p.length <= 28 && wide > 2.5;
+  const simple = b.p.length <= 28 && b.v1 - b.v0 > 2.5;
   let [roof, gable] = guessRoof(b, r(), simple);
   if (roof) {
     b.roof = roof;
-  }
-  if (k === 's' || k === 't') {
-    b.apex = lift || (k === 's' ? 2 : b.a < 20 ? 2.6 : 9);
   }
   const real = !'stwxo'.includes(k); // towers, silos and the like are made up
   if (b.r && real) {
@@ -454,16 +440,29 @@ function prepBuilding(b, r) {
   if (look.roof) {
     b.roof = textures[look.roof];
   }
-  if (look.flat) {
-    gable = false;
-  }
+  return gable && !look.flat;
+}
+
+/**
+ * Gives a roof its ridge, and a house maybe a chimney and solar panels on
+ * one slope: on most new houses, on some old ones.
+ * @param {!Building} b
+ * @param {!Rng} r
+ * @param {!Object} look
+ * @param {boolean} fresh Whether it stands in the new estate.
+ * @param {boolean} gable Whether the roof gets a ridge.
+ */
+function prepRidge(b, r, look, fresh, gable) {
+  const k = b.k;
+  const wide = b.v1 - b.v0;
   const metal = b.roof === textures.metal || b.roof === textures.metalRed;
   if (gable) {
     const guess =
       k === 'c'
         ? clamp(wide * 0.45, 2, 6)
         : clamp(wide * (metal ? 0.14 : 0.27), 0.7, 3.4);
-    ridge(b, lift || guess, fresh || !!look.hip || b.r === 'p');
+    // The surveyed height of the ridge above the walls beats the guess.
+    ridge(b, b.t || guess, fresh || !!look.hip || b.r === 'p');
   }
   if (b.halves && b.gables.length < 2) {
     b.halves = null;
@@ -474,11 +473,58 @@ function prepBuilding(b, r) {
       b.ry + (r() < 0.5 ? -1 : 1),
     ];
   }
-  // Solar panels on one slope: on most new houses, on some old ones.
   const sunny = look.pv || r() < (fresh ? 0.8 : 0.22);
   if (b.halves && k === 'h' && b.a > 80 && sunny) {
     b.pv = r() < 0.5 ? 0 : 1;
   }
+}
+
+/**
+ * The roof of a building that is modelled face by face or was surveyed, and
+ * where its sign sits. A surveyed roof keeps its faces under a plot that is
+ * painted.
+ * @param {!Building} b
+ * @param {string} base The colour of the walls.
+ */
+function prepModel(b, base) {
+  const spec = b.f ? {...ROOFS[b.poi], ...surveyedRoof(b)} : ROOFS[b.poi];
+  if (!spec) {
+    return;
+  }
+  buildRoof(b, spec, base);
+  if (spec.sign && b.sign) {
+    b.signH = spec.sign[2];
+    b.signW = b.signH * (b.sign.width / b.sign.height);
+    b.signU = b.at[0] + spec.sign[0];
+    b.signV = b.at[1] - spec.sign[1];
+  }
+}
+
+/**
+ * Picks walls and a roof for a building and files it in the grid.
+ * @param {!Building} b
+ * @param {!Rng} r
+ */
+function prepBuilding(b, r) {
+  // A sign needs the long side of the roof, whichever way the ridge runs.
+  prepPoly(b, b.label ? undefined : b.dir);
+  const k = b.k;
+  const fresh = k === 'h' && !!b.rd && b.rd[2][6].n === NEW_ESTATE;
+  const look = b.look || LANDMARKS[b.poi] || {};
+  let base = pick2(WALLS[k] || WALLS.h, r);
+  if (look.wall) {
+    base = look.wall;
+  } else if (fresh) {
+    base = pick2(NEW_WALLS, r);
+  }
+  prepWalls(b, base);
+  b.lpath = new Path2D(`M${b.lp.join(' ')}Z`);
+  const gable = pickRoof(b, r, look, fresh);
+  if (k === 's' || k === 't') {
+    // The surveyed height of the spire above the walls, or a guess.
+    b.apex = b.t || (k === 's' ? 2 : b.a < 20 ? 2.6 : 9);
+  }
+  prepRidge(b, r, look, fresh, gable);
   if (b.apex) {
     // Spires and silo lids are plain: one colour per face, by how the sun
     // falls on it.
@@ -494,17 +540,7 @@ function prepBuilding(b, r) {
   if (b.label) {
     prepSign(b, look);
   }
-  // A surveyed roof keeps its faces under a plot that is painted.
-  const spec = b.f ? {...ROOFS[b.poi], ...surveyedRoof(b)} : ROOFS[b.poi];
-  if (spec) {
-    buildRoof(b, spec, base);
-  }
-  if (spec && spec.sign && b.sign) {
-    b.signH = spec.sign[2];
-    b.signW = b.signH * (b.sign.width / b.sign.height);
-    b.signU = b.at[0] + spec.sign[0];
-    b.signV = b.at[1] - spec.sign[1];
-  }
+  prepModel(b, base);
   // For the order of drawing: a number, the buildings this one hides in the
   // current frame, and what it covers on the screen.
   b.id = ++buildingCount;
