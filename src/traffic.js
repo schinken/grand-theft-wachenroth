@@ -341,28 +341,22 @@ function busted() {
 }
 
 /**
- * Keeps the streets around the player busy.
- * @param {number} dt
- * @param {number} near How close things may appear.
+ * Drops the cars and pedestrians that are far away. Both lists are thinned
+ * out in place, in order, without a new list each update.
+ * @param {!Point} f What they have to be near: the player, or the camera.
  */
-export function populate(dt, near) {
+function dropFar(f) {
   const player = state.player;
-  const f = state.mode === 'play' ? player : state.cam;
   const j = state.job;
-  // Both lists are thinned out in place, in order, without a new list each
-  // update
   const cars = state.cars;
   let n = 0;
   for (const c of cars) {
     const keep = c === player.car || (j && (c === j.veh || c === j.prey));
-    if (
-      (keep && !c.gone) ||
-      !(
-        c.gone ||
-        ((c.ai || c.dead) && dist(c, f) > 300) ||
-        (c.ai && c.ai.jams > 4 && dist(c, f) > 110)
-      )
-    ) {
+    const lost =
+      c.gone ||
+      ((c.ai || c.dead) && dist(c, f) > 300) ||
+      (c.ai && c.ai.jams > 4 && dist(c, f) > 110);
+    if ((keep && !c.gone) || !lost) {
       cars[n++] = c;
     }
   }
@@ -375,6 +369,78 @@ export function populate(dt, near) {
     }
   }
   peds.length = n;
+}
+
+/**
+ * What kind of vehicle joins the traffic: mostly cars.
+ * @param {number} r A random number.
+ * @return {string}
+ */
+function trafficKind(r) {
+  if (r < 0.6) {
+    return 'car';
+  }
+  if (r < 0.78) {
+    return 'van';
+  }
+  if (r < 0.86) {
+    return 'sport';
+  }
+  if (r < 0.93) {
+    return 'tractor';
+  }
+  return r < 0.97 ? 'truck' : 'tipper';
+}
+
+/**
+ * A car joins the traffic at one of the junctions, if there is room.
+ * @param {!Array<!Object>} spots The junctions.
+ */
+function spawnCar(spots) {
+  const a = pick(spots.filter(n => n.car.length));
+  if (!a || state.cars.some(c => dist(c, a) < 14)) {
+    return;
+  }
+  const to = pick(a.car).n;
+  const b = NODES[to];
+  const ang = Math.atan2(b.y - a.y, b.x - a.x);
+  const c = makeCar(
+    a.x - (Math.sin(ang) * a.w) / 4,
+    a.y + (Math.cos(ang) * a.w) / 4,
+    ang,
+    trafficKind(Math.random())
+  );
+  c.ai = newAI(NODES.indexOf(a), to);
+  if (c.kind === 'tractor' && Math.random() < 0.5) {
+    hitch(c, 'grain');
+  }
+}
+
+/**
+ * A pedestrian sets off at one of the junctions: on the pavement, not in
+ * the middle of the road.
+ * @param {!Array<!Object>} spots The junctions.
+ */
+function spawnWalker(spots) {
+  const a = pick(spots.filter(n => n.walk.length));
+  if (!a) {
+    return;
+  }
+  const p = spawnPed(a.x, a.y, NODES.indexOf(a), pick(a.walk));
+  const b = NODES[p.to];
+  const off = ((a.w / 2 + 0.9) * p.side) / (dist(a, b) || 1);
+  p.x -= (b.y - a.y) * off;
+  p.y += (b.x - a.x) * off;
+}
+
+/**
+ * Keeps the streets around the player busy.
+ * @param {number} dt
+ * @param {number} near How close things may appear.
+ */
+export function populate(dt, near) {
+  const f = state.mode === 'play' ? state.player : state.cam;
+  dropFar(f);
   if ((state.spawnT -= dt) > 0) {
     return;
   }
@@ -384,44 +450,82 @@ export function populate(dt, near) {
     return d > near && d < 250;
   });
   if (state.cars.filter(c => c.ai).length < 13) {
-    const a = pick(spots.filter(n => n.car.length));
-    if (a && !state.cars.some(c => dist(c, a) < 14)) {
-      const to = pick(a.car).n;
-      const b = NODES[to];
-      const ang = Math.atan2(b.y - a.y, b.x - a.x);
-      const r = Math.random();
-      const c = makeCar(
-        a.x - (Math.sin(ang) * a.w) / 4,
-        a.y + (Math.cos(ang) * a.w) / 4,
-        ang,
-        r < 0.6
-          ? 'car'
-          : r < 0.78
-            ? 'van'
-            : r < 0.86
-              ? 'sport'
-              : r < 0.93
-                ? 'tractor'
-                : r < 0.97
-                  ? 'truck'
-                  : 'tipper'
-      );
-      c.ai = newAI(NODES.indexOf(a), to);
-      if (c.kind === 'tractor' && Math.random() < 0.5) {
-        hitch(c, 'grain');
-      }
-    }
+    spawnCar(spots);
   }
   if (state.peds.length < 24) {
-    const a = pick(spots.filter(n => n.walk.length));
-    if (a) {
-      // On the pavement, not in the middle of the road
-      const p = spawnPed(a.x, a.y, NODES.indexOf(a), pick(a.walk));
-      const b = NODES[p.to];
-      const off = ((a.w / 2 + 0.9) * p.side) / (dist(a, b) || 1);
-      p.x -= (b.y - a.y) * off;
-      p.y += (b.x - a.x) * off;
+    spawnWalker(spots);
+  }
+}
+
+/**
+ * Fills a car park in tidy rows.
+ * @param {!Object} a The area.
+ * @param {!Rng} r
+ */
+function fillCarPark(a, r) {
+  const ca = Math.cos(a.ang);
+  const sa = Math.sin(a.ang);
+  const radius = Math.hypot(a.x1 - a.x0, a.y1 - a.y0) / 2;
+  const free = (px, py) =>
+    pip(px, py, a.p) &&
+    !(surfAt(px, py) & 4) &&
+    !at(treeGrid, px, py).some(t => Math.hypot(t.x - px, t.y - py) < 3);
+  for (let u = -radius; u < radius; u += 2.8) {
+    for (let v = -radius; v < radius; v += 5.8) {
+      const x = a.mx + ca * u - sa * v;
+      const y = a.my + sa * u + ca * v;
+      const ex = -sa * 2.7;
+      const ey = ca * 2.7;
+      const take = r() < 0.42;
+      const flip = r() < 0.5;
+      const kind = r();
+      const room =
+        take && free(x, y) && free(x + ex, y + ey) && free(x - ex, y - ey);
+      if (!room || blocked(x, y, 3)) {
+        continue;
+      }
+      makeCar(
+        x,
+        y,
+        a.ang + Math.PI / 2 + (flip ? Math.PI : 0),
+        kind < 0.8 ? 'car' : kind < 0.93 ? 'van' : 'sport',
+        COLORS[(r() * COLORS.length) | 0]
+      );
     }
+  }
+}
+
+/**
+ * Parks a few cars along the kerbs of the village.
+ * @param {!Rng} r
+ */
+function lineKerbs(r) {
+  for (let i = 0; i < 46; i++) {
+    const s = SEGS[(r() * SEGS.length) | 0];
+    const t = r();
+    const kind = r();
+    const flip = r() < 0.5;
+    const col = COLORS[(r() * COLORS.length) | 0];
+    if (!town(s[6]) || s[5] < 14) {
+      continue;
+    }
+    const off = s[4] / 2 + 0.2;
+    const x = lerp(s[0], s[2], t) - ((s[3] - s[1]) / s[5]) * off;
+    const y = lerp(s[1], s[3], t) + ((s[2] - s[0]) / s[5]) * off;
+    const taken =
+      blocked(x, y, 2.6) ||
+      state.cars.some(c => Math.hypot(c.x - x, c.y - y) < 7) ||
+      NODES.some(n => n.car.length > 2 && Math.hypot(n.x - x, n.y - y) < 12);
+    if (taken) {
+      continue;
+    }
+    makeCar(
+      x,
+      y,
+      Math.atan2(s[3] - s[1], s[2] - s[0]) + (flip ? Math.PI : 0),
+      kind < 0.85 ? 'car' : kind < 0.95 ? 'van' : 'sport',
+      col
+    );
   }
 }
 
@@ -430,42 +534,7 @@ export function parkCars() {
   const r = rng(11);
   for (const a of AREAS) {
     if (a.k === 'park') {
-      const ca = Math.cos(a.ang);
-      const sa = Math.sin(a.ang);
-      const radius = Math.hypot(a.x1 - a.x0, a.y1 - a.y0) / 2;
-      for (let u = -radius; u < radius; u += 2.8) {
-        for (let v = -radius; v < radius; v += 5.8) {
-          const x = a.mx + ca * u - sa * v;
-          const y = a.my + sa * u + ca * v;
-          const ex = -sa * 2.7;
-          const ey = ca * 2.7;
-          const take = r() < 0.42;
-          const flip = r() < 0.5;
-          const kind = r();
-          const free = (px, py) =>
-            pip(px, py, a.p) &&
-            !(surfAt(px, py) & 4) &&
-            !at(treeGrid, px, py).some(t => Math.hypot(t.x - px, t.y - py) < 3);
-          if (
-            !take ||
-            !free(x, y) ||
-            !free(x + ex, y + ey) ||
-            !free(x - ex, y - ey)
-          ) {
-            continue;
-          }
-          if (blocked(x, y, 3)) {
-            continue;
-          }
-          makeCar(
-            x,
-            y,
-            a.ang + Math.PI / 2 + (flip ? Math.PI : 0),
-            kind < 0.8 ? 'car' : kind < 0.93 ? 'van' : 'sport',
-            COLORS[(r() * COLORS.length) | 0]
-          );
-        }
-      }
+      fillCarPark(a, r);
     }
   }
   // What belongs to a place stands there, mission or not, ready to be taken.
@@ -487,32 +556,5 @@ export function parkCars() {
       makeCar(x, y, Math.atan2(-b.ca, b.sa) + turn, kind, col);
     }
   }
-  for (let i = 0; i < 46; i++) {
-    // and a few along the kerb in the village
-    const s = SEGS[(r() * SEGS.length) | 0];
-    const t = r();
-    const kind = r();
-    const flip = r() < 0.5;
-    const col = COLORS[(r() * COLORS.length) | 0];
-    if (!town(s[6]) || s[5] < 14) {
-      continue;
-    }
-    const off = s[4] / 2 + 0.2;
-    const x = lerp(s[0], s[2], t) - ((s[3] - s[1]) / s[5]) * off;
-    const y = lerp(s[1], s[3], t) + ((s[2] - s[0]) / s[5]) * off;
-    if (
-      blocked(x, y, 2.6) ||
-      state.cars.some(c => Math.hypot(c.x - x, c.y - y) < 7) ||
-      NODES.some(n => n.car.length > 2 && Math.hypot(n.x - x, n.y - y) < 12)
-    ) {
-      continue;
-    }
-    makeCar(
-      x,
-      y,
-      Math.atan2(s[3] - s[1], s[2] - s[0]) + (flip ? Math.PI : 0),
-      kind < 0.85 ? 'car' : kind < 0.95 ? 'van' : 'sport',
-      col
-    );
-  }
+  lineKerbs(r);
 }
