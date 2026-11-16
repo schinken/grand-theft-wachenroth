@@ -11,9 +11,40 @@ import {SPOT} from './places.js';
 import {carSprite, icon} from './sprites.js';
 import {state} from './state.js';
 import {drawTrain} from './train.js';
-import {TAU, pick2, rand, rng} from './util.js';
+import {TAU, clamp, pick2, rand, rng} from './util.js';
 import {ctx} from './view.js';
 import {box} from './yards.js';
+
+/**
+ * Tyres below the body sprite, in the vehicle's local frame. The front
+ * pair turns, with a slightly greater angle on the inside of the bend.
+ * @param {!CanvasRenderingContext2D} g
+ * @param {!Car} c
+ */
+function drawWheels(g, c) {
+  const type = c.type;
+  if (!type.wheelbase) {
+    return;
+  }
+  const length = clamp(type.wheelbase * 0.26, 0.5, 0.95);
+  const width = clamp(type.width * 0.15, 0.2, 0.36);
+  const track = type.width - width * 0.5;
+  const angle = c.wheelAngle || 0;
+  const curvature = Math.tan(angle) / type.wheelbase;
+  g.fillStyle = '#45464a';
+  for (const axle of [-1, 1]) {
+    for (const side of [-1, 1]) {
+      const y = (side * track) / 2;
+      g.save();
+      g.translate((axle * type.wheelbase) / 2, y);
+      if (axle > 0) {
+        g.rotate(Math.atan(Math.tan(angle) / (1 - y * curvature)));
+      }
+      g.fillRect(-length / 2, -width / 2, length, width);
+      g.restore();
+    }
+  }
+}
 
 /**
  * @param {!Object} p
@@ -460,6 +491,7 @@ function drawCar(c) {
   ctx.save();
   ctx.translate(c.x, c.y);
   ctx.rotate(c.a);
+  drawWheels(ctx, c);
   // the drum of a concrete mixer turns
   const turning = c.kind === 'mixer' && !c.dead;
   const spr = turning
