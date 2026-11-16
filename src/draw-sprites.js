@@ -287,6 +287,206 @@ function drawProps() {
   }
 }
 
+// The colour of what is left on the ground, by its kind; anything else is
+// soot.
+const STAINS = {
+  blood: 'rgba(140,10,16,.8)',
+  stump: '#7a5634',
+  dirt: 'rgba(107,74,42,.9)',
+};
+
+/**
+ * A stain on the ground, or the stump of a tree.
+ * @param {!Object} d
+ */
+function drawDecal(d) {
+  ctx.fillStyle = STAINS[d.kind] || 'rgba(15,12,10,.55)';
+  ctx.beginPath();
+  ctx.arc(d.x, d.y, d.r, 0, TAU);
+  ctx.fill();
+  if (d.kind === 'stump') {
+    ctx.strokeStyle = '#c8a070'; // the year rings
+    ctx.lineWidth = 0.08;
+    ctx.beginPath();
+    ctx.arc(d.x, d.y, d.r * 0.55, 0, TAU);
+    ctx.stroke();
+  }
+}
+
+/**
+ * A thing to pick up, on its glowing spot: an icon that rocks, or a rocker
+ * who bangs his head.
+ * @param {!Object} v
+ */
+function drawItem(v) {
+  const k = Math.sin(state.t * 5 + v.ph);
+  const w = (v.job ? 2.6 : 2) + k * 0.2;
+  ctx.fillStyle = v.job ? 'rgba(255,210,62,.5)' : 'rgba(255,255,255,.25)';
+  ctx.beginPath();
+  ctx.arc(v.x, v.y, (v.job ? 2.4 : 1.7) + k * 0.3, 0, TAU);
+  ctx.fill();
+  if (v.kind === 'rocker') {
+    const a = v.ph + Math.sin(state.t * 9 + v.ph) * 0.35;
+    drawPerson(
+      {x: v.x, y: v.y, a, t: state.t * 2 + v.ph},
+      '#16161a',
+      v.hair,
+      true
+    );
+    return;
+  }
+  ctx.save();
+  ctx.translate(v.x, v.y);
+  ctx.rotate(Math.sin(state.t * 2 + v.ph) * 0.25);
+  ctx.drawImage(icon(v.kind), -w / 2, -w / 2, w, w);
+  ctx.restore();
+}
+
+/** The player on foot, in a yellow ring, with the hammer if a job has one. */
+function drawPlayer() {
+  const player = state.player;
+  ctx.strokeStyle = '#ffd23e';
+  ctx.lineWidth = 0.15;
+  ctx.beginPath();
+  ctx.arc(player.x, player.y, 1 + Math.sin(state.t * 6) * 0.1, 0, TAU);
+  ctx.stroke();
+  drawPerson(player, '#19c2bd', '#3a2a1a');
+  if (state.job && state.job.step.item === 'rocker') {
+    drawHammer(player);
+  }
+}
+
+/**
+ * A guard and the light of his lamp.
+ * @param {!Object} g
+ */
+function drawGuard(g) {
+  ctx.fillStyle = 'rgba(255,224,102,.28)';
+  ctx.beginPath();
+  ctx.moveTo(g.x, g.y);
+  ctx.arc(g.x, g.y, g.r, g.a - g.fov, g.a + g.fov);
+  ctx.closePath();
+  ctx.fill();
+  drawPerson(g, '#3c5a2a', '#2a1d14');
+}
+
+/**
+ * A shepherd dog: body, head and a tail that wags.
+ * @param {!Object} d
+ */
+function drawDog(d) {
+  box(ctx, d.x, d.y, 1.1, 0.45, d.a, '#5a3a1e');
+  box(
+    ctx,
+    d.x + Math.cos(d.a) * 0.6,
+    d.y + Math.sin(d.a) * 0.6,
+    0.4,
+    0.35,
+    d.a,
+    '#2a1d14'
+  );
+  const wag = Math.sin(d.t * 3 + state.t * 8) * 0.5;
+  box(
+    ctx,
+    d.x - Math.cos(d.a + wag) * 0.7,
+    d.y - Math.sin(d.a + wag) * 0.7,
+    0.4,
+    0.12,
+    d.a + wag,
+    '#5a3a1e'
+  );
+}
+
+/**
+ * Mama Doris with her broom.
+ * @param {!Object} dz
+ */
+function drawDoris(dz) {
+  ctx.strokeStyle = '#8a5a2a';
+  ctx.lineWidth = 0.18;
+  ctx.beginPath();
+  ctx.moveTo(dz.x, dz.y);
+  ctx.lineTo(dz.x + Math.cos(dz.a) * 1.5, dz.y + Math.sin(dz.a) * 1.5);
+  ctx.stroke();
+  ctx.fillStyle = '#d9b23c'; // the bristles
+  ctx.beginPath();
+  ctx.arc(
+    dz.x + Math.cos(dz.a) * 1.6,
+    dz.y + Math.sin(dz.a) * 1.6,
+    0.35,
+    0,
+    TAU
+  );
+  ctx.fill();
+  drawPerson(dz, '#c85aa8', '#d8d4cc');
+}
+
+/**
+ * The trailer of a vehicle, which hangs on the rear hitch, and its shadow.
+ * @param {!Car} c
+ */
+function drawTrailer(c) {
+  const tt = c.tr.type;
+  const hx = c.x - (Math.cos(c.a) * c.type.length) / 2;
+  const hy = c.y - (Math.sin(c.a) * c.type.length) / 2;
+  ctx.save();
+  ctx.translate(
+    hx - Math.cos(c.tr.a) * (tt.length / 2 + 0.4),
+    hy - Math.sin(c.tr.a) * (tt.length / 2 + 0.4)
+  );
+  ctx.rotate(c.tr.a);
+  ctx.fillStyle = 'rgba(0,0,0,.3)';
+  ctx.fillRect(-tt.length / 2 + 0.4, -tt.width / 2 + 0.4, tt.length, tt.width);
+  ctx.drawImage(tt.spr, -tt.length / 2, -tt.width / 2, tt.length, tt.width);
+  ctx.restore();
+}
+
+/**
+ * A vehicle on the ground: its trailer, its shadow, then the vehicle with
+ * its rotor or its blue lights.
+ * @param {!Car} c
+ */
+function drawCar(c) {
+  const type = c.type;
+  if (c.tr) {
+    drawTrailer(c);
+  }
+  ctx.save();
+  ctx.translate(c.x + 0.4, c.y + 0.4);
+  ctx.rotate(c.a);
+  ctx.fillStyle = 'rgba(0,0,0,.3)';
+  ctx.fillRect(-type.length / 2, -type.width / 2, type.length, type.width);
+  ctx.restore();
+  ctx.save();
+  ctx.translate(c.x, c.y);
+  ctx.rotate(c.a);
+  // the drum of a concrete mixer turns
+  const turning = c.kind === 'mixer' && !c.dead;
+  const spr = turning
+    ? carSprite('mixer', c.col, ((state.t * 5) | 0) % 4)
+    : c.spr;
+  ctx.drawImage(
+    spr,
+    -type.length / 2,
+    -type.width / 2,
+    type.length,
+    type.width
+  );
+  if (c.kind === 'heli') {
+    drawRotor(type, 0.6, false); // standing still
+  }
+  if (c.siren && !c.dead) {
+    // blue lights
+    const on = ((state.t * 6) | 0) % 2;
+    const x = c.kind === 'fire' ? type.length / 2 - 2.3 : -0.2;
+    ctx.fillStyle = on ? '#4aa3ff' : '#12327a';
+    ctx.fillRect(x, -type.width / 2 + 0.3, 0.5, 0.6);
+    ctx.fillStyle = on ? '#12327a' : '#4aa3ff';
+    ctx.fillRect(x, type.width / 2 - 0.9, 0.5, 0.6);
+  }
+  ctx.restore();
+}
+
 /**
  * Stains, pickups, people and vehicles.
  * @param {number} x0
@@ -295,201 +495,44 @@ function drawProps() {
  * @param {number} y1
  */
 export function drawSprites(x0, y0, x1, y1) {
-  const player = state.player;
+  const job = state.job;
   const seen = o =>
     o.x > x0 - 14 && o.x < x1 + 14 && o.y > y0 - 14 && o.y < y1 + 14;
   for (const d of state.decals) {
-    if (!seen(d)) {
-      continue;
-    }
-    ctx.fillStyle =
-      d.kind === 'blood'
-        ? 'rgba(140,10,16,.8)'
-        : d.kind === 'stump'
-          ? '#7a5634'
-          : d.kind === 'dirt'
-            ? 'rgba(107,74,42,.9)'
-            : 'rgba(15,12,10,.55)';
-    ctx.beginPath();
-    ctx.arc(d.x, d.y, d.r, 0, TAU);
-    ctx.fill();
-    if (d.kind === 'stump') {
-      ctx.strokeStyle = '#c8a070'; // the year rings
-      ctx.lineWidth = 0.08;
-      ctx.beginPath();
-      ctx.arc(d.x, d.y, d.r * 0.55, 0, TAU);
-      ctx.stroke();
+    if (seen(d)) {
+      drawDecal(d);
     }
   }
   drawProps();
   for (const v of state.items) {
-    if (!seen(v)) {
-      continue;
+    if (seen(v)) {
+      drawItem(v);
     }
-    const k = Math.sin(state.t * 5 + v.ph);
-    const w = (v.job ? 2.6 : 2) + k * 0.2;
-    ctx.fillStyle = v.job ? 'rgba(255,210,62,.5)' : 'rgba(255,255,255,.25)';
-    ctx.beginPath();
-    ctx.arc(v.x, v.y, (v.job ? 2.4 : 1.7) + k * 0.3, 0, TAU);
-    ctx.fill();
-    if (v.kind === 'rocker') {
-      // headbanging
-      const a = v.ph + Math.sin(state.t * 9 + v.ph) * 0.35;
-      drawPerson(
-        {x: v.x, y: v.y, a, t: state.t * 2 + v.ph},
-        '#16161a',
-        v.hair,
-        true
-      );
-      continue;
-    }
-    ctx.save();
-    ctx.translate(v.x, v.y);
-    ctx.rotate(Math.sin(state.t * 2 + v.ph) * 0.25);
-    ctx.drawImage(icon(v.kind), -w / 2, -w / 2, w, w);
-    ctx.restore();
   }
-  if (state.mode === 'play' && !player.car && !state.wasted) {
-    ctx.strokeStyle = '#ffd23e';
-    ctx.lineWidth = 0.15;
-    ctx.beginPath();
-    ctx.arc(player.x, player.y, 1 + Math.sin(state.t * 6) * 0.1, 0, TAU);
-    ctx.stroke();
-    drawPerson(player, '#19c2bd', '#3a2a1a');
-    if (state.job && state.job.step.item === 'rocker') {
-      drawHammer(player);
-    }
+  if (state.mode === 'play' && !state.player.car && !state.wasted) {
+    drawPlayer();
   }
   for (const p of state.peds) {
     if (seen(p) && !(p.fly > 0)) {
       drawPerson(p, p.shirt, p.hair, p.mane);
     }
   }
-  for (const g of (state.job && state.job.guards) || []) {
-    if (!seen(g)) {
-      continue;
+  for (const g of (job && job.guards) || []) {
+    if (seen(g)) {
+      drawGuard(g);
     }
-    ctx.fillStyle = 'rgba(255,224,102,.28)'; // the lamp
-    ctx.beginPath();
-    ctx.moveTo(g.x, g.y);
-    ctx.arc(g.x, g.y, g.r, g.a - g.fov, g.a + g.fov);
-    ctx.closePath();
-    ctx.fill();
-    drawPerson(g, '#3c5a2a', '#2a1d14');
   }
-  for (const d of (state.job && state.job.dogs) || []) {
-    if (!seen(d)) {
-      continue;
+  for (const d of (job && job.dogs) || []) {
+    if (seen(d)) {
+      drawDog(d);
     }
-    // a shepherd dog: body, head and a tail that wags
-    box(ctx, d.x, d.y, 1.1, 0.45, d.a, '#5a3a1e');
-    box(
-      ctx,
-      d.x + Math.cos(d.a) * 0.6,
-      d.y + Math.sin(d.a) * 0.6,
-      0.4,
-      0.35,
-      d.a,
-      '#2a1d14'
-    );
-    const wag = Math.sin(d.t * 3 + state.t * 8) * 0.5;
-    box(
-      ctx,
-      d.x - Math.cos(d.a + wag) * 0.7,
-      d.y - Math.sin(d.a + wag) * 0.7,
-      0.4,
-      0.12,
-      d.a + wag,
-      '#5a3a1e'
-    );
   }
-  const dz = state.job && state.job.doris;
-  if (dz && seen(dz)) {
-    ctx.strokeStyle = '#8a5a2a';
-    ctx.lineWidth = 0.18;
-    ctx.beginPath();
-    ctx.moveTo(dz.x, dz.y);
-    ctx.lineTo(dz.x + Math.cos(dz.a) * 1.5, dz.y + Math.sin(dz.a) * 1.5);
-    ctx.stroke();
-    ctx.fillStyle = '#d9b23c'; // the bristles
-    ctx.beginPath();
-    ctx.arc(
-      dz.x + Math.cos(dz.a) * 1.6,
-      dz.y + Math.sin(dz.a) * 1.6,
-      0.35,
-      0,
-      TAU
-    );
-    ctx.fill();
-    drawPerson(dz, '#c85aa8', '#d8d4cc');
+  if (job && job.doris && seen(job.doris)) {
+    drawDoris(job.doris);
   }
   for (const c of state.cars) {
-    if (!seen(c) || c.alt > 0.3) {
-      continue;
-    }
-    const type = c.type;
-    const fx = Math.cos(c.a);
-    const fy = Math.sin(c.a);
-    if (c.tr) {
-      // the trailer hangs on the rear hitch
-      const tt = c.tr.type;
-      const hx = c.x - (fx * type.length) / 2;
-      const hy = c.y - (fy * type.length) / 2;
-      ctx.save();
-      ctx.translate(
-        hx - Math.cos(c.tr.a) * (tt.length / 2 + 0.4),
-        hy - Math.sin(c.tr.a) * (tt.length / 2 + 0.4)
-      );
-      ctx.rotate(c.tr.a);
-      ctx.fillStyle = 'rgba(0,0,0,.3)';
-      ctx.fillRect(
-        -tt.length / 2 + 0.4,
-        -tt.width / 2 + 0.4,
-        tt.length,
-        tt.width
-      );
-      ctx.drawImage(tt.spr, -tt.length / 2, -tt.width / 2, tt.length, tt.width);
-      ctx.restore();
-    }
-    for (const sh of [0.4, 0]) {
-      // shadow first, then the car
-      ctx.save();
-      ctx.translate(c.x + sh, c.y + sh);
-      ctx.rotate(c.a);
-      if (sh) {
-        ctx.fillStyle = 'rgba(0,0,0,.3)';
-        ctx.fillRect(
-          -type.length / 2,
-          -type.width / 2,
-          type.length,
-          type.width
-        );
-      } else {
-        const spin =
-          c.kind === 'mixer' && !c.dead
-            ? carSprite('mixer', c.col, ((state.t * 5) | 0) % 4)
-            : c.spr;
-        ctx.drawImage(
-          spin,
-          -type.length / 2,
-          -type.width / 2,
-          type.length,
-          type.width
-        );
-        if (c.kind === 'heli') {
-          drawRotor(type, 0.6, false); // standing still
-        }
-        if (c.siren && !c.dead) {
-          // blue lights
-          const on = ((state.t * 6) | 0) % 2;
-          const x = c.kind === 'fire' ? type.length / 2 - 2.3 : -0.2;
-          ctx.fillStyle = on ? '#4aa3ff' : '#12327a';
-          ctx.fillRect(x, -type.width / 2 + 0.3, 0.5, 0.6);
-          ctx.fillStyle = on ? '#12327a' : '#4aa3ff';
-          ctx.fillRect(x, type.width / 2 - 0.9, 0.5, 0.6);
-        }
-      }
-      ctx.restore();
+    if (seen(c) && !(c.alt > 0.3)) {
+      drawCar(c);
     }
   }
   drawTrain(x0, y0, x1, y1);
