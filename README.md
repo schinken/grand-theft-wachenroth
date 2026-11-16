@@ -50,7 +50,7 @@ starts small and gets bigger:
 
 Each job name links to the game with that job up next: the start button names
 it, and it begins as soon as you press it. In the address, `?job=` takes the
-job's name from `missions.js` or its number.
+job's name from `src/missions.js` or its number.
 
 After the last job you can play on freely: the money, Bernhard's garage and
 Mara's bar stay, only Flo has no more jobs. The title screen continues a free
@@ -151,12 +151,17 @@ To play locally, serve the folder with any static web server and open
 `index.html`. Add `?selftest` to run the built-in checks: the page title turns
 into `selftest ok`.
 
-- `game.js`: the game. `missions.js`: Flo's jobs and lines. `audio.js`: sound.
+- The game is in `src/`, one module for each part; every file says at its top
+  what it holds. `main.js` is the entry with the main loop, `game.js` one step
+  of the world, `missions.js` Flo's jobs and lines, `audio.js` the sound.
 - `map.js` is generated. `tools/osm2map.py` bakes it from an OpenStreetMap
   extract and the open data files listed at the top of the script.
 - `GTW.poster()` in the browser console downloads a picture of the whole map,
   4 pixels per metre.
 - `tools/playtest.js` is a bot that plays all jobs through the thumb stick, and
-  `tools/perf.js` measures frame times; both run in Playwright.
+  `tools/perf.js` measures frame times; both run in Playwright. With a `seed`
+  the bot plays the same game every time, and with a `base` it plays a second
+  copy of the game, say the commit before, and tells whether both behave the
+  same: the check for a refactoring.
 
 Every push to `master` is checked, built and deployed to GitHub Pages.
