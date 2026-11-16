@@ -269,11 +269,11 @@ function sink(c) {
 }
 
 /**
- * Moves one vehicle: engine, steering, grip, walls, trees and street furniture.
+ * A burning car burns down and blows up; a badly dented one smokes.
  * @param {!Car} c
  * @param {number} dt
  */
-export function stepCar(c, dt) {
+function smoulder(c, dt) {
   const type = c.type;
   if (c.burn > 0) {
     c.thr = 0;
@@ -283,17 +283,26 @@ export function stepCar(c, dt) {
     if ((c.burn -= dt) <= 0) {
       explode(c);
     }
-  } else if (
-    !c.dead &&
-    c.hp < type.hp * 0.5 &&
-    Math.random() < dt * (c.hp < type.hp * 0.25 ? 16 : 6)
-  ) {
+    return;
+  }
+  const dented = !c.dead && c.hp < type.hp * 0.5;
+  if (dented && Math.random() < dt * (c.hp < type.hp * 0.25 ? 16 : 6)) {
     puff(
       c.x + Math.cos(c.a) * type.length * 0.35,
       c.y + Math.sin(c.a) * type.length * 0.35,
       'smoke'
     );
   }
+}
+
+/**
+ * Moves one vehicle: engine, steering, grip, walls, trees and street furniture.
+ * @param {!Car} c
+ * @param {number} dt
+ */
+export function stepCar(c, dt) {
+  const type = c.type;
+  smoulder(c, dt);
   if (c.dead) {
     c.thr = c.steer = 0;
   }
@@ -385,11 +394,20 @@ export function stepCar(c, dt) {
         1.3
       );
   } // the trailer swings in behind
-  if (air) {
-    return;
+  if (!air) {
+    hitScenery(c, fx, fy);
   }
+}
+
+/**
+ * Walls, tree trunks and street furniture are in the way of a car.
+ * @param {!Car} c
+ * @param {number} fx Its heading, as a vector of length 1.
+ * @param {number} fy
+ */
+function hitScenery(c, fx, fy) {
+  const type = c.type;
   for (const off of type.offs) {
-    // walls and tree trunks
     const px = c.x + fx * off;
     const py = c.y + fy * off;
     if (surfAt(px, py) & 2) {
@@ -431,6 +449,99 @@ export function stepCar(c, dt) {
   }
 }
 
+/**
+ * What ramming a car means for the game: a thief knocks wood off the cart,
+ * the police take it badly, and the getaway car counts the hit.
+ * @param {!Car} other The car that met the player's.
+ * @param {number} hit How hard, in metres a second.
+ */
+function ramRules(other, hit) {
+  const player = state.player;
+  const job = state.job;
+  const thief = other.ai && other.ai.thief;
+  const carting = job && job.logs > 0 && player.car === job.veh;
+  if (hit > 4 && thief && carting && state.t - (other.ramT || 0) > 1.5) {
+    // A thief rams the tractor: wood falls off the cart.
+    const c = player.car;
+    const back = c.type.length / 2 + c.tr.type.length / 2;
+    other.ramT = state.t;
+    job.logs--;
+    decal(
+      c.x - Math.cos(c.tr.a) * back,
+      c.y - Math.sin(c.tr.a) * back,
+      'stump'
+    );
+    float(
+      c,
+      job.logs ? `Holz weg! Noch ${job.logs}` : 'Der Hänger ist leer!',
+      '#ff5a1f'
+    );
+  }
+  if (!(hit > 7)) {
+    return;
+  }
+  if (other.ai && other.ai.cop) {
+    crime(0.4);
+  } // ramming the police
+  if (state.job && other === state.job.prey) {
+    other.hits = (other.hits || 0) + 1;
+    float(other, 'RUMMS!', '#ff5a1f');
+  }
+}
+
+/**
+ * Two vehicles that are near each other. Where their circles overlap they
+ * are pushed apart, and if they were closing in they bounce, spin and dent.
+ * @param {!Car} a
+ * @param {!Car} b
+ * @return {boolean} Whether they touch.
+ */
+function collidePair(a, b) {
+  const player = state.player;
+  const ma = a.type.mass * (a.dead ? 2 : 1);
+  const mb = b.type.mass * (b.dead ? 2 : 1);
+  const min = a.type.r + b.type.r;
+  let touch = false;
+  for (const oa of a.type.offs) {
+    for (const ob of b.type.offs) {
+      const dx = b.x + Math.cos(b.a) * ob - a.x - Math.cos(a.a) * oa;
+      const dy = b.y + Math.sin(b.a) * ob - a.y - Math.sin(a.a) * oa;
+      const d = Math.hypot(dx, dy);
+      if (!d || d >= min) {
+        continue;
+      }
+      touch = true;
+      const nx = dx / d;
+      const ny = dy / d;
+      const pen = min - d;
+      a.x -= (nx * pen * mb) / (ma + mb);
+      a.y -= (ny * pen * mb) / (ma + mb);
+      b.x += (nx * pen * ma) / (ma + mb);
+      b.y += (ny * pen * ma) / (ma + mb);
+      const rv = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny;
+      if (rv >= 0) {
+        continue;
+      }
+      const impulse = (-1.3 * rv) / (1 / ma + 1 / mb);
+      a.vx -= (impulse / ma) * nx;
+      a.vy -= (impulse / ma) * ny;
+      b.vx += (impulse / mb) * nx;
+      b.vy += (impulse / mb) * ny;
+      a.spin -=
+        ((oa * (Math.cos(a.a) * ny - Math.sin(a.a) * nx) * impulse) / ma) * 0.1;
+      b.spin +=
+        ((ob * (Math.cos(b.a) * ny - Math.sin(b.a) * nx) * impulse) / mb) * 0.1;
+      damage(a, ((-rv * mb) / (ma + mb)) * 1.6);
+      damage(b, ((-rv * ma) / (ma + mb)) * 1.6);
+      const other = a === player.car ? b : b === player.car ? a : null;
+      if (other) {
+        ramRules(other, -rv);
+      }
+    }
+  }
+  return touch;
+}
+
 // Where in state.cars the cars are that collideCars() has to look at, in
 // ascending order. Kept between rounds, to save the allocation.
 const awakeCars = [];
@@ -445,7 +556,6 @@ const awakeCars = [];
  */
 export function collideCars() {
   const cs = state.cars;
-  const player = state.player;
   const awake = awakeCars;
   awake.length = 0;
   for (let i = 0; i < cs.length; i++) {
@@ -472,94 +582,20 @@ export function collideCars() {
         j = awake[k];
       }
       const b = cs[j];
-      if (
+      const apart =
         Math.abs(a.x - b.x) > 12 ||
         Math.abs(a.y - b.y) > 12 ||
         a.alt > 0.3 ||
-        b.alt > 0.3
-      ) {
+        b.alt > 0.3;
+      if (apart || !collidePair(a, b)) {
         continue;
       }
-      const ma = a.type.mass * (a.dead ? 2 : 1);
-      const mb = b.type.mass * (b.dead ? 2 : 1);
-      const min = a.type.r + b.type.r;
-      for (const oa of a.type.offs) {
-        for (const ob of b.type.offs) {
-          const dx = b.x + Math.cos(b.a) * ob - a.x - Math.cos(a.a) * oa;
-          const dy = b.y + Math.sin(b.a) * ob - a.y - Math.sin(a.a) * oa;
-          const d = Math.hypot(dx, dy);
-          if (!d || d >= min) {
-            continue;
-          }
-          if (!b.awake) {
-            // Shoved out of its sleep: the cars behind have to look at it too
-            awake.push(j);
-            awake.sort((m, n) => m - n);
-          }
-          a.awake = b.awake = 2;
-          const nx = dx / d;
-          const ny = dy / d;
-          const pen = min - d;
-          a.x -= (nx * pen * mb) / (ma + mb);
-          a.y -= (ny * pen * mb) / (ma + mb);
-          b.x += (nx * pen * ma) / (ma + mb);
-          b.y += (ny * pen * ma) / (ma + mb);
-          const rv = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny;
-          if (rv >= 0) {
-            continue;
-          }
-          const impulse = (-1.3 * rv) / (1 / ma + 1 / mb);
-          a.vx -= (impulse / ma) * nx;
-          a.vy -= (impulse / ma) * ny;
-          b.vx += (impulse / mb) * nx;
-          b.vy += (impulse / mb) * ny;
-          a.spin -=
-            ((oa * (Math.cos(a.a) * ny - Math.sin(a.a) * nx) * impulse) / ma) *
-            0.1;
-          b.spin +=
-            ((ob * (Math.cos(b.a) * ny - Math.sin(b.a) * nx) * impulse) / mb) *
-            0.1;
-          damage(a, ((-rv * mb) / (ma + mb)) * 1.6);
-          damage(b, ((-rv * ma) / (ma + mb)) * 1.6);
-          const other = a === player.car ? b : b === player.car ? a : null;
-          const job = state.job;
-          if (
-            other &&
-            -rv > 4 &&
-            other.ai &&
-            other.ai.thief &&
-            job &&
-            job.logs > 0 &&
-            player.car === job.veh &&
-            state.t - (other.ramT || 0) > 1.5
-          ) {
-            // A thief rams the tractor: wood falls off the cart.
-            const c = player.car;
-            const back = c.type.length / 2 + c.tr.type.length / 2;
-            other.ramT = state.t;
-            job.logs--;
-            decal(
-              c.x - Math.cos(c.tr.a) * back,
-              c.y - Math.sin(c.tr.a) * back,
-              'stump'
-            );
-            float(
-              c,
-              job.logs ? `Holz weg! Noch ${job.logs}` : 'Der Hänger ist leer!',
-              '#ff5a1f'
-            );
-          }
-          if (other && -rv > 7) {
-            if (other.ai && other.ai.cop) {
-              crime(0.4);
-            } // ramming the police
-            if (state.job && other === state.job.prey) {
-              other.hits = (other.hits || 0) + 1;
-              float(other, 'RUMMS!', '#ff5a1f');
-            }
-          }
-        }
+      if (!b.awake) {
+        // Shoved out of its sleep: the cars behind have to look at it too
+        awake.push(j);
+        awake.sort((m, n) => m - n);
       }
+      a.awake = b.awake = 2;
     }
   }
   for (const c of cs) {
