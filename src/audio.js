@@ -17,6 +17,7 @@ let station = -1;
 let nextTime = 0;
 let stepIndex = 0;
 let voicePitch = 118;
+let twinNodes;
 const midi = n => 440 * 2 ** ((n - 69) / 12);
 const rnd = (a, b) => a + Math.random() * (b - a);
 
@@ -78,6 +79,35 @@ export function init() {
   o.start();
   o2.start();
   engineNodes = {o, o2, lp, g};
+  // Two four-stroke cylinders: two exhaust pulses per 720-degree cycle.
+  // A 0.12 s loop gives 1000 rpm at idle, with a dry air-cooled rattle.
+  const twinBuf = audioCtx.createBuffer(
+    1,
+    Math.round(audioCtx.sampleRate * 0.12),
+    audioCtx.sampleRate
+  );
+  const twinSamples = twinBuf.getChannelData(0);
+  for (const at of [0, 0.06]) {
+    for (let n = 0; n < audioCtx.sampleRate * 0.055; n++) {
+      const t = n / audioCtx.sampleRate;
+      const exhaust = Math.sin(2 * Math.PI * 140 * t) * Math.exp(-t * 95);
+      const rasp = Math.sin(2 * Math.PI * 390 * t) * Math.exp(-t * 210);
+      const rattle = (Math.random() * 2 - 1) * Math.exp(-t * 700);
+      twinSamples[Math.round(at * audioCtx.sampleRate) + n] =
+        exhaust * 0.8 + rasp * 0.3 + rattle * 0.15;
+    }
+  }
+  const twin = audioCtx.createBufferSource();
+  twin.buffer = twinBuf;
+  twin.loop = true;
+  const twinFilter = audioCtx.createBiquadFilter();
+  twinFilter.type = 'lowpass';
+  twinFilter.frequency.value = 2600;
+  const twinGain = audioCtx.createGain();
+  twinGain.gain.value = 0;
+  twin.connect(twinFilter).connect(twinGain).connect(sfx);
+  twin.start();
+  twinNodes = {twin, twinGain};
 
   const so = audioCtx.createOscillator();
   const lfo = audioCtx.createOscillator();
@@ -296,6 +326,7 @@ export function babble() {
 }
 
 const ENGINES = {
+  baby: [50, 7, 1400],
   tractor: [26, 3.2, 300],
   digger: [28, 2.6, 280],
   tanker: [32, 3.6, 320],
@@ -318,12 +349,26 @@ export function engine(speed, on, kind) {
     return;
   }
   const [base, k, cut] = ENGINES[kind] || [45, 5.5, 380];
-  const f = base + Math.abs(speed) * k;
+  const pace = Math.abs(speed);
+  // Short gearing: let Baby rev out, then drop in pitch at each upshift.
+  const gear = pace < 7 ? [0, 7] : pace < 15 ? [7, 8] : [15, 14];
+  const twinRate = 1 + Math.min(1, (pace - gear[0]) / gear[1]) * 5;
+  const f = kind === 'baby' ? base * twinRate : base + pace * k;
   const t = audioCtx.currentTime;
   engineNodes.o.frequency.setTargetAtTime(f, t, 0.03);
   engineNodes.o2.frequency.setTargetAtTime(f / 2, t, 0.03);
   engineNodes.lp.frequency.value = cut;
-  engineNodes.g.gain.setTargetAtTime(on ? 0.045 : 0, t, 0.05);
+  engineNodes.g.gain.setTargetAtTime(
+    on ? (kind === 'baby' ? 0.018 : 0.045) : 0,
+    t,
+    0.05
+  );
+  twinNodes.twin.playbackRate.setTargetAtTime(twinRate, t, 0.08);
+  twinNodes.twinGain.gain.setTargetAtTime(
+    on && kind === 'baby' ? 0.16 : 0,
+    t,
+    0.05
+  );
 }
 /**
  * Switches the police siren on or off.

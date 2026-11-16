@@ -19,6 +19,18 @@ export const TYPES = {
     hp: 100,
     mass: 1,
   },
+  baby: {
+    name: ['Baby'],
+    length: 3.05,
+    width: 1.38,
+    variantOf: 'car',
+    variantShare: 0.1,
+    wheelbase: 1.84,
+    max: 29,
+    acc: 27,
+    hp: 75,
+    mass: 0.65,
+  },
   sport: {
     name: ['Sportflitzer', 'Angeberkarre'],
     length: 4.4,
@@ -151,6 +163,7 @@ export const COLORS = [
   '#6b4a2a',
 ];
 export const PAINT = {
+  baby: '#d65b32',
   pizza: '#efece2',
   police: '#d9dcdf',
   tractor: '#2e7d32',
@@ -185,8 +198,10 @@ let Pen;
  */
 function pen(kind, col, frame, extras) {
   const type = TYPES[kind];
-  const w = Math.round(type.length * PX_PER_M);
-  const h = Math.round(type.width * PX_PER_M);
+  // The compact body uses a finer pixel grid, with the same size in the world.
+  const detail = kind === 'baby' ? 2 : 1;
+  const w = Math.round(type.length * PX_PER_M * detail);
+  const h = Math.round(type.width * PX_PER_M * detail);
   const c = canvas(w, h);
   const g = c.getContext('2d');
   const wreck = col === 'wreck';
@@ -271,6 +286,56 @@ function paintSaloon(p) {
   }
   if (kind === 'pizza' && !wreck) {
     paintPizza(p, a);
+  }
+}
+
+/**
+ * Baby: the Fiat 126P's short rear deck, tall cabin and rear engine vents.
+ * @param {!Pen} p
+ */
+function paintBaby(p) {
+  const {w, h, mid, wreck, body, glass, rect, paint, box} = p;
+  // Fiat 126P reference, nose-right: short bonnet, tall cabin, rear engine.
+  box(0, w, body);
+  rect(1, 3, 2, h - 6, paint('#9a9b98')); // rear bumper
+  rect(w - 3, 3, 2, h - 6, paint('#9a9b98'));
+  // Engine lid, with two banks of cooling slots and its centre latch.
+  rect(4, 3, 1, h - 6, shade(body, 0.7));
+  for (let y = 4; y < h - 4; y += 2) {
+    if (Math.abs(y - mid) > 2) {
+      rect(5, y, 1, 1, paint('#454343'));
+    }
+  }
+  rect(5, mid, 1, 2, paint('#b8b7ae'));
+  // Rear glass and broad, slightly bowed front windscreen.
+  rect(6, 4, 4, h - 8, glass);
+  rect(7, 3, 2, h - 6, glass);
+  rect(w - 17, 4, 5, h - 8, glass);
+  rect(w - 16, 3, 3, h - 6, glass);
+  // Side windows taper towards both ends; slim B pillars divide them.
+  for (const y of [2, h - 4]) {
+    rect(10, y, w - 27, 2, glass);
+    rect(9, y + (y === 2 ? 1 : 0), 1, 1, glass);
+    rect(21, y, 1, 2, shade(body, 0.8));
+  }
+  rect(11, 4, w - 28, h - 8, shade(body, 1.12));
+  rect(11, 4, w - 28, 1, shade(body, 1.23));
+  // Bonnet seam, wipers, handles, small square lamps and black bumper ends.
+  rect(w - 11, 4, 1, h - 8, shade(body, 0.8));
+  rect(w - 10, 3, 6, 1, shade(body, 1.14));
+  rect(w - 17, 5, 1, 4, paint('#44494a'));
+  rect(w - 17, h - 9, 1, 4, paint('#44494a'));
+  rect(23, 1, 2, 1, paint('#b8b7ae'));
+  rect(23, h - 2, 2, 1, paint('#b8b7ae'));
+  rect(0, 4, 1, 3, '#25262a');
+  rect(0, h - 7, 1, 3, '#25262a');
+  rect(w - 1, 4, 1, 3, '#25262a');
+  rect(w - 1, h - 7, 1, 3, '#25262a');
+  if (!wreck) {
+    rect(w - 4, 4, 2, 3, '#ffe9a0');
+    rect(w - 4, h - 7, 2, 3, '#ffe9a0');
+    rect(2, 3, 2, 3, '#e02a2a');
+    rect(2, h - 6, 2, 3, '#e02a2a');
   }
 }
 
@@ -476,6 +541,9 @@ function paintBody(p) {
     case 'pizza':
       paintSaloon(p);
       break;
+    case 'baby':
+      paintBaby(p);
+      break;
     case 'van':
       paintVan(p);
       break;
@@ -574,7 +642,7 @@ export function carSprite(kind, col, frame = 0, extras = '') {
   }
   const p = pen(kind, col, frame, extras);
   paintBody(p);
-  if (!p.wreck) {
+  if (!p.wreck && kind !== 'baby') {
     paintLamps(p);
   }
   if (!p.wreck && extras.includes('r')) {
