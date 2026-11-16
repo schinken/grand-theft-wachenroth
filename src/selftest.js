@@ -13,6 +13,7 @@ import {knockPed, stepPed} from './people.js';
 import {HOME, SPOT, field, nearNode, waypoint} from './places.js';
 import {HOME_GABLES, HOME_SLOPES, ROOFS} from './roofs.js';
 import {TREES, blocked} from './scenery.js';
+import {TYPES, carSprite} from './sprites.js';
 import {state} from './state.js';
 import {
   CROSSINGS,
@@ -144,6 +145,9 @@ export function selftest() {
       s =>
         (ride(SPOT.hq, s) && ride(s, SPOT.hq)) ||
         console.error('arrow lost', s.key)
+    ),
+    'every kind of vehicle has its picture': Object.keys(TYPES).every(
+      k => carSprite(k, '#e8e6df').width > 0
     ),
     'every mission pays and talks': MISSIONS.every(
       m =>

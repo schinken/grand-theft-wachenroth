@@ -88,43 +88,67 @@ function drawPitch(g, a) {
   g.lineCap = 'round';
 }
 
-// What stands on the ground in front of the landmarks. Every painter draws in
-// a frame whose origin is the kerb in front of the place, x along the street
-// and y towards the building, in metres.
-const DECOR = {
-  // A hatched apron that has to stay clear: the fire engines come out here.
-  firestation(g) {
-    g.fillStyle = '#5e5e64';
-    g.fillRect(-10, 0.5, 20, 8);
-    g.strokeStyle = '#e8c21c';
-    g.lineWidth = 0.22;
-    g.beginPath();
-    for (let x = -10; x < 10; x += 1.6) {
-      g.moveTo(x, 0.5);
-      g.lineTo(x + 1.6, 8.5);
-    }
-    g.rect(-10, 0.5, 20, 8);
-    g.stroke();
-    for (let i = 0; i < 10; i++) {
-      g.fillStyle = i % 2 ? '#f4f4ef' : '#c8201c';
-      g.fillRect(-10 + i * 2, 0, 2, 0.5);
-    }
-  },
-  // Beer benches on the gravel by the clubhouse.
-  // Stacks of crates in the yard.
-  drinks(g) {
-    const crates = ['#d99a1a', '#2f8f4a', '#c8322b', '#2b62c8', '#d99a1a'];
-    crates.forEach((crate, i) => {
-      g.fillStyle = 'rgba(0,0,0,.25)';
-      g.fillRect(-6.7 + i * 2.2, 1.5, 1.8, 2.6);
-      g.fillStyle = crate;
-      g.fillRect(-7 + i * 2.2, 1.2, 1.8, 2.6);
-      g.fillStyle = 'rgba(0,0,0,.3)';
-      g.fillRect(-7 + i * 2.2, 2.4, 1.8, 0.12);
-      g.fillRect(-6.15 + i * 2.2, 1.2, 0.12, 2.6);
-    });
-  },
-};
+/**
+ * A hatched apron that has to stay clear: the fire engines come out here.
+ * @param {!CanvasRenderingContext2D} g
+ */
+function paintFireApron(g) {
+  g.fillStyle = '#5e5e64';
+  g.fillRect(-10, 0.5, 20, 8);
+  g.strokeStyle = '#e8c21c';
+  g.lineWidth = 0.22;
+  g.beginPath();
+  for (let x = -10; x < 10; x += 1.6) {
+    g.moveTo(x, 0.5);
+    g.lineTo(x + 1.6, 8.5);
+  }
+  g.rect(-10, 0.5, 20, 8);
+  g.stroke();
+  for (let i = 0; i < 10; i++) {
+    g.fillStyle = i % 2 ? '#f4f4ef' : '#c8201c';
+    g.fillRect(-10 + i * 2, 0, 2, 0.5);
+  }
+}
+
+/**
+ * Stacks of crates in the yard of the drinks shop.
+ * @param {!CanvasRenderingContext2D} g
+ */
+function paintCrates(g) {
+  const crates = ['#d99a1a', '#2f8f4a', '#c8322b', '#2b62c8', '#d99a1a'];
+  crates.forEach((crate, i) => {
+    g.fillStyle = 'rgba(0,0,0,.25)';
+    g.fillRect(-6.7 + i * 2.2, 1.5, 1.8, 2.6);
+    g.fillStyle = crate;
+    g.fillRect(-7 + i * 2.2, 1.2, 1.8, 2.6);
+    g.fillStyle = 'rgba(0,0,0,.3)';
+    g.fillRect(-7 + i * 2.2, 2.4, 1.8, 0.12);
+    g.fillRect(-6.15 + i * 2.2, 1.2, 0.12, 2.6);
+  });
+}
+
+/**
+ * Paints what stands on the ground in front of a landmark, if it is in the
+ * view. The painter draws in a frame whose origin is the kerb in front of
+ * the place, x along the street and y towards the building, in metres.
+ * @param {!CanvasRenderingContext2D} g
+ * @param {string} key The place.
+ * @param {function(!CanvasRenderingContext2D)} paint
+ * @param {!Array<number>} view x0, y0, x1 and y1.
+ */
+function paintInFront(g, key, paint, [x0, y0, x1, y1]) {
+  const s = SPOT[key];
+  if (s.x < x0 - 30 || s.x > x1 + 30 || s.y < y0 - 30 || s.y > y1 + 30) {
+    return;
+  }
+  const [px, py] = MAP.pois[key];
+  g.save();
+  g.translate(s.x, s.y);
+  g.rotate(Math.atan2(py - s.y, px - s.x) - Math.PI / 2);
+  g.lineCap = 'butt';
+  paint(g);
+  g.restore();
+}
 
 /**
  * Paints what stands in front of the landmarks.
@@ -135,19 +159,8 @@ const DECOR = {
  * @param {number} y1
  */
 function paintDecor(g, x0, y0, x1, y1) {
-  for (const key of Object.keys(DECOR)) {
-    const s = SPOT[key];
-    if (s.x < x0 - 30 || s.x > x1 + 30 || s.y < y0 - 30 || s.y > y1 + 30) {
-      continue;
-    }
-    const [px, py] = MAP.pois[key];
-    g.save();
-    g.translate(s.x, s.y);
-    g.rotate(Math.atan2(py - s.y, px - s.x) - Math.PI / 2);
-    g.lineCap = 'butt';
-    DECOR[key](g);
-    g.restore();
-  }
+  paintInFront(g, 'firestation', paintFireApron, [x0, y0, x1, y1]);
+  paintInFront(g, 'drinks', paintCrates, [x0, y0, x1, y1]);
 }
 
 const GRAVE_BEDS = ['#4a3a2a', '#8f897d', '#2f6a2a', '#5a4632', '#3c7a30'];

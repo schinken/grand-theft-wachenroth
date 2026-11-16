@@ -257,44 +257,9 @@ function prepWalls(b, base) {
   }
 }
 
-// A first guess at the roof of a building, by its kind: the texture, if it
-// has one, and whether it gets a ridge. v is a random number, simple says
-// whether the outline suits a ridge, big whether it is a hall. Towers and
-// silos (t, s) get an apex instead of a texture.
-const GUESS = {
-  s: () => [null, false],
-  t: () => [null, false],
-  w: () => [textures.metalRed, false],
-  x: () => [textures.slab, false],
-  d: (b, v) => [
-    v < 0.5 ? textures.tar : v < 0.8 ? textures.tile3 : textures.metal,
-    v >= 0.25,
-  ],
-  o: () => [textures.flatLight, false],
-  c: (b, v, simple) => [textures.slate, simple],
-  m: b => [b.a > 1500 ? textures.flatLight : textures.flat, false],
-  i(b, v, simple, big) {
-    const roof = big
-      ? [textures.solar, textures.flatLight, textures.metal, textures.flat][
-          (v * 4) | 0
-        ]
-      : textures.metal;
-    return [roof, !big || roof === textures.metal];
-  },
-  g: (b, v, simple) => [
-    v < 0.5 ? textures.tar : v < 0.75 ? textures.flat : textures.tile3,
-    simple && v >= 0.75,
-  ],
-  y: (b, v, simple) => [
-    b.a > 350
-      ? [textures.metalRed, textures.metal, textures.tile3][(v * 3) | 0]
-      : [textures.tile3, textures.tile2, textures.tile4][(v * 3) | 0],
-    simple,
-  ],
-};
-
 /**
  * A first guess at a roof, for where the survey and the photo say nothing.
+ * Towers and silos (t, s) get an apex instead of a texture.
  * @param {!Building} b
  * @param {number} v A random number.
  * @param {boolean} simple Whether the outline suits a ridge.
@@ -302,9 +267,74 @@ const GUESS = {
  */
 function guessRoof(b, v, simple) {
   const big = b.a > 900;
-  if (GUESS[b.k]) {
-    return GUESS[b.k](b, v, simple, big);
+  switch (b.k) {
+    case 's':
+    case 't':
+      return [null, false];
+    case 'w':
+      return [textures.metalRed, false];
+    case 'x':
+      return [textures.slab, false];
+    case 'd':
+      return [
+        v < 0.5 ? textures.tar : v < 0.8 ? textures.tile3 : textures.metal,
+        v >= 0.25,
+      ];
+    case 'o':
+      return [textures.flatLight, false];
+    case 'c':
+      return [textures.slate, simple];
+    case 'm':
+      return [b.a > 1500 ? textures.flatLight : textures.flat, false];
+    case 'i':
+      return guessHallRoof(v, big);
+    case 'g':
+      return [
+        v < 0.5 ? textures.tar : v < 0.75 ? textures.flat : textures.tile3,
+        simple && v >= 0.75,
+      ];
+    case 'y':
+      return [
+        b.a > 350
+          ? [textures.metalRed, textures.metal, textures.tile3][(v * 3) | 0]
+          : [textures.tile3, textures.tile2, textures.tile4][(v * 3) | 0],
+        simple,
+      ];
+    default:
+      return guessHouseRoof(b, v, simple, big);
   }
+}
+
+/**
+ * The roof of an industrial building: sheet metal with a ridge, or on a big
+ * hall maybe something flat.
+ * @param {number} v A random number.
+ * @param {boolean} big
+ * @return {!Array} The texture, and whether it gets a ridge.
+ */
+function guessHallRoof(v, big) {
+  if (!big) {
+    return [textures.metal, true];
+  }
+  const roof = [
+    textures.solar,
+    textures.flatLight,
+    textures.metal,
+    textures.flat,
+  ][(v * 4) | 0];
+  return [roof, roof === textures.metal];
+}
+
+/**
+ * The roof of a house or of anything else: flat on a big building, tiles
+ * on the others.
+ * @param {!Building} b
+ * @param {number} v A random number.
+ * @param {boolean} simple Whether the outline suits a ridge.
+ * @param {boolean} big
+ * @return {!Array} The texture, and whether it gets a ridge.
+ */
+function guessHouseRoof(b, v, simple, big) {
   if (big) {
     return [v < 0.5 ? textures.flat : textures.flatLight, false];
   }
