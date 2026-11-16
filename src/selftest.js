@@ -88,7 +88,7 @@ export function selftest() {
         Math.abs(reverse.a + normal.a) < 1e-9
       );
     })(),
-    'the rear axle rolls around its turn centre without sliding sideways':
+    'the rear axle rolls around its turn centre, the body drifts outwards':
       (() => {
         const c = rolling('car', 0.4 / 0.62);
         c.wheelAngle = 0.4;
@@ -103,7 +103,8 @@ export function selftest() {
           (4 * Math.tan(c.wheelAngle)) / 2;
         return (
           Math.abs(Math.hypot(x + rear, y - radius) - radius) < 1e-8 &&
-          Math.abs(sideSpeed) < 1e-9
+          sideSpeed < 0 &&
+          sideSpeed > -0.05
         );
       })(),
     'fast steering remains responsive and stays straight with no input':
