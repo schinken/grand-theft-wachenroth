@@ -521,12 +521,25 @@ async page => {
   if (at < 0 && now.prints.length === was.prints.length) {
     return {same: true, print: sum(now.prints), state: now.state};
   }
-  // Each line: game time, job and step, then state, picture and HUD.
+  // Each line: game time, job and step, then state, picture and HUD. How
+  // many lines differ in each of the three tells a slip in the drawing from
+  // a game that went another way.
+  const differ = {lines: 0, state: 0, picture: 0, hud: 0};
+  now.prints.forEach((line, i) => {
+    const a = line.split(' ').slice(-3);
+    const b = (was.prints[i] || '').split(' ').slice(-3);
+    differ.lines += line !== was.prints[i];
+    differ.state += a[0] !== b[0];
+    differ.picture += a[1] !== b[1];
+    differ.hud += a[2] !== b[2];
+  });
   return {
     same: false,
     at,
+    differ,
+    prints: [was.prints.length, now.prints.length],
     was: was.prints.slice(Math.max(0, at - 1), at + 2),
     now: now.prints.slice(Math.max(0, at - 1), at + 2),
-    log: now.log.slice(-12),
+    state: [was.state, now.state],
   };
 }
