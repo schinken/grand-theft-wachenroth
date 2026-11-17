@@ -48,6 +48,63 @@ function drawWheels(g, c) {
 }
 
 /**
+ * Red brake lights and matching white reversing lights.
+ * Coordinates follow the sprite's pixel grid, including Baby's finer grid.
+ * @param {!CanvasRenderingContext2D} g
+ * @param {!Car} c
+ */
+function drawRearLights(g, c) {
+  if (!c.type.wheelbase || c.dead || c.burn) {
+    return;
+  }
+  const braking =
+    c.hb || (c.thr < -0.05 && c.vf > 0.1) || (c.thr > 0.05 && c.vf < -0.1);
+  const reversing = c.vf < -0.2;
+  if (!braking && !reversing) {
+    return;
+  }
+  const baby = c.kind === 'baby';
+  const x = baby ? 2 : 1;
+  const y = baby ? 3 : 2;
+  const width = baby ? 2 : 1;
+  const h = c.spr.height;
+  g.save();
+  g.translate(-c.type.length / 2, -c.type.width / 2);
+  g.scale(c.type.length / c.spr.width, c.type.width / h);
+  if (braking) {
+    // A tight red fringe and brighter centre stay visible at game zoom.
+    g.fillStyle = 'rgba(255,35,25,0.3)';
+    g.fillRect(x - 1, y - 1, width + 2, 5);
+    g.fillRect(x - 1, h - y - 4, width + 2, 5);
+    g.fillStyle = '#ff3030';
+    g.fillRect(x, y, width, 3);
+    g.fillRect(x, h - y - 3, width, 3);
+    g.fillStyle = '#ff9a85';
+    g.fillRect(x, y + 1, width, 1);
+    g.fillRect(x, h - y - 2, width, 1);
+  }
+  if (reversing) {
+    // Keep the outer half red; only the half facing the car's centre is white.
+    g.save();
+    g.beginPath();
+    g.rect(x - 1, y + 1.5, width + 2, 2.5);
+    g.rect(x - 1, h - y - 4, width + 2, 2.5);
+    g.clip();
+    g.fillStyle = 'rgba(235,235,225,0.22)';
+    g.fillRect(x - 1, y - 1, width + 2, 5);
+    g.fillRect(x - 1, h - y - 4, width + 2, 5);
+    g.fillStyle = '#e0e0da';
+    g.fillRect(x, y, width, 3);
+    g.fillRect(x, h - y - 3, width, 3);
+    g.fillStyle = '#ffffff';
+    g.fillRect(x, y + 1, width, 1);
+    g.fillRect(x, h - y - 2, width, 1);
+    g.restore();
+  }
+  g.restore();
+}
+
+/**
  * @param {!Object} p
  * @param {string} shirt
  * @param {string} hair
@@ -524,6 +581,7 @@ function drawCar(c) {
     type.length,
     type.width
   );
+  drawRearLights(ctx, c);
   if (c.kind === 'heli') {
     drawRotor(type, 0.6, false); // standing still
   }
