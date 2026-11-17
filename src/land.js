@@ -6,7 +6,16 @@
 import {MAP} from '../map.js';
 import {pip} from './geometry.js';
 import {textures} from './textures.js';
-import {EDGE, WORLD_H, WORLD_W, canvas, dist, rng} from './util.js';
+import {
+  EDGE,
+  WORLD_H,
+  WORLD_W,
+  canvas,
+  clamp,
+  dist,
+  lerp,
+  rng,
+} from './util.js';
 
 /**
  * Adds what drawing and collisions need to a polygon: path, bounding box, area
@@ -329,6 +338,31 @@ export function surfAt(x, y) {
   return ix < 0 || iy < 0 || ix >= SURF_W || iy >= SURF_H
     ? 0
     : SURF[iy * SURF_W + ix];
+}
+
+// The height of the ground every 16 m, row by row from the north-west corner,
+// in decimetres above the lowest point of the map: the state's terrain model.
+const HILLS = MAP.hills;
+// The hills are drawn and felt this many times as steep as they are: the
+// streets rise 2 m in 100, which nobody would notice from a helicopter.
+export const STEEP = 2.5;
+
+/**
+ * How high the ground is at a point, on straight slopes between the heights
+ * of the map. Beyond its edge the land runs on level.
+ * @param {number} x
+ * @param {number} y
+ * @return {number} Metres above the lowest point of the map.
+ */
+export function heightAt(x, y) {
+  const z = HILLS.z;
+  const w = HILLS.w;
+  const u = clamp(x / HILLS.cell, 0, w - 1.001);
+  const v = clamp(y / HILLS.cell, 0, z.length / w - 1.001);
+  const i = (v | 0) * w + (u | 0);
+  const north = lerp(z[i], z[i + 1], u % 1);
+  const south = lerp(z[i + w], z[i + w + 1], u % 1);
+  return lerp(north, south, v % 1) / 10;
 }
 
 // Every stretch of road: [ax, ay, bx, by, width, length, road].

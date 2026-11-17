@@ -18,6 +18,10 @@ More files add what OSM does not know. All of them are open data of the Bayerisc
           &STYLES=&SRS=EPSG:4326&BBOX=10.6950,49.7430,10.7300,49.7590&WIDTH=2517&HEIGHT=1779&FORMAT=image/png
           and the same from .../od/wms/alkis/v1/parzellarkarte? with LAYERS=by_alkis_parzellarkarte_umr_schwarz
           and &TRANSPARENT=TRUE
+  *.tif   the lie of the land, a height every metre: the terrain model DGM1 in tiles of 1 km, named by their
+          south-west corner. The game gets the heights for its hills from them and a picture that shades the slopes.
+          Wachenroth is on 622_5511 to 624_5513, nine tiles, of
+          https://download1.bayernwolke.de/a/dgm/dgm1/<tile>.tif
 """
 import base64
 import cmath
@@ -310,6 +314,23 @@ def latlon(east, north):
     return {'lat': math.degrees(lat), 'lon': 9 + math.degrees(math.atan2(math.sinh(eta2), math.cos(xi2)))}
 
 
+def utm(lat, lon):
+    """A point in degrees -> ETRS89 / UTM zone 32N east, north: latlon() the other way round."""
+    f = 1 / 298.257222101
+    n = f / (2 - f)
+    a = 6378137 / (1 + n) * (1 + n**2 / 4 + n**4 / 64) * 0.9996
+    alpha = (n / 2 - 2 * n**2 / 3 + 5 * n**3 / 16, 13 * n**2 / 48 - 3 * n**3 / 5, 61 * n**3 / 240)
+    e = 2 * math.sqrt(n) / (1 + n)
+    phi, lam = math.radians(lat), math.radians(lon - 9)
+    t = math.sinh(math.atanh(math.sin(phi)) - e * math.atanh(e * math.sin(phi)))
+    xi, eta = math.atan2(t, math.cos(lam)), math.atanh(math.sin(lam) / math.hypot(1, t))
+    return (500000 + a * (eta + sum(c * math.cos(2 * j * xi) * math.sinh(2 * j * eta) for j, c in enumerate(alpha, 1))),
+            a * (xi + sum(c * math.sin(2 * j * xi) * math.cosh(2 * j * eta) for j, c in enumerate(alpha, 1))))
+
+
+assert math.dist(utm(**latlon(623456, 5512345)), (623456, 5512345)) < .001
+
+
 def tidy(pts, tol=0.3):
     """Drop corners that barely leave the line between their neighbours: the cadastre draws every 10 cm notch."""
     i = 0
@@ -523,16 +544,129 @@ def roofs(buildings, photo):
             else 'l' if light >= 165 else 'd' if light < 125 or warm < -8 else 'g'
 
 
+def chunk(kind, body):
+    """One block of a PNG."""
+    return struct.pack('>I', len(body)) + kind + body + struct.pack('>I', zlib.crc32(kind + body))
+
+
+def png_url(w, lines, depth, colour, palette=b''):
+    """A PNG as a data URL from its lines of pixels, each with its filter byte in front."""
+    png = (b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', w, len(lines), depth, colour, 0, 0, 0))
+           + palette + chunk(b'IDAT', zlib.compress(b''.join(lines), 9)) + chunk(b'IEND', b''))
+    return 'data:image/png;base64,' + base64.b64encode(png).decode()
+
+
 def stencil(rows, w):
     """A see-through PNG from rows of bits, each row a str of '0' and '1': black where a bit is set."""
-    def chunk(kind, body):
-        return struct.pack('>I', len(body)) + kind + body + struct.pack('>I', zlib.crc32(kind + body))
     wide = -(-w // 8)
     lines = [b'\0' + int(row.ljust(wide * 8, '0'), 2).to_bytes(wide, 'big') for row in rows]
-    png = (b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', w, len(rows), 1, 3, 0, 0, 0))
-           + chunk(b'PLTE', bytes(6)) + chunk(b'tRNS', b'\0\xff') + chunk(b'IDAT', zlib.compress(b''.join(lines), 9))
-           + chunk(b'IEND', b''))
-    return 'data:image/png;base64,' + base64.b64encode(png).decode()
+    return png_url(w, lines, 1, 3, chunk(b'PLTE', bytes(6)) + chunk(b'tRNS', b'\0\xff'))
+
+
+def unlzw(data):
+    """Unpack the LZW of a TIFF: codes of 9 to 12 bits, the high bit first."""
+    out, table, width, bits, have, last = bytearray(), [], 9, 0, 0, b''
+    for byte in data:
+        bits, have = (bits << 8 | byte) & 0xffffff, have + 8
+        if have < width:
+            continue
+        have -= width
+        code = bits >> have & (1 << width) - 1
+        if code == 256:  # start afresh
+            table, width, last = [bytes([i]) for i in range(256)] + [b'', b''], 9, b''
+            continue
+        if code == 257:
+            break
+        entry = table[code] if code < len(table) else last + last[:1]
+        if last:
+            table.append(last + entry[:1])
+        out += entry
+        last = entry
+        width += len(table) == (1 << width) - 1 and width < 12
+    return out
+
+
+assert unlzw(bytes.fromhex('801048502821060d01')) == b'ABABABAAAA'
+
+
+def tiff(path):
+    """A terrain tile as (west edge, north edge, width, heights row by row from the north-west corner): a GeoTIFF
+    with a float for every metre, in LZW-packed strips."""
+    data = open(path, 'rb').read()
+    assert data[:4] == b'II*\0', f'{path} is no little-endian TIFF'
+    at, tags = struct.unpack_from('<I', data, 4)[0], {}
+    for i in range(struct.unpack_from('<H', data, at)[0]):
+        tag, kind, count, where = struct.unpack_from('<HHII', data, at + 2 + i * 12)
+        fmt = {3: 'H', 4: 'I', 12: 'd'}.get(kind)  # short, long, double
+        if fmt:  # a value of up to four bytes stands in the entry itself
+            here = at + 10 + i * 12 if struct.calcsize(fmt) * count <= 4 else where
+            tags[tag] = struct.unpack_from(f'<{count}{fmt}', data, here)
+    # 32-bit floats, LZW, no predictor, one metre per pixel
+    assert (tags[258], tags[339], tags[259], tags.get(317, (1,)), tags[33550][:2]) == ((32,), (3,), (5,), (1,), (1, 1)), \
+        f'{path} is not packed the way the terrain tiles are'
+    raw = b''.join(unlzw(data[at:at + size]) for at, size in zip(tags[273], tags[279]))
+    return int(tags[33922][3]), int(tags[33922][4]), tags[256][0], memoryview(raw).cast('f')
+
+
+def terrain(paths, cell):
+    """The mean height of every square of cell metres in the terrain tiles, by its column and row in UTM."""
+    ground = {}
+    for path in paths:
+        west, north, w, z = tiff(path)
+        for row in range(0, len(z) // w, cell):  # from the north edge down
+            cols = [sum(col) for col in zip(*(z[(row + i) * w:(row + i + 1) * w] for i in range(cell)))]
+            for col in range(0, w, cell):
+                ground[(west + col) // cell, (north - row) // cell - 1] = sum(cols[col:col + cell]) / cell ** 2
+    return ground
+
+
+def heights(paths, cell=8):
+    """The terrain tiles as a function: the height of the ground at a point of the map, in metres above the sea.
+
+    A height every metre would show every heap and ditch; over 8 m the slopes stay and the specks go.
+    """
+    ground = terrain(paths, cell)
+
+    def height(x, y):
+        """The height at a point of the map, between the four squares around it."""
+        east, north = utm(N - y / KY, W + x / KX)
+        u, v = east / cell - .5, north / cell - .5
+        c, r = int(u), int(v)
+        assert all(k in ground for k in ((c, r), (c + 1, r + 1))), f'no terrain tile for UTM {east:.0f}, {north:.0f}'
+        low = ground[c, r] + (ground[c + 1, r] - ground[c, r]) * (u - c)
+        high = ground[c, r + 1] + (ground[c + 1, r + 1] - ground[c, r + 1]) * (u - c)
+        return low + (high - low) * (v - r)
+
+    return height
+
+
+def hills(height, cell=16):
+    """The height of the ground every 16 m, for driving up and down the hills: row by row from the north-west corner
+    of the map, in decimetres above its lowest point. Each is the mean of the 16 m around it: the game draws the land
+    between them as straight slopes, and a railway embankment between two of them would be a row of humps."""
+    w, h = -(-WW // cell) + 1, -(-WH // cell) + 1
+    z = [sum(height(i * cell + dx, j * cell + dy) for dx in (-4, 4) for dy in (-4, 4)) / 4
+         for j in range(h) for i in range(w)]
+    return {'cell': cell, 'w': w, 'z': [round((v - min(z)) * 10) for v in z]}
+
+
+def relief(height, cell=8):
+    """The hills as a see-through PNG with a pixel every 8 m: black where the ground falls away from the light, white
+    where it faces it. The light comes from the north-west, as for the shadows of the game."""
+    w, h = -(-WW // cell), -(-WH // cell)
+    # The heights at the middles of the pixels, and one ring of pixels more for the slopes at the edge.
+    z = [[height((i + .5) * cell, (j + .5) * cell) for i in range(-1, w + 1)] for j in range(-1, h + 1)]
+    lines = []
+    for j in range(1, h + 1):
+        row = bytearray()
+        for i in range(1, w + 1):
+            # How steeply the ground rises towards the south-east: then it faces the light.
+            rise = (z[j][i + 1] - z[j][i - 1] + z[j + 1][i] - z[j - 1][i]) / (2 * cell * math.sqrt(2))
+            # white or black, and how much of it: a slope of one in seven is half way to the full shade
+            row += bytes((255 * (rise > 0), round(math.tanh(abs(rise) * 7) * (64 if rise > 0 else 128))))
+        # Every byte is stored as its step from the pixel before (PNG filter 1): slopes change slowly.
+        lines.append(b'\1' + bytes((v - (row[k - 2] if k > 1 else 0)) & 255 for k, v in enumerate(row)))
+    return png_url(w, lines, 8, 4)
 
 
 def fields(plan, photo, areas):
@@ -968,8 +1102,13 @@ if photo:
     out['yards'] = yards(areas, photo)
 if photo and plan:
     out['fields'] = fields(plan, photo, areas)
+tifs = [a for a in sys.argv[2:] if a.endswith('.tif')]
+if tifs:
+    height = heights(tifs)
+    out['hills'] = hills(height)
+    out['relief'] = relief(height)
 print('// Generated by tools/osm2map.py. Map data (c) OpenStreetMap contributors, ODbL.'
-      + (' Buildings, trees, roof colours, yards and parcel borders: Bayerische Vermessungsverwaltung,'
+      + (' Buildings, trees, terrain, roof colours, yards and parcel borders: Bayerische Vermessungsverwaltung,'
          ' www.geodaten.bayern.de, CC BY 4.0, simplified.' if len(sys.argv) > 2 else ''))
 print('export const MAP = ' + json.dumps(out, separators=(',', ':'), ensure_ascii=False) + ';')
 print(f'{len(roads)} roads, {len(nodes)} nodes, {len(buildings)} buildings, {len(areas)} areas, {len(trees)} trees, '

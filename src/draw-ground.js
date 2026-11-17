@@ -492,6 +492,10 @@ function paintGround(g, x0, y0, x1, y1) {
   paintRoadworks(g);
   paintDecor(g, x0, y0, x1, y1);
   paintBorders(g, x0, y0);
+  // The hills shade everything but the water, which stays a hole.
+  g.globalCompositeOperation = 'source-atop';
+  paintRelief(g);
+  g.globalCompositeOperation = 'source-over';
 }
 
 // The ground never changes, so it is painted once into tiles of 64 m and the
@@ -585,6 +589,19 @@ export const fieldMasks = MAP.fields.map(src => {
   mask.src = src;
   return mask;
 });
+// The hills, from the state's terrain model: a see-through picture with a
+// pixel every 8 m, dark where a slope looks away from the light in the
+// north-west and pale where it faces it.
+const relief = new Image();
+relief.onload = () => groundTiles.clear();
+relief.src = MAP.relief;
+/**
+ * Lays the shading of the hills over the whole world.
+ * @param {!CanvasRenderingContext2D} g Scaled in metres.
+ */
+export function paintRelief(g) {
+  g.drawImage(relief, 0, 0, relief.width * 8, relief.height * 8);
+}
 // Which way the furrows run on each kind of field
 export const FURROWS = [0.35, -0.9, 1.25, -0.2, 0.75];
 const yardTile = canvas(TILE_PX, TILE_PX);
