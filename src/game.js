@@ -48,6 +48,7 @@ export function reset(mode, save) {
     items: [],
     parts: [],
     decals: [],
+    skids: [],
     texts: [],
     sprays: [],
     job: null,
@@ -272,6 +273,13 @@ export function update(dt) {
   // What has run its time is dropped from the lists in place: a new list on
   // every update is work for the garbage collector
   let n = 0;
+  for (const mark of state.skids) {
+    if (state.t - mark.born < 70) {
+      state.skids[n++] = mark;
+    }
+  }
+  state.skids.length = n;
+  n = 0;
   for (const sp of state.sprays) {
     // broken hydrants are fountains for a while
     sp.t -= dt;

@@ -7,7 +7,7 @@ import * as audio from './audio.js';
 import {PICKED, freePlay, pause, start} from './game.js';
 import {MISSIONS} from './missions.js';
 import {showMap} from './paper-map.js';
-import {honk, keys, nextStation, pad, toggleCar} from './player.js';
+import {honk, keys, nextStation, pad, startSlide, toggleCar} from './player.js';
 import {buy, closeShop} from './shops.js';
 import {load, state, store} from './state.js';
 import {byId} from './util.js';
@@ -43,6 +43,9 @@ addEventListener('keydown', e => {
   keys[e.code] = true;
   if (e.repeat) {
     return;
+  }
+  if (e.code === 'Space' && !state.player.car) {
+    startSlide();
   }
   if (e.code === 'KeyF' || e.code === 'Enter') {
     toggleCar();

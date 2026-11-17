@@ -4,7 +4,7 @@
 
 import * as audio from './audio.js';
 import {buildingGrid} from './buildings.js';
-import {decal, flash, float, puff} from './effects.js';
+import {decal, flash, float, puff, tyreMarks} from './effects.js';
 import {pushOut} from './geometry.js';
 import {at} from './grid.js';
 import {NODES, surfAt} from './land.js';
@@ -316,7 +316,7 @@ function liftHeli(c, dt) {
  * @return {boolean} Whether it is firing.
  */
 function burnNos(c, dt) {
-  if (!(c.boosting && c.nos > 0)) {
+  if (!(c.boosting && c.nos > 0) || c.hb) {
     return false;
   }
   c.nos = Math.max(0, c.nos - dt / 6);
@@ -339,8 +339,8 @@ function burnNos(c, dt) {
  * @param {number} dt
  * @return {number}
  */
-function pedals(c, vf, max, push, dt) {
-  if (c.thr > 0 && vf < max) {
+export function pedals(c, vf, max, push, dt) {
+  if (c.thr > 0 && !c.hb && vf < max) {
     vf += push * (vf < 0 ? 2.5 : 1 - (vf / max) ** 2) * c.thr * dt;
   }
   if (c.thr < 0 && vf > -max * 0.35) {
@@ -348,7 +348,7 @@ function pedals(c, vf, max, push, dt) {
   }
   const drag =
     (c.thr ? 0 : 4) +
-    (c.hb ? 12 : 0) +
+    (c.hb ? 24 : 0) +
     (Math.abs(vf) > max ? 6 : 0) +
     (c.dead ? 8 : 0);
   return vf - Math.sign(vf) * Math.min(Math.abs(vf), drag * dt);
@@ -383,7 +383,9 @@ export function rollCar(c, vf, slip, dt, road) {
   // Ease the limit at speed for responsive game handling, while retaining
   // full lock for manoeuvring and less grip off the road.
   const grip =
-    ((road ? 14 : 8) + Math.abs(vf) * (road ? 1 : 0.6)) * (c.boost ? 1.2 : 1);
+    ((road ? 14 : 8) + Math.abs(vf) * (road ? 1 : 0.6)) *
+    (c.boost ? 1.2 : 1) *
+    (c.hb ? 1 + 0.4 * clamp((Math.abs(vf) - 5) / 10, 0, 1) : 1);
   const limit = Math.min(0.62, Math.atan((grip * wheelbase) / (vf * vf || 1)));
   const target = clamp(c.steer, -1, 1) * limit;
   c.wheelAngle += clamp(target - c.wheelAngle, -2.8 * dt, 2.8 * dt);
@@ -462,7 +464,7 @@ export function stepCar(c, dt) {
     (road ? 1 : 0.7) *
     (c.kind === 'heli' && !air ? 0.15 : 1);
   vf = pedals(c, vf, max, type.acc * boost * (nos ? 1.5 : 1), dt);
-  vl *= Math.exp(-(c.hb ? 1.6 : road ? 8 : 4.5) * dt);
+  vl *= Math.exp(-(c.hb ? 1.2 : road ? 8 : 4.5) * dt);
   if (!c.thr && Math.abs(vf) < 0.05 && Math.abs(vl) < 0.05) {
     vf = vl = 0;
     if (Math.abs(c.spin) < 0.02) {
@@ -486,6 +488,17 @@ export function stepCar(c, dt) {
   if (!air) {
     hitScenery(c, fx, fy);
   }
+  const along = c.vx * fx + c.vy * fy;
+  const slip = Math.abs(
+    c.vy * fx - c.vx * fy - (along * Math.tan(c.wheelAngle)) / 2
+  );
+  const braking = c.hb || (c.thr < -0.8 && along > 10);
+  const speed = Math.hypot(c.vx, c.vy);
+  c.skid =
+    !air && type.wheelbase && ground & 1 && speed > 3
+      ? clamp(Math.max(braking ? speed / 15 : 0, (slip - 1.5) / 6), 0, 1)
+      : 0;
+  tyreMarks(c);
 }
 
 /**

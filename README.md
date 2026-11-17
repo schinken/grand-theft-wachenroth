@@ -104,6 +104,8 @@ At least not that we know of.
 |                | Slider      | Volume                                |
 | P or Esc       | II          | Pause                                 |
 
+On foot, face a nearby stationary car and press Space to slide over it.
+
 The game saves after every job.
 
 ![The map](docs/screenshots/map.jpg)
