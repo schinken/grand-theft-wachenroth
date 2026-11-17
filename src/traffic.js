@@ -495,7 +495,9 @@ export function populate(dt, near) {
     const d = dist(n, f);
     return d > near && d < 250;
   });
-  if (state.cars.filter(c => c.ai).length < 13) {
+  // At night fewer people are out driving.
+  const most = state.night > 0.5 ? 10 : 13;
+  if (state.cars.filter(c => c.ai).length < most) {
     spawnCar(spots);
   }
   if (state.peds.length < 24) {
