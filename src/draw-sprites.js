@@ -5,6 +5,7 @@
 
 import {MAP} from '../map.js';
 import {makeSign} from './buildings.js';
+import {braking} from './cars.js';
 import {puff} from './effects.js';
 import {stand} from './hills.js';
 import {SHIRTS} from './people.js';
@@ -57,10 +58,9 @@ function drawRearLights(g, c) {
   if (!c.type.wheelbase || c.dead || c.burn) {
     return;
   }
-  const braking =
-    c.hb || (c.thr < -0.05 && c.vf > 0.1) || (c.thr > 0.05 && c.vf < -0.1);
+  const brakes = braking(c);
   const reversing = c.vf < -0.2;
-  if (!braking && !reversing) {
+  if (!brakes && !reversing) {
     return;
   }
   const baby = c.kind === 'baby';
@@ -71,7 +71,7 @@ function drawRearLights(g, c) {
   g.save();
   g.translate(-c.type.length / 2, -c.type.width / 2);
   g.scale(c.type.length / c.spr.width, c.type.width / h);
-  if (braking) {
+  if (brakes) {
     // A tight red fringe and brighter centre stay visible at game zoom.
     g.fillStyle = 'rgba(255,35,25,0.3)';
     g.fillRect(x - 1, y - 1, width + 2, 5);

@@ -238,11 +238,13 @@ async page => {
         const chasing = step.do === 'chase';
         const guided = (state.gps && state.gps.wp) || target;
         const waypt = collecting || chasing ? along(target) : guided;
-        const stops = !chasing && !collecting && step.do !== 'lose';
+        const racing = step.do === 'race';
+        const stops = !chasing && !collecting && !racing && step.do !== 'lose';
         const bearing = Math.atan2(waypt.y - player.y, waypt.x - player.x);
         const turn = Math.abs(wrap(bearing - car.a));
-        // Drive like a person, not a rocket.
-        let limit = 21;
+        // Drive like a person, not a rocket. In a race, like a person in a
+        // hurry.
+        let limit = racing ? 26 : 21;
         if (turn > 0.5 || (stops && far < 30)) {
           limit = 9;
         } else if (collecting && far < 18) {

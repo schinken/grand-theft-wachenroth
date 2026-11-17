@@ -162,6 +162,9 @@ function jobGauge(j) {
   if (st.do === 'collect') {
     return j.got / j.need;
   }
+  if (st.do === 'race') {
+    return j.cp / st.via.length;
+  }
   return null;
 }
 
@@ -177,7 +180,8 @@ function showMission() {
       j.logs ||
       j.need ||
       st.do === 'hold' ||
-      st.do === 'chase'
+      st.do === 'chase' ||
+      st.do === 'race'
     );
   show('noBar', noBar, () => {
     byId('mission').hidden = noBar;
@@ -196,6 +200,9 @@ function showMission() {
   }
   if (st.do === 'chase') {
     bits.push(`Treffer ${j.prey.hits || 0} / ${st.hits}`);
+  }
+  if (st.do === 'race') {
+    bits.push(`Platz ${j.place} von ${st.rivals.length + 1}`);
   }
   if (j.fragile) {
     bits.push('Ladung');

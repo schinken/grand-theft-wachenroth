@@ -4,6 +4,7 @@
  */
 
 import {near, put, stand} from './hills.js';
+import {lanternGlow, litWindows, shade, shadeCrown} from './night.js';
 import {state} from './state.js';
 import {CANOPY} from './textures.js';
 import {PX_PER_M, TAU, lerp} from './util.js';
@@ -215,6 +216,86 @@ function corner(i, x, y, s, lx, ly) {
 }
 
 /**
+ * Whether the light is on behind a window at night: in four of ten windows
+ * of a house, in one of eight elsewhere, and always the same ones.
+ * @param {!Building} b
+ * @param {number} wall
+ * @param {number} row
+ * @param {number} w Which window of the row.
+ * @return {boolean}
+ */
+function lightOn(b, wall, row, w) {
+  const dice = Math.imul(b.id * 31 + wall * 7 + row * 3 + w, 0x9e3779b1) >>> 28;
+  return dice < (b.k === 'h' ? 6 : 2);
+}
+
+/**
+ * Adds the windows on the walls that face the camera to the path of a
+ * canvas: every window is a little quad on its wall. drawWalls() has noted
+ * the walls in visibleWalls and the rows in rowLo and rowHi.
+ * @param {!CanvasRenderingContext2D} g
+ * @param {!Building} b
+ * @param {number} cx Camera centre, in metres.
+ * @param {number} cy
+ * @param {number} s How far the perspective pushes the eaves out.
+ * @param {number} which 0 for all windows, 1 for those with the light on, -1
+ *     for the dark ones.
+ * @return {boolean} Whether there are any.
+ */
+function traceWindows(g, b, cx, cy, s, which) {
+  const p = b.p;
+  const n = p.length;
+  const rows = b.rows;
+  const doors = b.doors;
+  let any = false;
+  for (const i of visibleWalls) {
+    const list = b.wins[i >> 1];
+    const j = (i + 2) % n;
+    const ax = p[i];
+    const ay = p[i + 1];
+    const ex = p[j] - ax;
+    const ey = p[j + 1] - ay;
+    const away = Math.hypot(ax + ex / 2 - cx, ay + ey / 2 - cy);
+    if (!list.length || (s - 1) * away < 0.8) {
+      continue; // seen too steeply to show windows
+    }
+    const portal = doors && doors.wall === i >> 1 ? doors : null;
+    for (let f = 0; f < rows.length; f++) {
+      if (f === 0 && portal && portal.wide) {
+        continue;
+      }
+      const lo = rowLo[f];
+      const hi = rowHi[f];
+      const lox = cx * (1 - lo);
+      const loy = cy * (1 - lo);
+      const hix = cx * (1 - hi);
+      const hiy = cy * (1 - hi);
+      for (let w = 0; w < list.length; w += 2) {
+        const t = list[w];
+        const half = list[w + 1];
+        if (f === 0 && portal && Math.abs(t - 0.5) < half + portal.half) {
+          continue; // the door is here
+        }
+        if (which && lightOn(b, i >> 1, f, w) !== which > 0) {
+          continue;
+        }
+        const x0 = ax + ex * (t - half);
+        const y0 = ay + ey * (t - half);
+        const x1 = ax + ex * (t + half);
+        const y1 = ay + ey * (t + half);
+        g.moveTo(x0 * lo + lox, y0 * lo + loy);
+        g.lineTo(x1 * lo + lox, y1 * lo + loy);
+        g.lineTo(x1 * hi + hix, y1 * hi + hiy);
+        g.lineTo(x0 * hi + hix, y0 * hi + hiy);
+        g.closePath();
+        any = true;
+      }
+    }
+  }
+  return any;
+}
+
+/**
  * The walls that face the camera, with plinth, windows and doors.
  * @param {!Building} b
  * @param {number} cx Camera centre, in metres.
@@ -283,56 +364,16 @@ function drawWalls(b, cx, cy, hc, h, s) {
   ctx.stroke();
   const doors = b.doors;
   if (b.rows) {
-    // Every window is a little quad on the wall; all of them go into one path.
     const rows = b.rows;
     for (let f = 0; f < rows.length; f++) {
       rowLo[f] = hc / (hc - h * rows[f][0]);
       rowHi[f] = hc / (hc - h * rows[f][1]);
     }
-    let any = false;
+    // At night the light is on behind some windows. Those are drawn apart,
+    // in the colour of a lamp, and keep it when the night falls.
+    const night = state.night > 0.5;
     ctx.beginPath();
-    for (const i of visibleWalls) {
-      const list = b.wins[i >> 1];
-      const j = (i + 2) % n;
-      const ax = p[i];
-      const ay = p[i + 1];
-      const ex = p[j] - ax;
-      const ey = p[j + 1] - ay;
-      const away = Math.hypot(ax + ex / 2 - cx, ay + ey / 2 - cy);
-      if (!list.length || (s - 1) * away < 0.8) {
-        continue; // seen too steeply to show windows
-      }
-      const portal = doors && doors.wall === i >> 1 ? doors : null;
-      for (let f = 0; f < rows.length; f++) {
-        if (f === 0 && portal && portal.wide) {
-          continue;
-        }
-        const lo = rowLo[f];
-        const hi = rowHi[f];
-        const lox = cx * (1 - lo);
-        const loy = cy * (1 - lo);
-        const hix = cx * (1 - hi);
-        const hiy = cy * (1 - hi);
-        for (let w = 0; w < list.length; w += 2) {
-          const t = list[w];
-          const half = list[w + 1];
-          if (f === 0 && portal && Math.abs(t - 0.5) < half + portal.half) {
-            continue; // the door is here
-          }
-          const x0 = ax + ex * (t - half);
-          const y0 = ay + ey * (t - half);
-          const x1 = ax + ex * (t + half);
-          const y1 = ay + ey * (t + half);
-          ctx.moveTo(x0 * lo + lox, y0 * lo + loy);
-          ctx.lineTo(x1 * lo + lox, y1 * lo + loy);
-          ctx.lineTo(x1 * hi + hix, y1 * hi + hiy);
-          ctx.lineTo(x0 * hi + hix, y0 * hi + hiy);
-          ctx.closePath();
-          any = true;
-        }
-      }
-    }
-    if (any) {
+    if (traceWindows(ctx, b, cx, cy, s, night ? -1 : 0)) {
       ctx.fillStyle = b.glass;
       ctx.fill();
       if (b.frame) {
@@ -340,6 +381,12 @@ function drawWalls(b, cx, cy, hc, h, s) {
         ctx.lineWidth = 0.14;
         ctx.stroke();
       }
+    }
+    ctx.beginPath();
+    if (night && traceWindows(ctx, b, cx, cy, s, 1)) {
+      ctx.fillStyle = '#ffd98a';
+      ctx.fill();
+      litWindows(g => traceWindows(g, b, cx, cy, s, 1));
     }
   }
   if (doors && visibleWalls.includes(doors.wall * 2)) {
@@ -750,6 +797,7 @@ function drawBuilding(b, cx, cy) {
   const h = Math.min(b.h, hc * 0.5);
   const top = Math.min(h + (b.rh || b.apex || 0), hc * 0.62);
   const s = hc / (hc - h);
+  shade(b, cx, cy, hc / (hc - top));
   drawWalls(b, cx, cy, hc, h, s);
   // The canvas would carry the windows' path through the new transform.
   ctx.beginPath();
@@ -818,6 +866,9 @@ export function drawFurniture(list, cx, cy) {
     line(tx, ty, hx, hy);
     disc(hx, hy, 0.52 * s, '#24262a');
     disc(hx, hy, 0.36 * s, p.down ? '#6a6a62' : '#f6edc0');
+    if (!p.down) {
+      lanternGlow(hx, hy);
+    }
   }
   ctx.lineCap = 'round';
 }
@@ -862,6 +913,7 @@ export function drawTrees(trees, cx, cy, hc, x0, y0, x1, y1) {
         ? 0.4
         : 1; // see under the canopy
     ctx.drawImage(CANOPY[t.s], x - t.r, y - t.r, t.r * 2, t.r * 2);
+    shadeCrown(CANOPY[t.s], x, y, t.r, ctx.globalAlpha);
   }
   ctx.globalAlpha = 1;
 }

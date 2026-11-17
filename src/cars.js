@@ -355,6 +355,15 @@ export function pedals(c, vf, max, push, dt) {
 }
 
 /**
+ * Whether a vehicle brakes: with the handbrake, or with the pedal against
+ * the way it rolls.
+ * @param {!Car} c
+ * @return {boolean}
+ */
+export const braking = c =>
+  c.hb || (c.thr < -0.05 && c.vf > 0.1) || (c.thr > 0.05 && c.vf < -0.1);
+
+/**
  * How steeply the ground rises along the nose of a vehicle, the way the game
  * exaggerates it. Uphill it pulls the vehicle back and takes off its top
  * speed, downhill it pushes. It never pulls harder than a vehicle slows down

@@ -55,7 +55,7 @@ export function selftest() {
   };
   const used = new Set(
     MISSIONS.flatMap(m => [
-      ...m.steps.flatMap(s => [s.to, s.at, s.near]),
+      ...m.steps.flatMap(s => [s.to, s.at, s.near, ...(s.via || [])]),
       ...(m.props || []).map(p => p.at),
     ]).filter(Boolean)
   );

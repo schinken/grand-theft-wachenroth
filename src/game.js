@@ -77,6 +77,8 @@ export function reset(mode, save) {
     thiefF: null,
     whereT: 0,
     finale: 0,
+    // How dark it is, from 0 by day to 1 at night
+    night: 0,
     map: false,
     stats: {missions: 0, stolen: 0, peds: 0, wrecks: 0, busted: 0, wasted: 0},
     cam: {x: 1450, y: 900, z: 4.4},
@@ -233,6 +235,9 @@ export function camera(dt) {
 export function update(dt) {
   const player = state.player;
   state.t += dt;
+  // Night falls for a job that plays at night, and lifts when it is over.
+  const dark = state.job && state.job.m.night ? 1 : 0;
+  state.night += clamp(dark - state.night, -dt / 2, dt / 2);
   if (state.mode === 'play') {
     controlPlayer(dt);
   }

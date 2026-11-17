@@ -29,7 +29,8 @@ import {WORLD_H, WORLD_W, clamp, dist, lerp, pick, rng, wrap} from './util.js';
 function nextNode(from, to, ai) {
   const a = NODES[from];
   const b = NODES[to];
-  const chase = ai.cop ? state.copF : ai.thief ? state.thiefF : null;
+  // The police and thieves follow the player, a racer the course.
+  const chase = ai.cop ? state.copF : ai.thief ? state.thiefF : ai.f;
   if (chase) {
     const n = downhill(chase, to);
     if (n >= 0) {
@@ -81,9 +82,10 @@ function gateShut(c, reach) {
  * car.
  * @param {!Car} c
  * @param {number} reach How far ahead, in metres.
+ * @param {!Array<!Car>} cars The cars it minds.
  * @return {boolean}
  */
-function inTheWay(c, reach) {
+function inTheWay(c, reach, cars) {
   const player = state.player;
   const fx = Math.cos(c.a);
   const fy = Math.sin(c.a);
@@ -94,7 +96,7 @@ function inTheWay(c, reach) {
     return f > 0 && f < reach && Math.abs(ry * fx - rx * fy) < 1.7;
   };
   return (
-    state.cars.some(o => o !== c && ahead(o)) ||
+    cars.some(o => o !== c && ahead(o)) ||
     state.peds.some(ahead) ||
     (state.mode === 'play' && !player.car && ahead(player))
   );
@@ -157,16 +159,24 @@ export function driveAI(c, dt) {
     ty = player.y + (player.car ? player.car.vy * 0.4 : 0);
   } // close enough: go straight for the player
   const err = wrap(Math.atan2(ty - c.y, tx - c.x) - c.a);
-  const fast = hunt || ai.flee || ai.rage > 0;
+  const fast = hunt || ai.flee || ai.race > 0 || ai.rage > 0;
   const want =
     (2 + Math.min(a.w, b.w) * 1.6) *
-    (hunt || ai.flee ? 2 : ai.rage > 0 ? 1.6 : 1) *
+    (ai.race || (hunt || ai.flee ? 2 : ai.rage > 0 ? 1.6 : 1)) *
     (1 - 0.7 * Math.min(1, Math.abs(err)));
   const reach = 5 + c.vf * 0.9;
   // A level crossing ahead is shut while the train passes: everybody waits,
   // the police too, and nobody gets tired of waiting.
   const gate = gateShut(c, reach + 6);
-  const block = gate || (!fast && !(ai.push > 0) && inTheWay(c, reach));
+  // Who is in a hurry or tired of waiting shoves through. A racer shoves
+  // other traffic aside but not you: it stays behind until there is room.
+  let mind = state.cars;
+  if (ai.push > 0 || (fast && !ai.race)) {
+    mind = null;
+  } else if (ai.race) {
+    mind = player.car ? [player.car] : [];
+  }
+  const block = gate || (mind !== null && inTheWay(c, reach, mind));
   ai.wait = block && !gate ? ai.wait + dt : 0;
   if (ai.wait > 5) {
     ai.push = 2;

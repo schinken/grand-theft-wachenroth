@@ -2,13 +2,15 @@
 //
 // A mission: id (for ?job=), title, reward, intro and outro (Flo on the
 // pager), steps, and maybe props (scenery, see below), sober: true (ends the
-// drunkenness) or drunk: n (leaves you drunk for n seconds).
+// drunkenness), drunk: n (leaves you drunk for n seconds) or night: true (it
+// is dark while the job lasts).
 //
 // A step: do (its kind), obj (the task, on the pager), say (Flo's message as
 // it starts), and what its kind needs:
 //   goto     reach place `to`: foot = walk in, else within r (7 m); fix = done
 //            only once the police have let go
-//   steal    get into vehicle `veh` (with `trailer`) waiting at place `at`
+//   steal    get into vehicle `veh` (with `trailer`) waiting at place `at`;
+//            armour = how many times as much as usual it can take
 //   bring    park the mission vehicle at place `to`, or with house at a
 //            customer's house far off, whose street fills in {street}
 //   collect  pick up n things of kind `item` within r of place `near`: on the
@@ -24,6 +26,9 @@
 //   chase    ram the getaway `veh` (with `trailer`), which sets off near place
 //            `at`, `hits` times or until it is badly dented
 //   take     get into the car you just stopped
+//   race     drive through the places `via` in their order, ahead of the
+//            `rivals` (the colours of their cars); the police join in after
+//            the first place
 //   lose     shake off the police
 // Any step may also have:
 //   time     seconds to do it in; the clock runs on until the next `time`, and
@@ -1148,6 +1153,51 @@ export const MISSIONS = [
     outro: [
       'Wir sind da! Die Musik spielt, das Bier läuft.',
       'Wachenroth gehört jetzt uns. Also mir. Aber du darfst mitfeiern.',
+    ],
+  },
+
+  {
+    id: 'nachtrennen',
+    title: 'Vollgas bei Vollmond',
+    reward: 2000,
+    night: true,
+    intro: [
+      'Die Kerwa ist rum, aber die Nacht ist jung: Die Höchstadter wollen ein Rennen. Durch unser Dorf!',
+      'Am Tankautomat beim Murk steht ein Flitzer für dich, mit Überrollkäfig. Wer verliert, zahlt die Zeche.',
+    ],
+    steps: [
+      {
+        do: 'steal',
+        veh: 'sport',
+        at: 'fuel',
+        armour: 3,
+        obj: 'Hol dir den Flitzer mit Überrollkäfig am Tankautomat Murk',
+      },
+      {
+        do: 'race',
+        via: [
+          'townhall',
+          'bakery',
+          'shop',
+          'kindergarten',
+          'hq',
+          'cemetery',
+          'fuel',
+        ],
+        rivals: ['#c8201c', '#e0b21c', '#7a3fb0'],
+        obj: 'Werde Erster: durchs Dorf, den Berg rauf und zurück zum Murk',
+        say: 'Die sind schon los! Rathaus, Bäck, Edeka, den Berg rauf zu mir und zurück zum Murk. Gib Gas!',
+      },
+      {
+        do: 'lose',
+        to: 'carwash',
+        obj: 'Erster! Jetzt häng die Polizei ab (Tipp: Waschstraße beim Murk)',
+        say: 'Gewonnen! Aber die Polizei klebt dir noch am Heck. Ab durch die Waschstraße!',
+      },
+    ],
+    outro: [
+      'Erster! Die Höchstadter zahlen, und zwar alles.',
+      'Bei Nacht gehört Wachenroth auch uns.',
     ],
   },
 ];

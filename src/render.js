@@ -14,6 +14,7 @@ import {drawAir, drawParticles, drawSprites} from './draw-sprites.js';
 import {gridFind} from './grid.js';
 import {layMesh, layOverHills, look, shown} from './hills.js';
 import {changed} from './hud.js';
+import {dusk, nightFall} from './night.js';
 import {SPOT} from './places.js';
 import {propGrid, treeGrid} from './scenery.js';
 import {state} from './state.js';
@@ -127,15 +128,18 @@ export function render() {
   drawGround(x0, y0, x1, y1);
   drawShadows(builds, trees, x0, y0, x1, y1);
   layOverHills(fx, fy);
+  const props = gridFind(propGrid, x0 - 9, y0 - 9, x1 + 9, y1 + 9);
+  dusk([x0, y0, x1, y1], props);
   // What stands or moves is put on its spot on the hills, thing by thing.
   ctx.setTransform(z, 0, 0, z, ox, oy);
   ctx.lineJoin = ctx.lineCap = 'round';
   drawSprites(x0, y0, x1, y1);
   drawBuildings(builds, ex, ey, hc, x0, y0, x1, y1);
-  drawFurniture(gridFind(propGrid, x0 - 9, y0 - 9, x1 + 9, y1 + 9), ex, ey);
+  drawFurniture(props, ex, ey);
   drawParticles();
   drawTrees(trees, ex, ey, hc, x0, y0, x1, y1);
   drawAir();
+  nightFall();
   drawEdge(x0, y0, x1, y1); // the world ends here
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   if (tipsy) {

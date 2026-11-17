@@ -11,7 +11,7 @@ import {nearest} from './geometry.js';
 import {roadPoint} from './items.js';
 import {NODES, SEGS, surfAt} from './land.js';
 import {MISSIONS, TALK} from './missions.js';
-import {HOME, SPOT, driveSpot, field, nearNode} from './places.js';
+import {HOME, SPOT, downhill, driveSpot, field, nearNode} from './places.js';
 import {shove, toggleCar} from './player.js';
 import {TREES, blocked} from './scenery.js';
 import {TRAILERS} from './sprites.js';
@@ -216,6 +216,19 @@ function calmThieves(j) {
     }
   }
   j.thieves = [];
+}
+
+/**
+ * The rivals of a race stop racing and go back to being traffic.
+ * @param {!Object} j
+ */
+function calmRivals(j) {
+  for (const c of j.rivals || []) {
+    if (c.ai) {
+      Object.assign(c.ai, {race: 0, f: null});
+    }
+  }
+  j.rivals = [];
 }
 
 // How fast the strays of a job run from you, in metres a second. A rocker
@@ -471,6 +484,7 @@ function setTerms(j, st) {
  */
 function setCast(j, st) {
   calmThieves(j);
+  calmRivals(j);
   j.thieves = st.thieves ? spawnThieves(st.thieves) : [];
   j.guards = (st.guards || []).map(([x0, y0, x1, y1]) => ({
     ...{x0, y0, x1, y1, x: x0, y: y0, a: Math.atan2(y1 - y0, x1 - x0)},
@@ -526,6 +540,7 @@ function itemSpot(st, c, free) {
  */
 function beginSteal(j, st) {
   j.veh = spawnAt(st.veh, st.at, st.trailer);
+  j.veh.hp *= st.armour || 1;
   j.to = j.veh;
 }
 
@@ -543,6 +558,96 @@ function beginChase(j, st) {
   }
   j.prey.ai = newAI(from, to, {flee: true});
   j.to = j.prey;
+}
+
+/**
+ * A race begins: the rivals stand on the road ahead, one behind the other,
+ * and set off for the first checkpoint.
+ * @param {!Object} j
+ * @param {!Object} st The step.
+ */
+function beginRace(j, st) {
+  const player = state.player;
+  const f = field(SPOT[st.via[0]]);
+  const from = nearNode(player, 'gps');
+  const a = NODES[from];
+  const next = downhill(f, from);
+  const to = next < 0 ? a.car[0].n : next;
+  const b = NODES[to];
+  j.rivals = st.rivals.map((col, i) => {
+    const t = Math.min(0.9, (9 + i * 7) / dist(a, b));
+    const at = {x: lerp(a.x, b.x, t), y: lerp(a.y, b.y, t)};
+    // Make room
+    state.cars = state.cars.filter(c => c === player.car || dist(c, at) > 6);
+    const c = makeCar(
+      at.x,
+      at.y,
+      Math.atan2(b.y - a.y, b.x - a.x),
+      'sport',
+      col
+    );
+    c.ai = newAI(from, to, {race: 1.85, f, cp: 0});
+    return c;
+  });
+  j.cp = 0;
+  j.place = st.rivals.length + 1;
+  j.to = SPOT[st.via[0]];
+}
+
+/**
+ * Runs a race: who has passed which checkpoint, the place you are in, and
+ * the police, who turn up after the first checkpoint. A rival who is ahead
+ * of you takes it easy and one who is behind steps on it, so it stays close.
+ * @param {!Object} j
+ * @param {!Object} st The step.
+ * @return {boolean} Whether you are through the last checkpoint.
+ */
+function raceDone(j, st) {
+  const player = state.player;
+  const last = st.via.length;
+  // How far somebody has got: checkpoints count most, then how near the
+  // next one is.
+  // ponytail: nearness is as the crow flies, not along the road. Right
+  // behind a bend the place can be off by one for a moment.
+  const far = (o, cp) => cp * 1e4 - dist(o, SPOT[st.via[cp]]);
+  const mine = far(player, j.cp);
+  j.place = 1;
+  for (const c of j.rivals) {
+    const ai = c.ai;
+    if (!ai || c.dead) {
+      continue; // out of the race
+    }
+    if (dist(c, SPOT[st.via[ai.cp]]) < 14) {
+      if (++ai.cp >= last) {
+        j.caught = 'race';
+        return false;
+      }
+      ai.f = field(SPOT[st.via[ai.cp]]);
+    }
+    const ahead = far(c, ai.cp) > mine;
+    j.place += ahead;
+    ai.race = ahead ? 1.85 : 2.3;
+  }
+  if (j.cp >= 1) {
+    if (!j.cops) {
+      j.cops = true;
+      audio.play('alarm');
+      page('Blaulicht! Die Polizei hat das Rennen spitzgekriegt. Fahr weiter!');
+    }
+    state.wanted = Math.max(state.wanted, 2);
+    state.seen = 8;
+  }
+  if (!player.car || dist(player, j.to) > 12) {
+    return false;
+  }
+  if (++j.cp >= last) {
+    return true;
+  }
+  j.to = SPOT[st.via[j.cp]];
+  state.gps = null;
+  float(player, `${j.cp} von ${last}`, '#ffd23e');
+  audio.play('step');
+  return false;
 }
 
 /**
@@ -599,6 +704,9 @@ function beginStep(j, st) {
       break;
     case 'collect':
       beginCollect(j, st);
+      break;
+    case 'race':
+      beginRace(j, st);
       break;
     default: // the other kinds need nothing
   }
@@ -774,6 +882,8 @@ function stepDone(j, dt) {
       return state.wanted < 1;
     case 'chase':
       return chaseDone(j, st);
+    case 'race':
+      return raceDone(j, st);
     default:
       throw new Error(`unknown step: ${st.do}`);
   }
@@ -833,6 +943,7 @@ function endJob() {
   state.pager.idle = '';
   state.items = state.items.filter(v => !v.job);
   calmThieves(j);
+  calmRivals(j);
   if (m.sober) {
     state.drunk = 0; // slept it off
   }
@@ -859,6 +970,7 @@ const LOST = {
   seen: 'Die Wache hat dich gesehen',
   dog: 'Der Schäferhund hat dich gestellt',
   gone: 'Entkommen',
+  race: 'Ein anderer war schneller',
   busted: '',
   wasted: '',
 };
@@ -871,6 +983,7 @@ export function failJob(why) {
   const j = state.job;
   state.job = null;
   calmThieves(j);
+  calmRivals(j);
   state.nextJob = 10;
   state.pager.idle = '';
   state.items = state.items.filter(v => !v.job);
