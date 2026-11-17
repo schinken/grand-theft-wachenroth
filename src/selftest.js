@@ -4,12 +4,12 @@
 
 import {MAP} from '../map.js';
 import {BUILD} from './buildings.js';
-import {pedals, rollCar} from './cars.js';
+import {hill, pedals, rollCar} from './cars.js';
 import {inFront, parting} from './draw-buildings.js';
 import {FENCE_TILES, FURROWS, fieldMasks} from './draw-ground.js';
 import {tyreMarks} from './effects.js';
 import {pushOut} from './geometry.js';
-import {ROADS, surfAt} from './land.js';
+import {ROADS, heightAt, surfAt} from './land.js';
 import {MISSIONS} from './missions.js';
 import {knockPed, stepPed} from './people.js';
 import {HOME, MODELLED, SPOT, field, nearNode, waypoint} from './places.js';
@@ -87,6 +87,20 @@ export function selftest() {
           stopped < rollingSpeed * 0.4 &&
           pedals(brake, 0.1, 38, 15, 0.1) === 0 &&
           pedals(brake, -0.1, 38, 15, 0.1) === 0
+        );
+      })(),
+    'the hills are in the map: Flo lives some 20 m above the church':
+      Math.abs(heightAt(...MAP.pois.hq) - heightAt(...MAP.pois.church) - 20) <
+      3,
+    'Bergstraße climbs to the north, and a car left alone on it stays put':
+      (() => {
+        const up = hill(1114, 727, 0, -1);
+        const coast = {thr: 0, hb: false, type: TYPES.car};
+        return (
+          up > 0.2 &&
+          hill(1114, 727, 0, 1) === -up &&
+          pedals(coast, -9.81 * 0.4 * 0.01, 38, 15, 0.01) === 0 &&
+          pedals(coast, 9.81 * 0.4 * 0.01, 38, 15, 0.01) === 0
         );
       })(),
     'a car slide crosses the body and rejects cars behind or moving fast':
@@ -201,12 +215,13 @@ export function selftest() {
       a && a[0] === 1 && Math.abs(a[2] - 0.5) < 1e-9,
     'inside a building: pushed out through the nearest wall':
       b && b[0] === 1 && Math.abs(b[2] - 2) < 1e-9,
-    'the map has its surveyed trees, roof colours, yards, fields and fences':
+    'the map has its surveyed trees, roof colours, yards, fields, fences and hills':
       FENCE_TILES.size > 100 &&
       fieldMasks.length === FURROWS.length &&
       TREES.length > 4000 &&
       BUILD.filter(b => b.c).length > 1000 &&
-      MAP.yards.length > 1000,
+      MAP.yards.length > 1000 &&
+      MAP.relief.length > 1000,
     'the house between the camera and another one is drawn last': (() => {
       const box = (id, x, y) => {
         const p = [x, y, x + 10, y, x + 10, y + 10, x, y + 10];

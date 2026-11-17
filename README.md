@@ -120,6 +120,11 @@ The village is built from open data:
 - **Buildings:** the 3D building model of the Bavarian surveying office, with
   measured heights, roof shapes, ridge directions and towers.
 - **Trees:** the same office's survey of single trees, about 7,000 of them.
+- **Hills:** the same office's terrain model, a height every metre. Flo's
+  house stands 20 m above the church, and you notice: the slopes are shaded,
+  higher ground comes closer to the camera the way the roofs do, and a car is
+  slow uphill and fast downhill. The game makes the hills two and a half times
+  as steep as they are.
 - **Roof colours, yards and fields:** read off the aerial photo.
 - **Fences and hedges:** along the parcel borders of the cadastre.
 
@@ -134,7 +139,7 @@ playgrounds, the Koppel of Rock at its crossroads, the Christmas tree
 plantation on the Weißer Berg, and the roofs of St. Gertrud, Gasthof Linsner,
 Lagerhaus Grönert and the barn at the Mühle.
 
-Map data © OpenStreetMap contributors, ODbL. Buildings, trees, aerial photo and
+Map data © OpenStreetMap contributors, ODbL. Buildings, trees, terrain, aerial photo and
 parcels: Bayerische Vermessungsverwaltung – www.geodaten.bayern.de, CC BY 4.0,
 simplified.
 

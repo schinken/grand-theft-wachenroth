@@ -6,6 +6,7 @@
 import {MAP} from '../map.js';
 import * as audio from './audio.js';
 import {BUILD} from './buildings.js';
+import {paintRelief} from './draw-ground.js';
 import {AREAS, DRIVE, ROADS, SEGS} from './land.js';
 import {PLACES} from './missions.js';
 import {field, pathLength, routeLine} from './places.js';
@@ -91,6 +92,7 @@ function mapPaint(k, dpr) {
     g.fillStyle = PAPER[a.k] || '#e6dfc4';
     g.fill(a.path);
   }
+  paintRelief(g);
   stroke(ROADS.stream, '#8fc4e8', 0, 1);
   stroke(ROADS.river, '#6fb0de', 0, 2.5);
   g.setLineDash([4 * px * dpr, 3 * px * dpr]);

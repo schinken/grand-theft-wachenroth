@@ -2,10 +2,15 @@
  * @fileoverview The game canvas and its size.
  */
 
-import {byId} from './util.js';
+import {byId, canvas} from './util.js';
 
 export const gameCanvas = byId('game');
-export const ctx = gameCanvas.getContext('2d');
+// What the player sees: render() lays the picture of the world over the hills.
+export const screenCtx = gameCanvas.getContext('2d');
+// The world is drawn flat, on a canvas of its own with room for more than the
+// screen shows: where the land falls away, more of it comes into sight.
+export const ROOM = 1.3;
+export const ctx = canvas(1, 1).getContext('2d');
 
 export let viewW = 800;
 export let viewH = 450;
@@ -18,6 +23,8 @@ export let viewH = 450;
 export function sizeView(w, h) {
   viewW = gameCanvas.width = w;
   viewH = gameCanvas.height = h;
+  ctx.canvas.width = Math.ceil(w * ROOM);
+  ctx.canvas.height = Math.ceil(h * ROOM);
   ctx.imageSmoothingEnabled = false;
 }
 

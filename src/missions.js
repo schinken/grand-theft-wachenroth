@@ -330,7 +330,7 @@ export const MISSIONS = [
       {
         do: 'goto',
         to: 'hall',
-        time: 70,
+        time: 90, // uphill, and a Bulldog with a trailer climbs slowly
         drop: true,
         obj: 'Bring die Krapfen zur Ebrachtalhalle',
         say: 'Zum Dank gibt es Krapfen. Bring sie zum Kinderfasching in die Ebrachtalhalle!',

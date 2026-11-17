@@ -7,7 +7,7 @@ import {buildingGrid} from './buildings.js';
 import {decal, flash, float, puff, tyreMarks} from './effects.js';
 import {pushOut} from './geometry.js';
 import {at} from './grid.js';
-import {NODES, surfAt} from './land.js';
+import {NODES, STEEP, heightAt, surfAt} from './land.js';
 import {knockPed, spawnPed} from './people.js';
 import {nearNode} from './places.js';
 import {waste} from './player.js';
@@ -355,6 +355,23 @@ export function pedals(c, vf, max, push, dt) {
 }
 
 /**
+ * How steeply the ground rises along the nose of a vehicle, the way the game
+ * exaggerates it. Uphill it pulls the vehicle back and takes off its top
+ * speed, downhill it pushes. It never pulls harder than a vehicle slows down
+ * by itself, so one that is left alone on a slope does not roll away.
+ * @param {number} x
+ * @param {number} y
+ * @param {number} fx Its heading, as a vector of length 1.
+ * @param {number} fy
+ * @return {number} Metres up for a metre ahead.
+ */
+export function hill(x, y, fx, fy) {
+  const rise =
+    (heightAt(x + fx * 2, y + fy * 2) - heightAt(x - fx * 2, y - fy * 2)) / 4;
+  return clamp(STEEP * rise, -0.4, 0.4);
+}
+
+/**
  * The trailer swings in behind its vehicle.
  * @param {!Car} c
  * @param {number} vf The speed of the vehicle, in metres a second.
@@ -458,12 +475,15 @@ export function stepCar(c, dt) {
   // Tuned at the garage: faster, quicker off the mark, and it takes bends.
   const nos = burnNos(c, dt);
   const boost = (c.boost || 1) * (nos ? 1.45 : 1);
+  const slope = air ? 0 : hill(c.x, c.y, fx, fy);
   const max =
     type.max *
     boost *
     (road ? 1 : 0.7) *
-    (c.kind === 'heli' && !air ? 0.15 : 1);
-  vf = pedals(c, vf, max, type.acc * boost * (nos ? 1.5 : 1), dt);
+    (c.kind === 'heli' && !air ? 0.15 : 1) *
+    (1 - slope);
+  const push = type.acc * boost * (nos ? 1.5 : 1);
+  vf = pedals(c, vf - 9.81 * slope * dt, max, push, dt);
   vl *= Math.exp(-(c.hb ? 1.2 : road ? 8 : 4.5) * dt);
   if (!c.thr && Math.abs(vf) < 0.05 && Math.abs(vl) < 0.05) {
     vf = vl = 0;
