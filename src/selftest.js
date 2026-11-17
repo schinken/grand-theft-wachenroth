@@ -9,6 +9,7 @@ import {inFront, parting} from './draw-buildings.js';
 import {FENCE_TILES, FURROWS, fieldMasks} from './draw-ground.js';
 import {tyreMarks} from './effects.js';
 import {pushOut} from './geometry.js';
+import {look, near} from './hills.js';
 import {ROADS, heightAt, surfAt} from './land.js';
 import {MISSIONS} from './missions.js';
 import {knockPed, stepPed} from './people.js';
@@ -92,6 +93,12 @@ export function selftest() {
     'the hills are in the map: Flo lives some 20 m above the church':
       Math.abs(heightAt(...MAP.pois.hq) - heightAt(...MAP.pois.church) - 20) <
       3,
+    'from above the church its ground looks as it is, the hill of Flo nearer':
+      (() => {
+        const [x, y] = MAP.pois.church;
+        look({x, y, h: 50, z: 9, ox: 0, oy: 0, flat: false});
+        return near(x, y) === 1 && near(...MAP.pois.hq) > 1.1;
+      })(),
     'Bergstraße climbs to the north, and a car left alone on it stays put':
       (() => {
         const up = hill(1114, 727, 0, -1);

@@ -12,7 +12,7 @@ import {ROOFS, fromFrame} from './roofs.js';
 import {state} from './state.js';
 import {textures} from './textures.js';
 import {DEBUG, PX_PER_M, TAU, WORLD_W, canvas} from './util.js';
-import {ctx} from './view.js';
+import {flatCtx} from './view.js';
 import {paintKita, paintPlayground, paintXmasFarm, paintYard} from './yards.js';
 
 /**
@@ -718,7 +718,7 @@ function groundTile(tx, ty, paint, room) {
  * @param {number} y1
  */
 export function drawGround(x0, y0, x1, y1) {
-  const view = ctx.getTransform();
+  const view = flatCtx.getTransform();
   const z = view.a;
   textures.water.setTransform({
     a: 1 / PX_PER_M,
@@ -726,10 +726,10 @@ export function drawGround(x0, y0, x1, y1) {
     e: ((state.t * 5) % 64) / PX_PER_M,
     f: ((state.t * 2) % 64) / PX_PER_M,
   });
-  ctx.fillStyle = textures.water;
-  ctx.fillRect(x0 - 1, y0 - 1, x1 - x0 + 2, y1 - y0 + 2);
+  flatCtx.fillStyle = textures.water;
+  flatCtx.fillRect(x0 - 1, y0 - 1, x1 - x0 + 2, y1 - y0 + 2);
   // Tiles go down in whole screen pixels, so neighbours meet without a seam.
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  flatCtx.setTransform(1, 0, 0, 1, 0, 0);
   const tx0 = Math.floor(x0 / TILE_M);
   const ty0 = Math.floor(y0 / TILE_M);
   const tx1 = Math.floor(x1 / TILE_M);
@@ -753,34 +753,34 @@ export function drawGround(x0, y0, x1, y1) {
       const sy = Math.round(ty * TILE_M * z + view.f);
       const sw = Math.round((tx + 1) * TILE_M * z + view.e) - sx;
       const sh = Math.round((ty + 1) * TILE_M * z + view.f) - sy;
-      ctx.drawImage(tile, sx, sy, sw, sh);
+      flatCtx.drawImage(tile, sx, sy, sw, sh);
     }
   }
-  ctx.setTransform(z, 0, 0, z, view.e, view.f);
+  flatCtx.setTransform(z, 0, 0, z, view.e, view.f);
   const j = state.job;
   const to = j && j.to;
   if (to && to !== j.veh && to !== j.prey) {
     // where to go: a pulsing ring on the ground
     const pulse = Math.sin(state.t * 5);
-    ctx.fillStyle = 'rgba(255,210,62,.3)';
-    ctx.strokeStyle = '#ffd23e';
-    ctx.lineWidth = 0.5;
-    ctx.beginPath();
-    ctx.arc(to.x, to.y, 3.4 + pulse * 0.5, 0, TAU);
-    ctx.fill();
-    ctx.stroke();
+    flatCtx.fillStyle = 'rgba(255,210,62,.3)';
+    flatCtx.strokeStyle = '#ffd23e';
+    flatCtx.lineWidth = 0.5;
+    flatCtx.beginPath();
+    flatCtx.arc(to.x, to.y, 3.4 + pulse * 0.5, 0, TAU);
+    flatCtx.fill();
+    flatCtx.stroke();
     if (j.step.do === 'hold') {
-      ctx.beginPath();
-      ctx.arc(to.x, to.y, j.step.r || 10, 0, TAU);
-      ctx.stroke();
+      flatCtx.beginPath();
+      flatCtx.arc(to.x, to.y, j.step.r || 10, 0, TAU);
+      flatCtx.stroke();
     }
   }
   if (DEBUG) {
     for (const k of Object.keys(SPOT)) {
-      ctx.fillStyle = '#f0f';
-      ctx.beginPath();
-      ctx.arc(SPOT[k].x, SPOT[k].y, 1.5, 0, TAU);
-      ctx.fill();
+      flatCtx.fillStyle = '#f0f';
+      flatCtx.beginPath();
+      flatCtx.arc(SPOT[k].x, SPOT[k].y, 1.5, 0, TAU);
+      flatCtx.fill();
     }
   }
 }

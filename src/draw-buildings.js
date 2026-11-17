@@ -3,10 +3,11 @@
  * camera, street furniture and trees, and their shadows.
  */
 
+import {near, put, stand} from './hills.js';
 import {state} from './state.js';
 import {CANOPY} from './textures.js';
 import {PX_PER_M, TAU, lerp} from './util.js';
-import {ctx} from './view.js';
+import {ctx, flatCtx} from './view.js';
 
 /**
  * @param {!Array<!Building>} builds
@@ -17,25 +18,25 @@ import {ctx} from './view.js';
  * @param {number} y1
  */
 export function drawShadows(builds, trees, x0, y0, x1, y1) {
-  ctx.fillStyle = 'rgba(0,0,0,.28)';
+  flatCtx.fillStyle = 'rgba(0,0,0,.28)';
   for (const b of builds) {
     const o = b.h * 0.35;
     if (b.x1 + o < x0 || b.x0 > x1 || b.y1 + o < y0 || b.y0 > y1) {
       continue;
     }
-    ctx.translate(o, o);
-    ctx.fill(b.path);
-    ctx.translate(-o, -o);
+    flatCtx.translate(o, o);
+    flatCtx.fill(b.path);
+    flatCtx.translate(-o, -o);
   }
-  ctx.beginPath();
+  flatCtx.beginPath();
   for (const t of trees) {
     if (t.cut) {
       continue;
     }
-    ctx.moveTo(t.x + 1.6 + t.r * 0.9, t.y + 1.6);
-    ctx.arc(t.x + 1.6, t.y + 1.6, t.r * 0.9, 0, TAU);
+    flatCtx.moveTo(t.x + 1.6 + t.r * 0.9, t.y + 1.6);
+    flatCtx.arc(t.x + 1.6, t.y + 1.6, t.r * 0.9, 0, TAU);
   }
-  ctx.fill();
+  flatCtx.fill();
 }
 
 const FRAME = '#f1ecde';
@@ -685,12 +686,13 @@ function drawRoof(b, lx, ly, s, s2) {
  * @param {number} y1
  */
 export function drawBuildings(builds, cx, cy, hc, x0, y0, x1, y1) {
-  const base = ctx.getTransform();
   inView.length = 0;
   for (const b of builds) {
-    const h = Math.min(b.h, hc * 0.5);
-    const top = Math.min(h + (b.rh || b.apex || 0), hc * 0.62);
-    const s2 = hc / (hc - top);
+    // The camera is lower above a building that stands on a hill.
+    const hb = hc / near(b.mx, b.my);
+    const h = Math.min(b.h, hb * 0.5);
+    const top = Math.min(h + (b.rh || b.apex || 0), hb * 0.62);
+    const s2 = hb / (hb - top);
     // What the building covers on the screen, roof leaning outwards
     b.sx0 = Math.min(b.x0, b.x0 * s2 + cx * (1 - s2));
     b.sx1 = Math.max(b.x1, b.x1 * s2 + cx * (1 - s2));
@@ -724,27 +726,27 @@ export function drawBuildings(builds, cx, cy, hc, x0, y0, x1, y1) {
     }
   }
   for (const b of inView) {
-    drawBuilding(b, cx, cy, hc, base);
+    drawBuilding(b, cx, cy);
   }
 }
 
 /**
- * Draws a building, after everything it can hide.
+ * Draws a building, after everything it can hide. It stands on the ground at
+ * its middle, all of it at that height: a house is level, whatever the slope.
  * @param {!Building} b
  * @param {number} cx Camera centre, in metres.
  * @param {number} cy
- * @param {number} hc Camera height, in metres.
- * @param {!DOMMatrix} base The transform of the world.
  */
-function drawBuilding(b, cx, cy, hc, base) {
+function drawBuilding(b, cx, cy) {
   if (b.drawn) {
     return; // done, or three buildings hide each other in a ring
   }
   b.drawn = true;
   for (const o of b.behind) {
-    drawBuilding(o, cx, cy, hc, base);
+    drawBuilding(o, cx, cy);
   }
-  const z = base.a;
+  const hc = stand(b.mx, b.my);
+  const z = put.z;
   const h = Math.min(b.h, hc * 0.5);
   const top = Math.min(h + (b.rh || b.apex || 0), hc * 0.62);
   const s = hc / (hc - h);
@@ -756,13 +758,12 @@ function drawBuilding(b, cx, cy, hc, base) {
     z * b.sa,
     -z * b.sa,
     z * b.ca,
-    base.e + z * b.mx,
-    base.f + z * b.my
+    put.e + z * b.mx,
+    put.f + z * b.my
   );
   const lx = (cx - b.mx) * b.ca + (cy - b.my) * b.sa;
   const ly = (cy - b.my) * b.ca - (cx - b.mx) * b.sa;
   drawRoof(b, lx, ly, s, hc / (hc - top));
-  ctx.setTransform(z, 0, 0, z, base.e, base.f); // ten times faster than (base)
 }
 
 /**
@@ -770,9 +771,8 @@ function drawBuilding(b, cx, cy, hc, base) {
  * @param {!Array<!Prop>} list
  * @param {number} cx Camera centre, in metres.
  * @param {number} cy
- * @param {number} hc Camera height, in metres.
  */
-export function drawFurniture(list, cx, cy, hc) {
+export function drawFurniture(list, cx, cy) {
   const line = (x0, y0, x1, y1) => {
     ctx.beginPath();
     ctx.moveTo(x0, y0);
@@ -787,6 +787,7 @@ export function drawFurniture(list, cx, cy, hc) {
   };
   ctx.lineCap = 'butt';
   for (const p of list) {
+    const hp = stand(p.x, p.y);
     if (p.k === 'hydrant') {
       if (p.down) {
         disc(p.x, p.y, 1.5, 'rgba(70,130,190,.4)');
@@ -797,7 +798,7 @@ export function drawFurniture(list, cx, cy, hc) {
       continue;
     }
     const h = 6.5;
-    const s = p.down ? 1 : hc / (hc - h);
+    const s = p.down ? 1 : hp / (hp - h);
     // Standing lanterns lean like the houses do, fallen ones lie flat
     const k = 1 - s;
     const tx = p.down ? p.x + Math.cos(p.fa) * h : p.x * s + cx * k;
@@ -838,7 +839,8 @@ export function drawTrees(trees, cx, cy, hc, x0, y0, x1, y1) {
     if (t.cut) {
       continue;
     }
-    const s = hc / (hc - t.h);
+    const ht = hc / near(t.x, t.y);
+    const s = ht / (ht - t.h);
     const x = t.x * s + cx * (1 - s);
     const y = t.y * s + cy * (1 - s);
     if (
@@ -849,6 +851,7 @@ export function drawTrees(trees, cx, cy, hc, x0, y0, x1, y1) {
     ) {
       continue; // the grid hands out whole cells, mostly off the screen
     }
+    stand(t.x, t.y);
     ctx.beginPath();
     ctx.moveTo(t.x, t.y);
     ctx.lineTo(x, y);

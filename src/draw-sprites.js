@@ -6,6 +6,7 @@
 import {MAP} from '../map.js';
 import {makeSign} from './buildings.js';
 import {puff} from './effects.js';
+import {stand} from './hills.js';
 import {SHIRTS} from './people.js';
 import {SPOT} from './places.js';
 import {carSprite, icon} from './sprites.js';
@@ -244,6 +245,7 @@ export function drawAir() {
     if (!(c.alt > 0.3)) {
       continue;
     }
+    stand(c.x, c.y);
     const type = c.type;
     const lift = c.alt * 5;
     for (const sh of [lift, 0]) {
@@ -284,6 +286,8 @@ function drawProps() {
     if (pr.from > j.i || pr.until <= j.i) {
       continue;
     }
+    // A tent and the stage stand at the place itself, the rest beside it.
+    stand(...(pr.k === 'tent' || pr.k === 'stage' ? MAP.pois[pr.at] : [x, y]));
     if (pr.k === 'fire') {
       ctx.fillStyle = '#3a2a1a';
       ctx.beginPath();
@@ -391,6 +395,7 @@ function drawItem(v) {
 /** The player on foot, in a yellow ring, with the hammer if a job has one. */
 function drawPlayer() {
   const player = state.player;
+  stand(player.x, player.y);
   ctx.strokeStyle = '#ffd23e';
   ctx.lineWidth = 0.15;
   ctx.beginPath();
@@ -543,8 +548,15 @@ function drawCar(c) {
  */
 export function drawSprites(x0, y0, x1, y1) {
   const job = state.job;
-  const seen = o =>
-    o.x > x0 - 14 && o.x < x1 + 14 && o.y > y0 - 14 && o.y < y1 + 14;
+  // Whether a thing is in view. If it is, the canvas is put on its spot on
+  // the hills.
+  const seen = o => {
+    if (o.x < x0 - 14 || o.x > x1 + 14 || o.y < y0 - 14 || o.y > y1 + 14) {
+      return false;
+    }
+    stand(o.x, o.y);
+    return true;
+  };
   for (const mark of state.skids) {
     if (seen(mark)) {
       // A minute at full strength, then ten seconds fading away.
@@ -619,6 +631,7 @@ export function drawSprites(x0, y0, x1, y1) {
  */
 export function drawParticles() {
   for (const p of state.parts) {
+    stand(p.x, p.y);
     const k = p.life / p.max;
     if (
       p.kind === 'spark' ||

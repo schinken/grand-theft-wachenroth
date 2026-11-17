@@ -7,6 +7,7 @@ import {MAP} from '../map.js';
 import * as audio from './audio.js';
 import {bounce, damage} from './cars.js';
 import {pushOut} from './geometry.js';
+import {stand} from './hills.js';
 import {SEGS} from './land.js';
 import {state} from './state.js';
 import {PX_PER_M, TAU, canvas, clamp, dist} from './util.js';
@@ -312,6 +313,7 @@ export function drawTrain(x0, y0, x1, y1) {
     ) {
       continue;
     }
+    stand(v.x, v.y);
     ctx.save();
     ctx.translate(v.x, v.y);
     ctx.rotate(v.a);
