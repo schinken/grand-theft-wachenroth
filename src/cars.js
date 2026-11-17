@@ -154,7 +154,7 @@ export function damage(c, imp) {
       puff(c.x, c.y, 'spark');
     }
   }
-  c.hp -= ((imp - 5) * 0.55) / c.type.mass;
+  c.hp -= ((imp - 5) * 0.35) / c.type.mass;
   if (c.ai) {
     c.ai.rage = 5;
   }
