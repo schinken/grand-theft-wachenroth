@@ -4,6 +4,9 @@
 // pager), steps, and maybe props (scenery, see below), sober: true (ends the
 // drunkenness), drunk: n (leaves you drunk for n seconds) or night: true (it
 // is dark while the job lasts).
+// intro, outro and step.say accept text for Flo's pager, or {speaker, text}
+// for spoken subtitles. Speaker colours and optional portraits live in
+// dialogue.js.
 //
 // A step: do (its kind), obj (the task, on the pager), say (Flo's message as
 // it starts), and what its kind needs:
@@ -1203,7 +1206,7 @@ export const MISSIONS = [
   },
   {
     id: 'voelkerverstaendigung',
-    title: 'Völkerverständigung mit Wohnwagen',
+    title: 'Völkerverständigung',
     reward: 1800,
     intro: [
       'Im Ortskern beim Rathaus steht ein Auswärtiger mit Auto und Wohnwagen. Der redet alle Passanten an, aber keiner versteht ihn.',
@@ -1227,14 +1230,20 @@ export const MISSIONS = [
         do: 'caravan',
         phase: 'find',
         obj: 'Finde Leon-Maximilian mit seinem Handy im Dorf (zu Fuß ansprechen)',
-        say: 'Frau Gruber: Unser Leon-Maximilian ist im Dorf unterwegs, mit diesem Pornomon KO! auf dem Handy. Schau nordwestlich vom Ortskern, da läuft er auf dem Gehsteig herum. Und sag ihm, dass er heut noch was Gescheites machen soll!',
+        say: {
+          speaker: 'gruber',
+          text: 'Unser Leon-Maximilian ist im Dorf unterwegs, mit diesem Pornomon KO! auf dem Handy. Schau nordwestlich vom Ortskern, da läuft er auf dem Gehsteig herum. Und sag ihm, dass er heut noch was Gescheites machen soll!',
+        },
       },
       {
         do: 'caravan',
         phase: 'buy',
         to: 'shop',
         obj: 'Kauf im Edeka eine Dose Energie Trunk für Leon-Maximilian (3 €)',
-        say: 'Leon-Maximilian: Klar kann ich Vogtländisch, ich studier doch in Dresden! Aber mein Energielevel ist komplett im Keller. Erst eine Dose Energie Trunk vom Edeka, dann übersetze ich. Mein Pornomon KO! hat auch schon Durst.',
+        say: {
+          speaker: 'leon',
+          text: 'Klar kann ich Vogtländisch, ich studier doch in Dresden! Aber mein Energielevel ist komplett im Keller. Erst eine Dose Energie Trunk vom Edeka, dann übersetze ich. Mein Pornomon KO! hat auch schon Durst.',
+        },
       },
       {
         do: 'caravan',
@@ -1246,7 +1255,10 @@ export const MISSIONS = [
         do: 'caravan',
         phase: 'board',
         obj: 'Hol ein Auto und lass Leon-Maximilian einsteigen',
-        say: 'Leon-Maximilian: Ahhh! Energielevel hundert Prozent. Pornomon KO! kann warten. Hol ein Auto und fahr neben mich, ich steig ein!',
+        say: {
+          speaker: 'leon',
+          text: 'Ahhh! Energielevel hundert Prozent. Pornomon KO! kann warten. Hol ein Auto und fahr neben mich, ich steig ein!',
+        },
       },
       {
         do: 'caravan',
@@ -1259,12 +1271,18 @@ export const MISSIONS = [
         do: 'caravan',
         phase: 'escort',
         to: 'garage',
-        obj: 'Eskortiere das Gespann zur Werkstatt. Langsam fahren, warten, Unfälle vermeiden!',
-        say: 'Leon-Maximilian übersetzt: Er hat eine Panne! Der Motor zieht kaum noch, bis zur Werkstatt schafft er es gerade noch. Fahr voraus, er folgt deiner Strecke. Bleib unter 35 km/h und warte, wenn er zurückfällt. Beide Fahrzeuge müssen bei Mechanic Monkeys ankommen!',
+        obj: 'Eskortiere das Gespann zur Werkstatt und lass es dort anhalten. Aussteigen ist erlaubt!',
+        say: {
+          speaker: 'leon',
+          text: 'Er hat eine Panne! Der Motor zieht kaum noch, bis zur Werkstatt schafft er es gerade noch. Fahr am Gespann vorbei und dann auf der Straße voraus, er folgt deiner Strecke. Bleib unter 35 km/h und warte, wenn er zurückfällt. Beide Fahrzeuge müssen bei Mechanic Monkeys ankommen!',
+        },
       },
     ],
     outro: [
-      'Leon-Maximilian: Er sagt danke. Und dass ihm hier alle so komisch vorkommen, wenn sie reden.',
+      {
+        speaker: 'leon',
+        text: 'Er sagt danke. Und dass ihm hier alle so komisch vorkommen, wenn sie reden.',
+      },
       'Gespann heil bei Mechanic Monkeys! Völkerverständigung für drei Euro Dosenbrause. Und der Gruber-Sohn hat endlich mal was anderes gefangen als Pornomon.',
     ],
   },

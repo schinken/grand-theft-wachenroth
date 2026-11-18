@@ -4,6 +4,7 @@
  */
 
 import * as audio from './audio.js';
+import {speak} from './dialogue.js';
 import {state} from './state.js';
 import {TAU, byId, clamp, rand} from './util.js';
 
@@ -162,4 +163,18 @@ export function page(...msgs) {
     audio.play('pager');
   }
   pg.q.push(...msgs);
+}
+
+/**
+ * Mission messages: Flo uses the pager, a named person uses subtitles.
+ * @param {...(string|!Object)} msgs Text, or {speaker, text}.
+ */
+export function message(...msgs) {
+  for (const msg of msgs) {
+    if (typeof msg === 'string') {
+      page(msg);
+    } else {
+      speak(msg.speaker, msg.text);
+    }
+  }
 }

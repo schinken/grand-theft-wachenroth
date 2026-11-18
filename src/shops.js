@@ -43,7 +43,12 @@ export function shops() {
         },
       },
     ]);
-  } else if (c && !c.burn && dist(player, SPOT.garage) < 6) {
+  } else if (
+    c &&
+    !c.burn &&
+    dist(player, SPOT.garage) < 6 &&
+    !(j && j.caravan && j.step.phase === 'escort')
+  ) {
     if (Math.hypot(c.vx, c.vy) < 3) {
       state.shopCool = 'garage';
       openGarage(c);

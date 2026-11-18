@@ -3,6 +3,7 @@
  */
 
 import * as audio from './audio.js';
+import {SPEAKERS} from './dialogue.js';
 import {nearest} from './geometry.js';
 import {SEGS} from './land.js';
 import {MISSIONS, PLACES} from './missions.js';
@@ -157,6 +158,54 @@ function showPager(dt) {
   }
 }
 
+/** Spoken words: coloured by speaker, with an optional portrait. */
+function showSubtitles() {
+  const line = state.dialogue.cur;
+  const visible =
+    !!line &&
+    state.mode === 'play' &&
+    !state.paused &&
+    !state.shop &&
+    !state.map;
+  show('subtitlesVisible', visible, () => {
+    byId('subtitles').hidden = !visible;
+  });
+  if (!line) {
+    return;
+  }
+  const profile = SPEAKERS[line.speaker] || {
+    name: line.speaker,
+    color: '#ffffff',
+    portrait: null,
+  };
+  const key = JSON.stringify([line.speaker, line.text, profile]);
+  show('subtitleLine', key, () => {
+    const el = byId('subtitles');
+    el.style.color = profile.color;
+    el.querySelector('strong').textContent = profile.name;
+    el.querySelector('span').textContent = line.text;
+    const portrait = el.querySelector('img');
+    const source = profile.portrait;
+    portrait.hidden = true;
+    if (source) {
+      portrait.alt = profile.name;
+      portrait.onload = () => {
+        portrait.hidden = portrait.getAttribute('src') !== source;
+      };
+      portrait.onerror = () => {
+        portrait.hidden = true;
+      };
+      portrait.src = source;
+      if (portrait.complete && portrait.naturalWidth) {
+        portrait.hidden = false;
+      }
+    } else {
+      portrait.removeAttribute('src');
+      portrait.alt = '';
+    }
+  });
+}
+
 /**
  * The gauge of a job: the load or the wood that is left, or how far a hold
  * or a collection has got. Other steps have none.
@@ -286,6 +335,7 @@ export function hud(dt) {
   const c = state.player.car;
   showGauges(dt);
   showPager(dt);
+  showSubtitles();
   showMission();
   if ((state.whereT -= dt) <= 0) {
     state.whereT = 0.5;

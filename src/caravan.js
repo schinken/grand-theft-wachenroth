@@ -3,14 +3,15 @@
  */
 
 import {hitch, makeCar} from './cars.js';
-import {info, page} from './effects.js';
+import {speak} from './dialogue.js';
+import {info} from './effects.js';
 import {nearest} from './geometry.js';
 import {DRIVE, NODES, SEGS, surfAt, town} from './land.js';
-import {SPOT, field, nearLink, routeLine} from './places.js';
+import {SPOT, field, nearLink} from './places.js';
 import {shove} from './player.js';
 import {blocked} from './scenery.js';
 import {state} from './state.js';
-import {dist, wrap} from './util.js';
+import {clamp, dist, wrap} from './util.js';
 
 /**
  * A clear pavement stretch northwest of the centre, away from the visitor.
@@ -84,8 +85,10 @@ function studentWalk() {
 export function beginCaravan(j) {
   if (!j.caravan) {
     const [link, x, y] = nearLink(SPOT.townhall);
-    const a = NODES[link[0]];
-    const b = NODES[link[1]];
+    const garage = field(SPOT.garage);
+    const forward = garage[link[1]] < garage[link[0]];
+    const a = NODES[link[forward ? 0 : 1]];
+    const b = NODES[link[forward ? 1 : 0]];
     const angle = Math.atan2(b.y - a.y, b.x - a.x);
     const lane = Math.min(a.w, b.w) / 4;
     const rig = hitch(
@@ -135,15 +138,15 @@ export function beginCaravan(j) {
     j.to = c.student;
   }
   if (phase === 'escort') {
-    page(
-      'Wohnwagenfahrer: Nu fahr när sachte vor, iech kumm fei hinnerdrher. Mei Wuhngwaachn muss heil bleim!'
+    speak(
+      'visitor',
+      'Nu fahr när sachte vor, iech kumm fei hinnerdrher. Mei Wuhngwaachn muss heil bleim!'
     );
-    const line = routeLine(field(state.player), c.rig, state.player);
-    c.trail = [];
-    for (let i = 2; i < line.length; i += 2) {
-      c.trail.push({x: line[i], y: line[i + 1]});
-    }
-    c.last = {...state.player};
+    // Never chase the player's parking manoeuvre or position on foot. Wait
+    // until the lead car has passed the rig before beginning its trail.
+    c.trail = [{x: c.rig.x, y: c.rig.y}];
+    c.last = null;
+    c.departed = false;
     c.rig.ai = {escort: c, wait: 0};
   }
 }
@@ -203,8 +206,22 @@ export function moveCaravan(j, dt) {
   if (phase !== 'escort') {
     return;
   }
-  // Store only the route actually driven; a shortcut is never invented.
-  if (p.car && dist(p, c.last) > 2) {
+  const dx = p.x - c.rig.x;
+  const dy = p.y - c.rig.y;
+  const fx = Math.cos(c.rig.a);
+  const fy = Math.sin(c.rig.a);
+  if (
+    !c.departed &&
+    p.car &&
+    dx * fx + dy * fy > 8 &&
+    Math.abs(dy * fx - dx * fy) < 8
+  ) {
+    c.departed = true;
+    c.last = {x: c.rig.x, y: c.rig.y};
+  }
+  // Record forward driving only. Reversing to park must not send the
+  // caravan back towards a stop or through the same turning manoeuvre.
+  if (p.car && c.departed && p.car.vf >= -0.5 && dist(p, c.last) > 1.5) {
     c.trail.push({x: p.x, y: p.y});
     c.last = {x: p.x, y: p.y};
   }
@@ -235,8 +252,9 @@ export function caravanDone(j, dt) {
   switch (j.step.phase) {
     case 'visitor':
       if (near) {
-        page(
-          'Wohnwagenfahrer: Nu gugge när! Mei Audoo rucklt un dr Wuhngwaachn hängt aa noch droo. Wu issn do e Wärkschdadd? Iech verschdie eich fei net!'
+        speak(
+          'visitor',
+          'Nu gugge när! Mei Audoo rucklt un dr Wuhngwaachn hängt aa noch droo. Wu issn do e Wärkschdadd? Iech verschdie eich fei net!'
         );
       }
       return near;
@@ -264,23 +282,22 @@ export function caravanDone(j, dt) {
           dist(p, c.visitor) < 12) ||
           (near && dist(c.student, c.visitor) < 8))
       ) {
-        page(
-          'Wohnwagenfahrer: Dr Moddor hot fei kaan Zuch mehr. Iech brauch e Wärkschdadd, sunsd bleim mir do midn Wuhngwaachn schdehn. Kannsd när vorfoahrn?'
+        speak(
+          'visitor',
+          'Dr Moddor hot fei kaan Zuch mehr. Iech brauch e Wärkschdadd, sunsd bleim mir do midn Wuhngwaachn schdehn. Kannsd när vorfoahrn?'
         );
         return true;
       }
       return false;
     case 'escort':
       c.wait =
-        stopped &&
-        dist(p, SPOT.garage) < 18 &&
-        dist(c.rig, SPOT.garage) < 24 &&
-        Math.abs(c.rig.vf) < 1.5
+        dist(c.rig, SPOT.garage) < 24 && Math.hypot(c.rig.vx, c.rig.vy) < 1.5
           ? c.wait + dt
           : 0;
       if (c.wait > 2) {
-        page(
-          'Wohnwagenfahrer: Do simmer! Nu bassds. Habt fei vieln Dank, ihr gudn Leit!'
+        speak(
+          'visitor',
+          'Do simmer! Nu bassds. Habt fei vieln Dank, ihr gudn Leit!'
         );
         return true;
       }
@@ -335,31 +352,76 @@ export function caravanPeople(j) {
 export function driveEscort(car, dt) {
   const c = car.ai.escort;
   const points = c.trail;
-  while (points.length > 1 && dist(car, points[0]) < 4) {
-    points.shift();
-  }
   const p = state.player;
-  const gap = dist(car, p);
-  const target = points[0];
-  const err = target
-    ? wrap(Math.atan2(target.y - car.y, target.x - car.x) - car.a)
-    : 0;
-  const speed = Math.max(2, 9 * (1 - Math.min(0.8, Math.abs(err))));
   const fx = Math.cos(car.a);
   const fy = Math.sin(car.a);
-  const obstacle = state.cars.some(o => {
-    const dx = o.x - car.x;
-    const dy = o.y - car.y;
-    return (
-      o !== car &&
-      dx * fx + dy * fy > 0 &&
-      dx * fx + dy * fy < 6 + Math.max(0, car.vf) &&
-      Math.abs(dy * fx - dx * fy) < (car.type.width + o.type.width) / 2
-    );
-  });
-  const wait = !p.car || !target || obstacle || (points.length < 4 && gap < 15);
-  car.thr = wait ? (car.vf > 0.2 ? -1 : 0) : car.vf < speed ? 0.65 : -0.4;
+  const wheelbase = car.type.wheelbase;
+  const rear = {
+    x: car.x - (fx * wheelbase) / 2,
+    y: car.y - (fy * wheelbase) / 2,
+  };
+  // Project onto the next few metres of the recorded path, then discard
+  // only the part already passed. A missed point can never cause a U-turn.
+  let best = Infinity;
+  let segment = 0;
+  let projection = points[0];
+  let scanned = 0;
+  for (let i = 0; i + 1 < points.length && scanned < 18; i++) {
+    const a = points[i];
+    const b = points[i + 1];
+    const q = nearest(rear.x, rear.y, a.x, a.y, b.x, b.y);
+    const d = Math.hypot(rear.x - q[0], rear.y - q[1]);
+    if (d < best - 0.05) {
+      best = d;
+      segment = i;
+      projection = {x: q[0], y: q[1]};
+    }
+    scanned += dist(a, b);
+  }
+  points.splice(0, segment);
+  if (projection) {
+    points[0] = projection;
+  }
+  const v = Math.max(0, car.vf);
+  let look = 3.5 + v * 0.7;
+  let remaining = 0;
+  let target = null;
+  for (let i = 0; i + 1 < points.length; i++) {
+    const a = points[i];
+    const b = points[i + 1];
+    const length = dist(a, b);
+    remaining += length;
+    if (!target && length >= look) {
+      const t = length ? look / length : 0;
+      target = {x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t};
+    }
+    look -= length;
+  }
+  target ||= points[points.length - 1];
+  const err = target
+    ? wrap(Math.atan2(target.y - rear.y, target.x - rear.x) - car.a)
+    : 0;
+  const want = Math.min(
+    9,
+    9 / (1 + Math.abs(err) * 2),
+    Math.sqrt(Math.max(0, remaining - 11) * 4)
+  );
+  const wait = !p.car || !c.departed || remaining <= 11;
+  car.thr = wait
+    ? car.vf > 0.2
+      ? -1
+      : 0
+    : clamp((want - car.vf) * 0.6, -1, 0.65);
   car.hb = wait && car.vf < 1;
-  car.steer = Math.max(-1, Math.min(1, err * 2.2));
+  const limit = Math.min(
+    0.62,
+    Math.atan(((14 + v) * wheelbase) / (v * v || 1))
+  );
+  const distance = target ? Math.max(1, dist(rear, target)) : 1;
+  car.steer = clamp(
+    Math.atan((2 * wheelbase * Math.sin(err)) / distance) / limit,
+    -1,
+    1
+  );
   car.ai.wait = wait ? car.ai.wait + dt : 0;
 }

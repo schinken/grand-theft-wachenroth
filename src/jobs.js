@@ -12,7 +12,8 @@ import {
   parkCaravan,
 } from './caravan.js';
 import {bail, hitch, makeCar, repaint} from './cars.js';
-import {decal, flash, float, info, page, puff} from './effects.js';
+import {clearDialogue} from './dialogue.js';
+import {decal, flash, float, info, message, page, puff} from './effects.js';
 import {nearest} from './geometry.js';
 import {roadPoint} from './items.js';
 import {NODES, SEGS, surfAt} from './land.js';
@@ -49,6 +50,7 @@ function spawnAt(kind, key, trailer) {
 
 /** Starts the next mission. */
 export function startJob() {
+  clearDialogue();
   const m = MISSIONS[state.jobN];
   state.job = {
     m,
@@ -67,7 +69,7 @@ export function startJob() {
   };
   state.items = state.items.filter(v => !v.job);
   flash(m.title, `Auftrag ${state.jobN + 1} von ${MISSIONS.length}`);
-  page(...m.intro);
+  message(...m.intro);
   nextStep();
 }
 
@@ -742,11 +744,15 @@ export function nextStep() {
   j.need = 0; // only a collect step counts things
   j.told = false;
   j.to = st.to ? SPOT[st.to] : st.house ? houseSpot(state.player) : null;
-  const fill = text => text.replace('{street}', j.to && j.to.name);
+  const fillText = text => text.replace('{street}', j.to && j.to.name);
+  const fill = msg =>
+    typeof msg === 'string'
+      ? fillText(msg)
+      : {...msg, text: fillText(msg.text)};
   setTerms(j, st);
   setCast(j, st);
   if (st.say) {
-    page(fill(st.say));
+    message(fill(st.say));
   }
   state.pager.idle = fill(st.obj);
   beginStep(j, st);
@@ -948,6 +954,11 @@ function endJob() {
   const j = state.job;
   const m = j.m;
   parkCaravan(j);
+  if (j.caravan) {
+    // Leave the success and final conversation visible. The workshop opens
+    // normally on the next visit, after the player has left its entrance.
+    state.shopCool = 'garage';
+  }
   state.job = null;
   state.jobN++;
   state.nextJob = 8;
@@ -967,7 +978,7 @@ function endJob() {
   flash('Mission erfüllt!', `+${fmt(m.reward)}`);
   audio.play('win');
   store();
-  page(...m.outro);
+  message(...m.outro);
   if (state.jobN >= MISSIONS.length) {
     state.nextJob = 1e9;
     state.finale = 9;
@@ -995,6 +1006,7 @@ const LOST = {
  * @param {string} why
  */
 export function failJob(why) {
+  clearDialogue();
   const j = state.job;
   parkCaravan(j);
   state.job = null;
