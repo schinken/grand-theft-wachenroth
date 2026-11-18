@@ -119,6 +119,35 @@ export function hitch(c, kind) {
 }
 
 /**
+ * Collision circles relative to the car's centre, including its caravan.
+ * @param {!Car} c
+ * @return {!Array<!Object>} Offsets in world axes, and radii.
+ */
+export function vehicleCircles(c) {
+  const fx = Math.cos(c.a);
+  const fy = Math.sin(c.a);
+  const circles = c.type.offs.map(off => ({
+    x: fx * off,
+    y: fy * off,
+    r: c.type.r,
+  }));
+  if (c.tr && c.tr.kind === 'caravan') {
+    const tr = c.tr;
+    const tx = Math.cos(tr.a);
+    const ty = Math.sin(tr.a);
+    const back = tr.type.length / 2 + 0.4;
+    const x = (-fx * c.type.length) / 2 - tx * back;
+    const y = (-fy * c.type.length) / 2 - ty * back;
+    const r = tr.type.width / 2;
+    const end = tr.type.length / 2 - r;
+    for (const off of [-end, 0, end]) {
+      circles.push({x: x + tx * off, y: y + ty * off, r});
+    }
+  }
+  return circles;
+}
+
+/**
  * Pushes a car out of something it hit.
  * @param {!Car} c
  * @param {!Array<number>} h [nx, ny, depth].
@@ -537,10 +566,11 @@ export function stepCar(c, dt) {
  * @param {number} fy
  */
 function hitScenery(c, fx, fy) {
-  const type = c.type;
-  for (const off of type.offs) {
-    const px = c.x + fx * off;
-    const py = c.y + fy * off;
+  for (const circle of vehicleCircles(c)) {
+    const type = {r: circle.r};
+    const off = circle.x * fx + circle.y * fy;
+    const px = c.x + circle.x;
+    const py = c.y + circle.y;
     if (surfAt(px, py) & 2) {
       continue;
     }
@@ -553,7 +583,7 @@ function hitScenery(c, fx, fy) {
       ) {
         continue;
       }
-      const h = pushOut(c.x + fx * off, c.y + fy * off, type.r, b.p);
+      const h = pushOut(c.x + circle.x, c.y + circle.y, type.r, b.p);
       if (h) {
         damage(c, bounce(c, h, off));
       }
@@ -562,8 +592,8 @@ function hitScenery(c, fx, fy) {
       if (t.cut) {
         continue;
       }
-      const dx = c.x + fx * off - t.x;
-      const dy = c.y + fy * off - t.y;
+      const dx = c.x + circle.x - t.x;
+      const dy = c.y + circle.y - t.y;
       const d = Math.hypot(dx, dy);
       if (d && d < type.r + 0.4) {
         damage(c, bounce(c, [dx / d, dy / d, type.r + 0.4 - d], off));
@@ -572,7 +602,7 @@ function hitScenery(c, fx, fy) {
     for (const p of at(propGrid, px, py)) {
       if (
         !p.down &&
-        Math.hypot(c.x + fx * off - p.x, c.y + fy * off - p.y) < type.r + 0.2
+        Math.hypot(c.x + circle.x - p.x, c.y + circle.y - p.y) < type.r + 0.2
       ) {
         knock(p, c);
       }
@@ -631,19 +661,21 @@ function collidePair(a, b) {
   const player = state.player;
   const ma = a.type.mass * (a.dead ? 2 : 1);
   const mb = b.type.mass * (b.dead ? 2 : 1);
-  const min = a.type.r + b.type.r;
   let touch = false;
-  for (const oa of a.type.offs) {
-    for (const ob of b.type.offs) {
-      const dx = b.x + Math.cos(b.a) * ob - a.x - Math.cos(a.a) * oa;
-      const dy = b.y + Math.sin(b.a) * ob - a.y - Math.sin(a.a) * oa;
+  const circlesA = vehicleCircles(a);
+  const circlesB = vehicleCircles(b);
+  for (const oa of circlesA) {
+    for (const ob of circlesB) {
+      const min = oa.r + ob.r;
+      const dx = b.x + ob.x - a.x - oa.x;
+      const dy = b.y + ob.y - a.y - oa.y;
       const d = Math.hypot(dx, dy);
-      if (!d || d >= min) {
+      if (d >= min) {
         continue;
       }
       touch = true;
-      const nx = dx / d;
-      const ny = dy / d;
+      const nx = d ? dx / d : 1;
+      const ny = d ? dy / d : 0;
       const pen = min - d;
       a.x -= (nx * pen * mb) / (ma + mb);
       a.y -= (ny * pen * mb) / (ma + mb);
@@ -658,10 +690,8 @@ function collidePair(a, b) {
       a.vy -= (impulse / ma) * ny;
       b.vx += (impulse / mb) * nx;
       b.vy += (impulse / mb) * ny;
-      a.spin -=
-        ((oa * (Math.cos(a.a) * ny - Math.sin(a.a) * nx) * impulse) / ma) * 0.1;
-      b.spin +=
-        ((ob * (Math.cos(b.a) * ny - Math.sin(b.a) * nx) * impulse) / mb) * 0.1;
+      a.spin -= (((oa.x * ny - oa.y * nx) * impulse) / ma) * 0.1;
+      b.spin += (((ob.x * ny - ob.y * nx) * impulse) / mb) * 0.1;
       damage(a, ((-rv * mb) / (ma + mb)) * 1.6);
       damage(b, ((-rv * ma) / (ma + mb)) * 1.6);
       const other = a === player.car ? b : b === player.car ? a : null;
@@ -676,6 +706,9 @@ function collidePair(a, b) {
 // Where in state.cars the cars are that collideCars() has to look at, in
 // ascending order. Kept between rounds, to save the allocation.
 const awakeCars = [];
+const collisionExtent = c =>
+  c.type.length / 2 +
+  (c.tr && c.tr.kind === 'caravan' ? c.tr.type.length + 0.4 : 0);
 
 /**
  * Vehicle against vehicle. Cars that have not moved cannot run into each
@@ -713,9 +746,10 @@ export function collideCars() {
         j = awake[k];
       }
       const b = cs[j];
+      const reach = Math.max(12, collisionExtent(a) + collisionExtent(b));
       const apart =
-        Math.abs(a.x - b.x) > 12 ||
-        Math.abs(a.y - b.y) > 12 ||
+        Math.abs(a.x - b.x) > reach ||
+        Math.abs(a.y - b.y) > reach ||
         a.alt > 0.3 ||
         b.alt > 0.3;
       if (apart || !collidePair(a, b)) {

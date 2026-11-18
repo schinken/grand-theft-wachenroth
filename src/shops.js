@@ -23,7 +23,27 @@ export function shops() {
   if (state.shopCool || state.mode !== 'play' || state.wasted) {
     return;
   }
-  if (c && !c.burn && dist(player, SPOT.garage) < 6) {
+  const j = state.job;
+  if (
+    !c &&
+    j &&
+    j.caravan &&
+    j.step.phase === 'buy' &&
+    dist(player, SPOT.shop) < 3
+  ) {
+    state.shopCool = 'shop';
+    openShop('Edeka Claudia', 'Eine kalte Dose für den Übersetzer.', [
+      {
+        label: 'Dose Energie Trunk',
+        price: 3,
+        credit: true, // Flo puts this mission expense on his tab.
+        ok: () => state.job === j && !j.caravan.energy,
+        buy() {
+          j.caravan.energy = true;
+        },
+      },
+    ]);
+  } else if (c && !c.burn && dist(player, SPOT.garage) < 6) {
     if (Math.hypot(c.vx, c.vy) < 3) {
       state.shopCool = 'garage';
       openGarage(c);

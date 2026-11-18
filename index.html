@@ -329,6 +329,7 @@
         min-height: 1.2em;
       }
       #dmg div,
+      #convoy div,
       #nos div {
         display: inline-block;
         width: 130px;
@@ -338,6 +339,7 @@
         background: #333;
       }
       #dmg i,
+      #convoy i,
       #nos i {
         display: block;
         height: 100%;
@@ -345,6 +347,21 @@
       }
       #nos i {
         background: #3bb0ff;
+      }
+      #convoy {
+        color: #ff5a1f;
+        margin-bottom: 6px;
+      }
+      #convoy strong {
+        display: block;
+        color: #ff3030;
+        font-size: inherit;
+      }
+      #convoy div {
+        margin-left: 0;
+      }
+      #convoy i {
+        background: #ff3030;
       }
       #info {
         color: var(--gold);
@@ -567,6 +584,7 @@
           font-size: 15px;
         }
         #dmg div,
+        #convoy div,
         #nos div {
           width: 90px;
         }
@@ -624,6 +642,18 @@
       <div id="foot">
         <div id="info" class="out" hidden></div>
         <div id="where" class="out"></div>
+        <div id="convoy" class="out" hidden>
+          <strong>Wohnwagengespann</strong>
+          <div
+            role="progressbar"
+            aria-label="Zustand Wohnwagengespann"
+            aria-valuemin="0"
+            aria-valuemax="100"
+          >
+            <i></i>
+          </div>
+          <span>100 %</span>
+        </div>
         <div id="dmg" class="out">
           KAROSSE
           <div><i></i></div>

@@ -47,6 +47,21 @@ function show(key, value, write) {
  */
 function showGauges(dt) {
   const c = state.player.car;
+  const cast = state.job && state.job.caravan;
+  show('hasConvoy', !!cast, () => {
+    byId('convoy').hidden = !cast;
+  });
+  if (cast) {
+    const condition = Math.round(
+      clamp((cast.rig.hp / cast.health - 0.75) / 0.25, 0, 1) * 100
+    );
+    show('convoyCondition', condition, () => {
+      const el = byId('convoy');
+      el.querySelector('i').style.width = `${condition}%`;
+      el.querySelector('div').setAttribute('aria-valuenow', condition);
+      el.querySelector('span').textContent = `${condition} %`;
+    });
+  }
   state.shown =
     Math.abs(state.money - state.shown) < 1
       ? state.money

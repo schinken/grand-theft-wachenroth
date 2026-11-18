@@ -688,6 +688,7 @@ export function carSprite(kind, col, frame = 0, extras = '') {
 }
 
 export const TRAILERS = {
+  caravan: {length: 4.8, width: 2.15},
   grain: {length: 5.2, width: 2.3},
   log: {length: 13, width: 1.8},
   cart: {length: 5.2, width: 2.3},
@@ -814,6 +815,30 @@ function paintMaypole(rect, w, h) {
   rect(w - 6, h / 2 - 1, 6, 2, '#333');
 }
 
+/**
+ * A small touring caravan: cream roof, blue stripe, skylight and drawbar.
+ * @param {!Rect} rect
+ * @param {number} w
+ * @param {number} h
+ */
+function paintCaravan(rect, w, h) {
+  rect(w / 2 - 3, 0, 6, h, '#22252b');
+  rect(0, 1, w - 5, h - 2, '#42454b');
+  rect(1, 2, w - 7, h - 4, '#f0e8d2');
+  rect(3, 3, w - 12, h - 6, '#fff9e7');
+  rect(2, 2, w - 9, 1, '#497e9b');
+  rect(2, h - 3, w - 9, 1, '#497e9b');
+  rect(1, 4, 1, h - 8, '#5a8290');
+  rect(w - 7, 4, 1, h - 8, '#5a8290');
+  rect(w / 2 - 6, h / 2 - 3, 6, 6, '#747c80');
+  rect(w / 2 - 5, h / 2 - 2, 4, 4, '#bad4d8');
+  rect(6, h / 2 - 1, 3, 2, '#c5c0b3');
+  rect(0, 2, 1, 2, '#a62b23');
+  rect(0, h - 4, 1, 2, '#a62b23');
+  rect(w - 5, h / 2 - 2, 2, 4, '#72777b');
+  rect(w - 3, h / 2 - 1, 3, 2, '#42454b');
+}
+
 for (const [kind, type] of Object.entries(TRAILERS)) {
   const w = (type.length * PX_PER_M) | 0;
   const h = (type.width * PX_PER_M) | 0;
@@ -825,6 +850,8 @@ for (const [kind, type] of Object.entries(TRAILERS)) {
   };
   if (kind === 'log') {
     paintMaypole(rect, w, h);
+  } else if (kind === 'caravan') {
+    paintCaravan(rect, w, h);
   } else {
     paintCart(kind, rect, w, h);
   }

@@ -3,8 +3,10 @@
  */
 
 import * as audio from './audio.js';
+import {vehicleCircles} from './cars.js';
 import {float} from './effects.js';
 import {NODES} from './land.js';
+import {nearNode} from './places.js';
 import {shove, waste} from './player.js';
 import {state} from './state.js';
 import {crime} from './traffic.js';
@@ -180,14 +182,8 @@ export function knockPed(p, vx, vy, byPlayer) {
  * @return {boolean}
  */
 function touching(o, c, r) {
-  for (const off of c.type.offs) {
-    if (
-      Math.hypot(
-        o.x - c.x - Math.cos(c.a) * off,
-        o.y - c.y - Math.sin(c.a) * off
-      ) <
-      c.type.r + r
-    ) {
+  for (const circle of vehicleCircles(c)) {
+    if (Math.hypot(o.x - c.x - circle.x, o.y - c.y - circle.y) < circle.r + r) {
       return true;
     }
   }
@@ -317,6 +313,29 @@ export function walkersVsCars() {
     }
     if (afoot) {
       carVsPlayer(c, sp);
+    }
+    const j = state.job;
+    const cast = j && j.caravan;
+    if (
+      cast &&
+      j.caught !== 'student' &&
+      (!cast.aboard || !player.car) &&
+      sp > 3 &&
+      touching(cast.student, c, 0.35)
+    ) {
+      const from = nearNode(cast.student, 'walk');
+      const p = spawnPed(
+        cast.student.x,
+        cast.student.y,
+        from,
+        NODES[from].walk[0]
+      );
+      p.shirt = '#71b43d';
+      p.hair = '#4a3018';
+      knockPed(p, c.vx, c.vy, c === player.car);
+      j.caught = 'student';
+      c.vx *= 0.92;
+      c.vy *= 0.92;
     }
   }
 }
