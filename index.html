@@ -182,6 +182,44 @@
       #hud > * {
         position: fixed;
       }
+      #subtitles {
+        left: 50%;
+        bottom: calc(38px + var(--b));
+        transform: translateX(-50%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+        width: min(820px, 62vw);
+        pointer-events: none;
+        text-align: center;
+        font:
+          bold clamp(19px, 2.3vw, 29px)/1.3 Arial,
+          sans-serif;
+        text-shadow:
+          -1px -1px 0 #000,
+          1px -1px 0 #000,
+          -1px 1px 0 #000,
+          2px 2px 2px #000,
+          0 0 5px #000;
+        overflow-wrap: anywhere;
+      }
+      #subtitles strong {
+        display: block;
+        margin-bottom: 3px;
+        font-size: 0.72em;
+        letter-spacing: 0.04em;
+      }
+      #subtitles img {
+        width: 76px;
+        height: 90px;
+        flex: 0 0 auto;
+        object-fit: contain;
+      }
+      .touch #subtitles {
+        bottom: calc(230px + var(--b));
+        width: calc(100% - 32px);
+      }
       #pager {
         top: calc(10px + var(--t));
         left: calc(12px + var(--l));
@@ -329,6 +367,7 @@
         min-height: 1.2em;
       }
       #dmg div,
+      #convoy div,
       #nos div {
         display: inline-block;
         width: 130px;
@@ -338,6 +377,7 @@
         background: #333;
       }
       #dmg i,
+      #convoy i,
       #nos i {
         display: block;
         height: 100%;
@@ -345,6 +385,21 @@
       }
       #nos i {
         background: #3bb0ff;
+      }
+      #convoy {
+        color: #ff5a1f;
+        margin-bottom: 6px;
+      }
+      #convoy strong {
+        display: block;
+        color: #ff3030;
+        font-size: inherit;
+      }
+      #convoy div {
+        margin-left: 0;
+      }
+      #convoy i {
+        background: #ff3030;
       }
       #info {
         color: var(--gold);
@@ -567,6 +622,7 @@
           font-size: 15px;
         }
         #dmg div,
+        #convoy div,
         #nos div {
           width: 90px;
         }
@@ -575,6 +631,15 @@
         }
       }
       @media (max-height: 520px) {
+        .touch #subtitles {
+          bottom: calc(136px + var(--b));
+          width: 70vw;
+          font-size: clamp(16px, 2.4vw, 23px);
+        }
+        #subtitles img {
+          width: 50px;
+          height: 60px;
+        }
         #btns button {
           width: 62px;
           height: 62px;
@@ -594,6 +659,16 @@
     <canvas id="game" aria-label="Spielansicht"></canvas>
 
     <div id="hud" hidden>
+      <div
+        id="subtitles"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        hidden
+      >
+        <img hidden alt="" />
+        <div><strong></strong><span></span></div>
+      </div>
       <div id="pager">
         <i></i>FLO-FUNK 3000
         <div id="lcd"></div>
@@ -624,6 +699,18 @@
       <div id="foot">
         <div id="info" class="out" hidden></div>
         <div id="where" class="out"></div>
+        <div id="convoy" class="out" hidden>
+          <strong>Wohnwagengespann</strong>
+          <div
+            role="progressbar"
+            aria-label="Zustand Wohnwagengespann"
+            aria-valuemin="0"
+            aria-valuemax="100"
+          >
+            <i></i>
+          </div>
+          <span>100 %</span>
+        </div>
         <div id="dmg" class="out">
           KAROSSE
           <div><i></i></div>

@@ -4,6 +4,7 @@
  */
 
 import * as audio from './audio.js';
+import {stepDialogue} from './dialogue.js';
 import {collideCars, makeCar, stepCar} from './cars.js';
 import {float, page, puff, replay} from './effects.js';
 import {onShow} from './hud.js';
@@ -55,6 +56,7 @@ export function reset(mode, save) {
     jobN: 0,
     nextJob: 5,
     pager: {q: [], cur: '', n: 0, hold: 0, said: 0, idle: ''},
+    dialogue: {q: [], cur: null, left: 0},
     spawnT: 0,
     shake: 0,
     wasted: 0,
@@ -155,7 +157,12 @@ function playRules(dt) {
   } else if ((state.nextJob -= dt) <= 0 && state.jobN < MISSIONS.length) {
     startJob();
   }
-  if (state.finale && (state.finale -= dt) <= 0) {
+  if (
+    state.finale &&
+    !state.dialogue.cur &&
+    !state.dialogue.q.length &&
+    (state.finale -= dt) <= 0
+  ) {
     finish();
   }
 }
@@ -235,6 +242,7 @@ export function camera(dt) {
 export function update(dt) {
   const player = state.player;
   state.t += dt;
+  stepDialogue(dt);
   // Night falls for a job that plays at night, and lifts when it is over.
   const dark = state.job && state.job.m.night ? 1 : 0;
   state.night += clamp(dark - state.night, -dt / 2, dt / 2);

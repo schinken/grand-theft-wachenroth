@@ -4,6 +4,9 @@
 // pager), steps, and maybe props (scenery, see below), sober: true (ends the
 // drunkenness), drunk: n (leaves you drunk for n seconds) or night: true (it
 // is dark while the job lasts).
+// intro, outro and step.say accept text for Flo's pager, or {speaker, text}
+// for spoken subtitles. Speaker colours and optional portraits live in
+// dialogue.js.
 //
 // A step: do (its kind), obj (the task, on the pager), say (Flo's message as
 // it starts), and what its kind needs:
@@ -100,6 +103,7 @@ export const PLACES = {
   fichte: 'Die Festtags-Fichte',
   schreinerei: 'Schreinerei Wichert',
   linsner: 'Gasthof Linsner',
+  grubers: 'Familie Gruber',
 };
 
 // Painted on the roofs of the landmarks.
@@ -1198,6 +1202,88 @@ export const MISSIONS = [
     outro: [
       'Erster! Die Höchstadter zahlen, und zwar alles.',
       'Bei Nacht gehört Wachenroth auch uns.',
+    ],
+  },
+  {
+    id: 'voelkerverstaendigung',
+    title: 'Völkerverständigung',
+    reward: 1800,
+    intro: [
+      'Im Ortskern beim Rathaus steht ein Auswärtiger mit Auto und Wohnwagen. Der redet alle Passanten an, aber keiner versteht ihn.',
+      'Fahr mal hin und schau dir die Sache an. Vielleicht braucht er Hilfe.',
+    ],
+    steps: [
+      {
+        do: 'caravan',
+        phase: 'visitor',
+        to: 'townhall',
+        obj: 'Schau dir das Wohnwagengespann beim Rathaus an (zu Fuß)',
+      },
+      {
+        do: 'caravan',
+        phase: 'family',
+        to: 'grubers',
+        obj: 'Frag bei den Grubers im Norden nach ihrem Sohn (zu Fuß)',
+        say: 'Der spricht tiefstes Vogtländisch und versteht unser Fränkisch auch net! Wir brauchen einen Übersetzer. Fahr zu den Grubers im Norden: Ihr Sohn studiert in Dresden und ist in den Semesterferien daheim.',
+      },
+      {
+        do: 'caravan',
+        phase: 'find',
+        obj: 'Finde Leon-Maximilian mit seinem Handy im Dorf (zu Fuß ansprechen)',
+        say: {
+          speaker: 'gruber',
+          text: 'Unser Leon-Maximilian ist im Dorf unterwegs, mit diesem Pornomon KO! auf dem Handy. Schau nordwestlich vom Ortskern, da läuft er auf dem Gehsteig herum. Und sag ihm, dass er heut noch was Gescheites machen soll!',
+        },
+      },
+      {
+        do: 'caravan',
+        phase: 'buy',
+        to: 'shop',
+        obj: 'Kauf im Edeka eine Dose Energie Trunk für Leon-Maximilian (3 €)',
+        say: {
+          speaker: 'leon',
+          text: 'Klar kann ich Vogtländisch, ich studier doch in Dresden! Aber mein Energielevel ist komplett im Keller. Erst eine Dose Energie Trunk vom Edeka, dann übersetze ich. Mein Pornomon KO! hat auch schon Durst.',
+        },
+      },
+      {
+        do: 'caravan',
+        phase: 'drink',
+        obj: 'Bring Leon-Maximilian die Dose Energie Trunk (zu Fuß)',
+        say: 'Dose eingepackt. Bring sie dem Handyhelden, bevor er sich noch im nächsten Garten ein Pornomon fängt.',
+      },
+      {
+        do: 'caravan',
+        phase: 'board',
+        obj: 'Hol ein Auto und lass Leon-Maximilian einsteigen',
+        say: {
+          speaker: 'leon',
+          text: 'Ahhh! Energielevel hundert Prozent. Pornomon KO! kann warten. Hol ein Auto und fahr neben mich, ich steig ein!',
+        },
+      },
+      {
+        do: 'caravan',
+        phase: 'translate',
+        to: 'townhall',
+        obj: 'Bring Leon-Maximilian zum Wohnwagen: neben dem Fahrer halten oder zum Reden aussteigen',
+        say: 'Leon-Maximilian ist eingestiegen. Zurück zum Rathaus, jetzt wird simultan übersetzt!',
+      },
+      {
+        do: 'caravan',
+        phase: 'escort',
+        to: 'garage',
+        obj: 'Eskortiere das Gespann zur Werkstatt und lass es dort anhalten. Aussteigen ist erlaubt!',
+        say: {
+          speaker: 'leon',
+          text: 'Er hat eine Panne! Der Motor zieht kaum noch, bis zur Werkstatt schafft er es gerade noch. Fahr am Gespann vorbei und dann auf der Straße voraus, er folgt deiner Strecke. Bleib unter 35 km/h und warte, wenn er zurückfällt. Beide Fahrzeuge müssen bei Mechanic Monkeys ankommen!',
+        },
+      },
+    ],
+    outro: [
+      {
+        speaker: 'leon',
+        text: 'Er sagt danke. Und dass ihm hier alle so komisch vorkommen, wenn sie reden.',
+      },
+      'Gespann heil bei Mechanic Monkeys! Völkerverständigung für drei Euro Dosenbrause. Und der Gruber-Sohn hat endlich mal was anderes gefangen als Pornomon.',
     ],
   },
 ];

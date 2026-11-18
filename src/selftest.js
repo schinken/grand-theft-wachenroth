@@ -4,6 +4,7 @@
 
 import {MAP} from '../map.js';
 import {BUILD} from './buildings.js';
+import {caravanDone, driveEscort} from './caravan.js';
 import {hill, pedals, rollCar} from './cars.js';
 import {inFront, parting} from './draw-buildings.js';
 import {FENCE_TILES, FURROWS, fieldMasks} from './draw-ground.js';
@@ -74,6 +75,53 @@ export function selftest() {
     return c;
   };
   const checks = {
+    'the delivered caravan completes the escort with the player on foot':
+      (() => {
+        const player = state.player;
+        const dialogue = state.dialogue;
+        try {
+          state.player = {...SPOT.garage, x: SPOT.garage.x + 30, car: null};
+          state.dialogue = {q: [], cur: null, left: 0};
+          return caravanDone(
+            {
+              step: {phase: 'escort'},
+              to: SPOT.garage,
+              caravan: {rig: {...SPOT.garage, vx: 0, vy: 0}, wait: 0},
+            },
+            2.1
+          );
+        } finally {
+          state.player = player;
+          state.dialogue = dialogue;
+        }
+      })(),
+    'the escort does not turn back to a missed waypoint': (() => {
+      const player = state.player;
+      try {
+        state.player = {car: {}};
+        const car = {
+          x: 0,
+          y: 0,
+          a: 0,
+          vf: 8,
+          type: TYPES.car,
+          ai: {
+            escort: {
+              departed: true,
+              trail: [
+                {x: -6, y: 0},
+                {x: 40, y: 0},
+              ],
+            },
+            wait: 0,
+          },
+        };
+        driveEscort(car, 1 / 60);
+        return Math.abs(car.steer) < 0.01 && car.thr > 0;
+      } finally {
+        state.player = player;
+      }
+    })(),
     'the handbrake stops strongly even with throttle and never reverses speed':
       (() => {
         const brake = {thr: 1, hb: true, type: TYPES.car};

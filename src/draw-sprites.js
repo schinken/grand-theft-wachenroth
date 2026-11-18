@@ -5,6 +5,7 @@
 
 import {MAP} from '../map.js';
 import {makeSign} from './buildings.js';
+import {caravanPeople} from './caravan.js';
 import {braking} from './cars.js';
 import {puff} from './effects.js';
 import {stand} from './hills.js';
@@ -336,6 +337,20 @@ export function drawAir() {
 /** Mission scenery: bonfires, tents, people waiting for a lift. */
 function drawProps() {
   const j = state.job;
+  for (const p of caravanPeople(j)) {
+    stand(p.x, p.y);
+    drawPerson(p, p.col, '#4a3018');
+    if (p.phone) {
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.a);
+      ctx.fillStyle = '#202329';
+      ctx.fillRect(0.35, -0.2, 0.35, 0.5);
+      ctx.fillStyle = '#8bdbef';
+      ctx.fillRect(0.4, -0.14, 0.23, 0.32);
+      ctx.restore();
+    }
+  }
   for (const pr of j ? j.m.props || [] : []) {
     const s = SPOT[pr.at];
     const x = s.x + (pr.dx || 0);

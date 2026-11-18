@@ -5,8 +5,15 @@
 import {MAP} from '../map.js';
 import * as audio from './audio.js';
 import {BUILD} from './buildings.js';
+import {
+  beginCaravan,
+  caravanDone,
+  moveCaravan,
+  parkCaravan,
+} from './caravan.js';
 import {bail, hitch, makeCar, repaint} from './cars.js';
-import {decal, flash, float, info, page, puff} from './effects.js';
+import {clearDialogue} from './dialogue.js';
+import {decal, flash, float, info, message, page, puff} from './effects.js';
 import {nearest} from './geometry.js';
 import {roadPoint} from './items.js';
 import {NODES, SEGS, surfAt} from './land.js';
@@ -43,6 +50,7 @@ function spawnAt(kind, key, trailer) {
 
 /** Starts the next mission. */
 export function startJob() {
+  clearDialogue();
   const m = MISSIONS[state.jobN];
   state.job = {
     m,
@@ -61,7 +69,7 @@ export function startJob() {
   };
   state.items = state.items.filter(v => !v.job);
   flash(m.title, `Auftrag ${state.jobN + 1} von ${MISSIONS.length}`);
-  page(...m.intro);
+  message(...m.intro);
   nextStep();
 }
 
@@ -380,6 +388,7 @@ function moveDoris(j, dt) {
  * @param {number} dt
  */
 export function jobCast(j, dt) {
+  moveCaravan(j, dt);
   if (j.thieves.length && (j.thiefT = (j.thiefT || 0) - dt) <= 0) {
     j.thiefT = 1;
     state.thiefF = field(state.player);
@@ -693,6 +702,9 @@ function beginCollect(j, st) {
  */
 function beginStep(j, st) {
   switch (st.do) {
+    case 'caravan':
+      beginCaravan(j);
+      break;
     case 'steal':
       beginSteal(j, st);
       break;
@@ -732,11 +744,15 @@ export function nextStep() {
   j.need = 0; // only a collect step counts things
   j.told = false;
   j.to = st.to ? SPOT[st.to] : st.house ? houseSpot(state.player) : null;
-  const fill = text => text.replace('{street}', j.to && j.to.name);
+  const fillText = text => text.replace('{street}', j.to && j.to.name);
+  const fill = msg =>
+    typeof msg === 'string'
+      ? fillText(msg)
+      : {...msg, text: fillText(msg.text)};
   setTerms(j, st);
   setCast(j, st);
   if (st.say) {
-    page(fill(st.say));
+    message(fill(st.say));
   }
   state.pager.idle = fill(st.obj);
   beginStep(j, st);
@@ -867,6 +883,8 @@ function stepDone(j, dt) {
   const player = state.player;
   const near = r => j.to && dist(player, j.to) < r;
   switch (st.do) {
+    case 'caravan':
+      return caravanDone(j, dt);
     case 'steal':
     case 'take':
       return player.car === j.veh;
@@ -935,6 +953,12 @@ export function jobRules(dt) {
 function endJob() {
   const j = state.job;
   const m = j.m;
+  parkCaravan(j);
+  if (j.caravan) {
+    // Leave the success and final conversation visible. The workshop opens
+    // normally on the next visit, after the player has left its entrance.
+    state.shopCool = 'garage';
+  }
   state.job = null;
   state.jobN++;
   state.nextJob = 8;
@@ -954,7 +978,7 @@ function endJob() {
   flash('Mission erfüllt!', `+${fmt(m.reward)}`);
   audio.play('win');
   store();
-  page(...m.outro);
+  message(...m.outro);
   if (state.jobN >= MISSIONS.length) {
     state.nextJob = 1e9;
     state.finale = 9;
@@ -963,6 +987,8 @@ function endJob() {
 
 // What the flash says about why a job is lost.
 const LOST = {
+  student: 'Leon-Maximilian wurde überfahren',
+  escort: 'Das Wohnwagengespann wurde beschädigt oder übernommen',
   time: 'Zeit abgelaufen',
   wreck: 'Fahrzeug Schrott',
   cargo: 'Ladung kaputt',
@@ -980,14 +1006,16 @@ const LOST = {
  * @param {string} why
  */
 export function failJob(why) {
+  clearDialogue();
   const j = state.job;
+  parkCaravan(j);
   state.job = null;
   calmThieves(j);
   calmRivals(j);
   state.nextJob = 10;
   state.pager.idle = '';
   state.items = state.items.filter(v => !v.job);
-  if (j.prey) {
+  if (j.prey && !j.caravan) {
     j.prey.ai = newAI(
       j.prey.ai ? j.prey.ai.from : 0,
       j.prey.ai ? j.prey.ai.to : 0

@@ -25,6 +25,21 @@ export const NEW_HOUSES = BUILD.filter(
   b => b.rd && b.rd[2][6].n === NEW_ESTATE
 );
 
+// A fictional household at an ordinary northern house, without a real name
+// or address being added to the surveyed map.
+const gruberHouse = BUILD.filter(
+  b =>
+    b.k === 'h' &&
+    b.rd &&
+    !b.poi &&
+    Math.hypot(b.mx - SPOT.hq.x, b.my - SPOT.hq.y) < 160
+).sort((a, b) => a.my - b.my)[0];
+SPOT.grubers = {
+  ...driveSpot(gruberHouse),
+  key: 'grubers',
+  name: PLACES.grubers,
+};
+
 /**
  * Where a car stands on the drive of a house, nose to the street.
  * @param {!Building} b A house that knows its street.

@@ -3,7 +3,8 @@
  */
 
 import * as audio from './audio.js';
-import {hitch, makeCar} from './cars.js';
+import {driveEscort} from './caravan.js';
+import {hitch, makeCar, vehicleCircles} from './cars.js';
 import {flash, page} from './effects.js';
 import {pip} from './geometry.js';
 import {at} from './grid.js';
@@ -96,8 +97,26 @@ function inTheWay(c, reach, cars) {
     return f > 0 && f < reach && Math.abs(ry * fx - rx * fy) < 1.7;
   };
   return (
-    cars.some(o => o !== c && ahead(o)) ||
+    cars.some(o => {
+      if (o === c || o.alt > 0.3 || dist(o, c) > reach + 25) {
+        return false;
+      }
+      return vehicleCircles(o).some(circle => {
+        const rx = o.x + circle.x - c.x;
+        const ry = o.y + circle.y - c.y;
+        const f = rx * fx + ry * fy;
+        return (
+          f + circle.r > 0 &&
+          f - circle.r < reach &&
+          Math.abs(ry * fx - rx * fy) < c.type.width / 2 + circle.r + 0.3
+        );
+      });
+    }) ||
     state.peds.some(ahead) ||
+    (state.job &&
+      state.job.caravan &&
+      (!state.job.caravan.aboard || !player.car) &&
+      ahead(state.job.caravan.student)) ||
     (state.mode === 'play' && !player.car && ahead(player))
   );
 }
@@ -128,6 +147,16 @@ function throttle(vf, want, block, fast) {
  */
 export function driveAI(c, dt) {
   const ai = c.ai;
+  if (ai.escort) {
+    driveEscort(c, dt);
+    const v = Math.max(0, c.vf);
+    const reach = c.type.length / 2 + 2 + v * 0.6 + (v * v) / 36;
+    if (gateShut(c, reach + 6) || inTheWay(c, reach, state.cars)) {
+      c.thr = c.vf > 0.2 ? -1 : 0;
+      c.hb = c.vf < 1;
+    }
+    return;
+  }
   const a = NODES[ai.from];
   const b = NODES[ai.to];
   const player = state.player;
@@ -164,28 +193,29 @@ export function driveAI(c, dt) {
     (2 + Math.min(a.w, b.w) * 1.6) *
     (ai.race || (hunt || ai.flee ? 2 : ai.rage > 0 ? 1.6 : 1)) *
     (1 - 0.7 * Math.min(1, Math.abs(err)));
-  const reach = 5 + c.vf * 0.9;
+  const v = Math.max(0, c.vf);
+  const reach = c.type.length / 2 + 2 + v * 0.6 + (v * v) / 36;
   // A level crossing ahead is shut while the train passes: everybody waits,
   // the police too, and nobody gets tired of waiting.
   const gate = gateShut(c, reach + 6);
-  // Who is in a hurry or tired of waiting shoves through. A racer shoves
-  // other traffic aside but not you: it stays behind until there is room.
+  // Pursuers and racers may ram traffic. Ordinary drivers wait in a queue
+  // for as long as necessary, including well behind a closed crossing.
   let mind = state.cars;
-  if (ai.push > 0 || (fast && !ai.race)) {
+  if (hunt || ai.flee) {
     mind = null;
   } else if (ai.race) {
     mind = player.car ? [player.car] : [];
   }
   const block = gate || (mind !== null && inTheWay(c, reach, mind));
   ai.wait = block && !gate ? ai.wait + dt : 0;
-  if (ai.wait > 5) {
-    ai.push = 2;
-  } // tired of waiting: shove through
-  ai.push -= dt;
   ai.rage -= dt;
   c.thr = throttle(c.vf, want, block, fast);
   c.hb = block && c.vf < 1;
   c.steer = clamp(err * 2.2, -1, 1);
+  if (block) {
+    ai.stuck = 0;
+    ai.rev = 0;
+  }
   if (
     near &&
     dist(c, player) < 9 &&
