@@ -8,7 +8,7 @@ import {collideCars, makeCar, stepCar} from './cars.js';
 import {float, page, puff, replay} from './effects.js';
 import {onShow} from './hud.js';
 import {dropCash, grab} from './items.js';
-import {jobCast, jobRules, startJob} from './jobs.js';
+import {jobCast, jobRules, startJob, walkSong} from './jobs.js';
 import {MISSIONS, RANKS, TALK} from './missions.js';
 import {stepPed, walkersVsCars} from './people.js';
 import {
@@ -258,6 +258,7 @@ export function update(dt) {
   walkersVsCars();
   populate(dt, 85);
   police(dt);
+  audio.sing(walkSong());
   if (player.car) {
     player.x = player.car.x;
     player.y = player.car.y;

@@ -2,17 +2,23 @@
 //
 // A mission: id (for ?job=), title, reward, intro and outro (Flo on the
 // pager), steps, and maybe props (scenery, see below), sober: true (ends the
-// drunkenness), drunk: n (leaves you drunk for n seconds) or night: true (it
-// is dark while the job lasts).
+// drunkenness), drunk: n (leaves you drunk for n seconds), night: true (it
+// is dark while the job lasts), walk: [from, to] (children with lanterns
+// wait at the first place and walk to the second, see parade) or home: the
+// place colleagues drive the job's vehicles back to once nobody needs them.
 //
 // A step: do (its kind), obj (the task, on the pager), say (Flo's message as
 // it starts), and what its kind needs:
 //   goto     reach place `to`: foot = walk in, else within r (7 m); fix = done
 //            only once the police have let go
-//   steal    get into vehicle `veh` (with `trailer`) waiting at place `at`;
-//            armour = how many times as much as usual it can take
+//   steal    get into vehicle `veh` (with `trailer`) waiting at place `at`:
+//            the one the job left there at its post, or else a new one;
+//            armour = how many times as much as usual it can take, ready =
+//            it stands there from the start of the job
 //   bring    park the mission vehicle at place `to`, or with house at a
-//            customer's house far off, whose street fills in {street}
+//            customer's house far off, whose street fills in {street}; post =
+//            it stays there across the road: you get out, and a colleague
+//            minds it until a later step sends it on
 //   collect  pick up n things of kind `item` within r of place `near`: on the
 //            roads, or anywhere off them (loose), or at the kerb in front of
 //            houses (kerb); trees to cut stand where they grow. foot = on foot
@@ -30,6 +36,8 @@
 //            `rivals` (the colours of their cars); the police join in after
 //            the first place
 //   lose     shake off the police
+//   parade   the lantern walk moves on, until its last child is past place
+//            `to`
 // Any step may also have:
 //   time     seconds to do it in; the clock runs on until the next `time`, and
 //            0 stops it
@@ -45,6 +53,8 @@
 //   got      what you call out once the step is done
 //   beat     you are pulled out of the vehicle and slapped about, and see
 //            stars for a while
+//   shut     the posts where fire engines keep the traffic out of the roads
+//            around the lantern walk from now on
 //
 // Props: k ('fire', 'tent', 'stage', or 'person' with shirt colour col) at
 // place `at`, dx and dy metres off it, shown from step `from` until before
@@ -100,6 +110,17 @@ export const PLACES = {
   fichte: 'Die Festtags-Fichte',
   schreinerei: 'Schreinerei Wichert',
   linsner: 'Gasthof Linsner',
+};
+
+// Where a fire engine stands across the road for the lantern walk: x and y on
+// the middle of the road, and what the arrow calls the spot. No house stands
+// there, so the map's list of places does not have them.
+export const POSTS = {
+  postEast: [1659.6, 982.4, 'Hauptstraße bei der Mara'],
+  postWest: [1471.7, 956.5, 'Hauptstraße vor der Kirche'],
+  postSouth: [1729.8, 1278.1, 'Kleinwachenroth'],
+  postWorks: [1583.5, 1014.9, 'Kaspar-Röckelein-Straße'],
+  postMill: [1733, 1261.5, 'Abzweig zur Mühle'],
 };
 
 // Painted on the roofs of the landmarks.
@@ -704,6 +725,89 @@ export const MISSIONS = [
     ],
     outro: [
       'Alle wieder im Stall. Der Michi gibt einen aus, und Mama Doris legt den Besen weg.',
+    ],
+  },
+
+  {
+    id: 'martin',
+    title: 'Laterne, Laterne',
+    reward: 1000,
+    night: true,
+    walk: ['church', 'muehle'],
+    home: 'firestation',
+    props: [{k: 'fire', at: 'muehle', dx: 5, dy: 6}],
+    intro: [
+      'Heut ist Martinsumzug: Die Kinder ziehen mit ihren Laternen von St. Gertrud die Hauptstraße runter, am Röckelein vorbei, bis zur Kleinwachenrother Mühle. Und die Feuerwehr hockt noch beim Aufwärmen.',
+      'Du sperrst ab, damit kein Auto reinfährt. Unten in Kleinwachenroth stehen die Kameraden schon. Hol das Löschfahrzeug bei der Feuerwehr, Am Graben 7!',
+    ],
+    steps: [
+      {
+        do: 'steal',
+        veh: 'fire',
+        at: 'firestation',
+        obj: 'Hol das Löschfahrzeug bei der Feuerwehr, Am Graben 7',
+      },
+      {
+        do: 'bring',
+        to: 'postEast',
+        post: true,
+        obj: "Sperr die Hauptstraße bei Mara's Marktschänke ab",
+        say: 'Erst die Hauptstraße: Stell das Löschfahrzeug bei der Mara auf die Straße. Mit der Hupe geht das Blaulicht an.',
+      },
+      {
+        do: 'steal',
+        veh: 'fire',
+        at: 'maras',
+        ready: true,
+        obj: "Steig ins zweite Löschfahrzeug vor Mara's Marktschänke",
+        say: 'Da kommt keiner mehr durch, ein Kamerad bleibt beim Auto. Das zweite Löschfahrzeug steht gleich vor der Mara.',
+      },
+      {
+        do: 'bring',
+        to: 'postWest',
+        post: true,
+        obj: 'Sperr die Hauptstraße hinter der Kirche ab',
+        say: 'Jetzt die andere Seite: die Hauptstraße rauf, an der Kirche vorbei, und dahinter abstellen.',
+      },
+      {
+        do: 'parade',
+        to: 'postWorks',
+        shut: ['postWest', 'postEast', 'postSouth'],
+        obj: 'Geh mit dem Umzug über die Hauptstraße, bis er in die Kaspar-Röckelein-Straße abbiegt',
+        say: 'Alles dicht! Die Laternen brennen, die Kinder singen, der Umzug läuft. Geh ruhig ein Stück mit, und fahr mir ja net in die Kinder.',
+      },
+      {
+        do: 'steal',
+        veh: 'fire',
+        at: 'postEast',
+        obj: "Hol das Löschfahrzeug bei Mara's Marktschänke",
+        say: 'Sie sind abgebogen, die Hauptstraße kann wieder auf. Hol das Löschfahrzeug bei der Mara, der Kamerad gibt es dir wieder.',
+      },
+      {
+        do: 'bring',
+        to: 'postWorks',
+        obj: 'Fahr hinter dem Umzug in die Kaspar-Röckelein-Straße',
+        say: 'Jetzt hinter den Kindern her, rein in die Kaspar-Röckelein-Straße. Aber langsam!',
+      },
+      {
+        do: 'bring',
+        to: 'postMill',
+        post: true,
+        shut: ['postWorks', 'postSouth'],
+        obj: 'Fahr im Schritttempo hinter dem Umzug her, am Röckelein vorbei bis zum Abzweig zur Mühle',
+        say: 'Die Hauptstraße rollt wieder, hinten sicherst jetzt du. Bleib im Schritttempo hinter den Kindern, am Röckelein vorbei, und stell dich am Schluss in den Abzweig zur Mühle.',
+      },
+      {
+        do: 'parade',
+        to: 'muehle',
+        shut: ['postMill'],
+        obj: 'Begleite den Umzug zum Martinsfeuer an der Kleinwachenrother Mühle',
+        say: 'Gleich sind sie da. An der Mühle brennt schon das Martinsfeuer.',
+      },
+    ],
+    outro: [
+      'Alle Kinder sind an der Mühle, und keins hat ein Auto gesehen. Es gibt Martinsgänse aus Hefeteig und Kinderpunsch.',
+      'Die Kameraden fahren die Löschfahrzeuge heim. Du darfst noch am Feuer stehen bleiben.',
     ],
   },
 

@@ -228,15 +228,20 @@ function drawOverlay(z) {
       '#ffd23e',
       `${(to.name || 'ZIEL').toUpperCase()} · ${metres((state.gps && state.gps.far) || far)}`
     );
-    if (to === j.veh || to === j.prey) {
-      // the car you are after
+    // The car you are after, or the one you got out of and have to bring on
+    const left = j.step.do === 'bring' && player.car !== j.veh ? j.veh : null;
+    const car = to === j.veh || to === j.prey ? to : left;
+    if (left) {
+      pointer(left, '#ffd23e', left.name.toUpperCase());
+    }
+    if (car) {
       const bob = Math.sin(state.t * 6) * 3;
-      const [x, y] = shown(to);
+      const [x, y] = shown(car);
       arrow(
         x,
         y - 3.2 * z - 12 + bob,
         Math.PI / 2,
-        to === j.prey ? '#ff5a1f' : '#ffd23e',
+        car === j.prey ? '#ff5a1f' : '#ffd23e',
         0.8
       );
     }

@@ -1,5 +1,5 @@
-// Everything you hear is synthesised here: effects, Flo's pager voice, engines
-// and the car radio.
+// Everything you hear is synthesised here: effects, Flo's pager voice, engines,
+// the car radio and the children of the lantern walk.
 
 let audioCtx;
 let master;
@@ -12,6 +12,10 @@ let dieselNodes;
 let tap;
 let engineNodes;
 let sirenGain;
+let song;
+let singing = 0;
+let songTime = 0;
+let songIndex = 0;
 let muted = false;
 let volume = 0.25; // a quarter of full: it was far too loud
 let station = -1;
@@ -159,6 +163,9 @@ export function init() {
   so.connect(slp).connect(sirenGain).connect(sfx);
   so.start();
   lfo.start();
+  song = audioCtx.createGain();
+  song.gain.value = 0;
+  song.connect(master);
   setInterval(tick, 70);
 }
 
@@ -704,11 +711,114 @@ const STATIONS = [
   },
 ];
 
-/** Schedules the radio a quarter of a second ahead. */
-function tick() {
-  if (station < 0 || audioCtx.state !== 'running') {
+// ---------- the lantern walk: children sing "Sankt Martin"
+
+// "Sankt Martin, Sankt Martin, Sankt Martin ritt durch Schnee und Wind, sein
+// Ross, das trug ihn fort geschwind. Sankt Martin ritt mit leichtem Mut, sein
+// Mantel deckt ihn warm und gut." For each syllable its note, how many beats
+// it lasts, and its vowel; a capital one has a hissing S before it.
+const MARTIN_NOTES = [
+  ...[62, 67, 67, 62, 71, 71, 67, 74, 74, 74, 76, 74, 72, 71],
+  ...[71, 72, 72, 72, 74, 72, 71, 69],
+  ...[62, 67, 67, 69, 71, 72, 72, 71],
+  ...[74, 74, 76, 74, 72, 71, 69, 67],
+];
+const MARTIN_BEATS = '12112111111111' + '11111111' + '11111111' + '11111112';
+const MARTIN_VOWELS = 'AaiAaiAaiiuEui' + 'AoauioeI' + 'Aaiiiaeu' + 'Aaeeiauu';
+const BEAT = 0.56; // seconds
+// Where a child's mouth resonates for each vowel, in hertz.
+const VOWELS = {
+  a: [1000, 1500],
+  e: [600, 2400],
+  i: [350, 2900],
+  o: [600, 1000],
+  u: [400, 900],
+};
+
+/**
+ * One sung syllable: two voices a little apart, as children sing, through
+ * the two resonances of its vowel.
+ * @param {number} t When it sounds, in audio context seconds.
+ * @param {number} n MIDI note number.
+ * @param {number} dur
+ * @param {string} vowel
+ */
+function syllable(t, n, dur, vowel) {
+  const g = audioCtx.createGain();
+  env(g, t, 0.05, dur, 0.5, 0.7);
+  g.connect(song);
+  const mouth = VOWELS[vowel.toLowerCase()].map(hz => {
+    const f = audioCtx.createBiquadFilter();
+    f.type = 'bandpass';
+    f.Q.value = 4;
+    f.frequency.value = hz;
+    f.connect(g);
+    return f;
+  });
+  for (const off of [-16, 11]) {
+    const o = audioCtx.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.value = midi(n);
+    o.detune.value = off;
+    mouth.forEach(f => o.connect(f));
+    o.start(t);
+    o.stop(t + dur + 0.1);
+  }
+  if (vowel < 'a') {
+    hiss(t - 0.05, 0.06, 0.12, 'highpass', 5000, song);
+  }
+}
+
+/** Schedules the song a quarter of a second ahead, over and over. */
+function playSong() {
+  if (songTime < audioCtx.currentTime) {
+    songTime = audioCtx.currentTime + 0.06;
+  }
+  while (songTime < audioCtx.currentTime + 0.25) {
+    // After the last syllable they take a breath of two beats.
+    const i = songIndex++ % (MARTIN_NOTES.length + 1);
+    const beats = Number(MARTIN_BEATS[i] || 2);
+    if (i < MARTIN_NOTES.length) {
+      syllable(
+        songTime,
+        MARTIN_NOTES[i],
+        beats * BEAT * 0.92,
+        MARTIN_VOWELS[i]
+      );
+    }
+    songTime += beats * BEAT;
+  }
+}
+
+/**
+ * How loud the children of the lantern walk are heard singing. The radio
+ * makes room for them.
+ * @param {number} vol From 0, silent, to 1.
+ */
+export function sing(vol) {
+  if (!song || vol === singing) {
     return;
   }
+  singing = vol;
+  song.gain.setTargetAtTime(vol * 0.7, audioCtx.currentTime, 0.2);
+  music.gain.setTargetAtTime(0.3 - 0.2 * vol, audioCtx.currentTime, 0.2);
+}
+
+/** Keeps the radio and the song going. */
+function tick() {
+  if (audioCtx.state !== 'running') {
+    return;
+  }
+  if (singing > 0) {
+    playSong();
+  }
+  if (station >= 0) {
+    playRadio();
+  }
+}
+
+/** Schedules the radio a quarter of a second ahead. */
+function playRadio() {
   const st = STATIONS[station];
   const s = 60 / st.bpm / 4;
   if (nextTime < audioCtx.currentTime) {

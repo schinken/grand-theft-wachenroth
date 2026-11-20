@@ -36,6 +36,9 @@ function nextNode(from, to, ai) {
     if (n >= 0) {
       return n;
     }
+    if (ai.home) {
+      return -1; // a colleague has brought it home: off the road
+    }
   }
   let opts = b.car.filter(e => e.n !== from);
   if (ai.flee) {
@@ -48,6 +51,14 @@ function nextNode(from, to, ai) {
   }
   if (!opts.length) {
     return -1;
+  }
+  const zone = state.job && state.job.zone;
+  if (zone && !zone.has(to)) {
+    // Nobody turns into a road that is closed for the lantern walk, nor up
+    // to the fire engine in front of it, while another way is open.
+    const shut = n => zone.has(n) || NODES[n].car.some(e => zone.has(e.n));
+    const open = opts.filter(e => !shut(e.n));
+    opts = open.length ? open : opts;
   }
   const dir = Math.atan2(b.y - a.y, b.x - a.x);
   let total = 0;
@@ -78,12 +89,36 @@ function gateShut(c, reach) {
 }
 
 /**
- * Whether a car, a pedestrian or the player on foot is right in front of a
- * car.
+ * Whether a car has to wait for the lantern walk: the fire brigade lets
+ * nobody into the roads it has closed, and nobody drives into the children.
+ * @param {!Car} c
+ * @param {number} reach How far ahead it minds the children, in metres.
+ * @return {boolean}
+ */
+function walkAhead(c, reach) {
+  const j = state.job;
+  if (!j || !j.kids) {
+    return false;
+  }
+  if (!j.zone.has(c.ai.from) && j.zone.has(c.ai.to)) {
+    return true;
+  }
+  const fx = Math.cos(c.a);
+  const fy = Math.sin(c.a);
+  return j.kids.some(k => {
+    const rx = k.x - c.x;
+    const ry = k.y - c.y;
+    const f = rx * fx + ry * fy;
+    return f > 0 && f < reach && Math.abs(ry * fx - rx * fy) < 2;
+  });
+}
+
+/**
+ * The car, the pedestrian or the player on foot right in front of a car.
  * @param {!Car} c
  * @param {number} reach How far ahead, in metres.
  * @param {!Array<!Car>} cars The cars it minds.
- * @return {boolean}
+ * @return {?Object} Null when the way is free.
  */
 function inTheWay(c, reach, cars) {
   const player = state.player;
@@ -95,10 +130,11 @@ function inTheWay(c, reach, cars) {
     const f = rx * fx + ry * fy;
     return f > 0 && f < reach && Math.abs(ry * fx - rx * fy) < 1.7;
   };
+  const afoot = state.mode === 'play' && !player.car && ahead(player);
   return (
-    cars.some(o => o !== c && ahead(o)) ||
-    state.peds.some(ahead) ||
-    (state.mode === 'play' && !player.car && ahead(player))
+    cars.find(o => o !== c && ahead(o)) ||
+    state.peds.find(ahead) ||
+    (afoot ? player : null)
   );
 }
 
@@ -165,9 +201,10 @@ export function driveAI(c, dt) {
     (ai.race || (hunt || ai.flee ? 2 : ai.rage > 0 ? 1.6 : 1)) *
     (1 - 0.7 * Math.min(1, Math.abs(err)));
   const reach = 5 + c.vf * 0.9;
-  // A level crossing ahead is shut while the train passes: everybody waits,
-  // the police too, and nobody gets tired of waiting.
-  const gate = gateShut(c, reach + 6);
+  // A level crossing ahead is shut while the train passes, or the lantern
+  // walk has the road: everybody waits, the police too, and nobody gets tired
+  // of waiting.
+  const gate = gateShut(c, reach + 6) || walkAhead(c, reach + 3);
   // Who is in a hurry or tired of waiting shoves through. A racer shoves
   // other traffic aside but not you: it stays behind until there is room.
   let mind = state.cars;
@@ -176,8 +213,12 @@ export function driveAI(c, dt) {
   } else if (ai.race) {
     mind = player.car ? [player.car] : [];
   }
-  const block = gate || (mind !== null && inTheWay(c, reach, mind));
-  ai.wait = block && !gate ? ai.wait + dt : 0;
+  const ahead = mind === null ? null : inTheWay(c, reach, mind);
+  // Behind somebody who waits like that, a car is as patient: otherwise the
+  // queue shoves its first car through.
+  ai.held = gate || !!(ahead && ahead.ai && ahead.ai.held);
+  const block = ai.held || !!ahead;
+  ai.wait = block && !ai.held ? ai.wait + dt : 0;
   if (ai.wait > 5) {
     ai.push = 2;
   } // tired of waiting: shove through
@@ -491,9 +532,11 @@ export function populate(dt, near) {
     return;
   }
   state.spawnT = 0.3;
-  const spots = NODES.filter(n => {
+  // Nobody sets off inside the roads that are closed for the lantern walk.
+  const zone = state.job && state.job.zone;
+  const spots = NODES.filter((n, i) => {
     const d = dist(n, f);
-    return d > near && d < 250;
+    return d > near && d < 250 && !(zone && zone.has(i));
   });
   // At night fewer people are out driving.
   const most = state.night > 0.5 ? 10 : 13;

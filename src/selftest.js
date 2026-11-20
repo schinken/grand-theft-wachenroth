@@ -8,6 +8,7 @@ import {hill, pedals, rollCar} from './cars.js';
 import {inFront, parting} from './draw-buildings.js';
 import {FENCE_TILES, FURROWS, fieldMasks} from './draw-ground.js';
 import {tyreMarks} from './effects.js';
+import {enclosed} from './jobs.js';
 import {pushOut} from './geometry.js';
 import {look, near} from './hills.js';
 import {ROADS, heightAt, surfAt} from './land.js';
@@ -56,6 +57,9 @@ export function selftest() {
   const used = new Set(
     MISSIONS.flatMap(m => [
       ...m.steps.flatMap(s => [s.to, s.at, s.near, ...(s.via || [])]),
+      ...m.steps.flatMap(s => s.shut || []),
+      ...(m.walk || []),
+      m.home,
       ...(m.props || []).map(p => p.at),
     ]).filter(Boolean)
   );
@@ -317,6 +321,15 @@ export function selftest() {
     'every kind of vehicle has its picture': Object.keys(TYPES).every(
       k => carSprite(k, '#e8e6df').width > 0
     ),
+    'the posts of the fire brigade close the roads round the lantern walk':
+      MISSIONS.filter(m => m.walk).every(m => {
+        const far = field(SPOT[m.walk[1]]);
+        const zones = m.steps
+          .filter(s => s.shut)
+          .map(s => enclosed(s.shut, far));
+        // Shut in, the roads are few; through a gap the whole village leaks.
+        return zones[0].size > 10 && zones.every(zone => zone.size < 60);
+      }),
     'every mission pays and talks': MISSIONS.every(
       m =>
         m.reward > 0 &&

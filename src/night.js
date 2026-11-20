@@ -34,6 +34,10 @@ function patch(rgb) {
 const WARM = patch('255,236,196');
 const RED = patch('255,36,28');
 const BLUE = patch('70,130,255');
+// The colours of paper lanterns, as 'r,g,b', and their light. The first is
+// also that of a fire.
+export const PAPER = ['255,170,60', '255,222,96', '255,96,72', '150,230,120'];
+const PAPERS = PAPER.map(patch);
 // The beam of a pair of head lamps: from the middle of its left edge it fans
 // out to the right and fades. Four fans, each a little wider, make its sides
 // soft.
@@ -91,13 +95,11 @@ function lay(sprite, alpha, glow, px, py, turn, x, y, w, h) {
 
 /**
  * The lamps of a vehicle that is driven: the beam ahead, a little light on
- * itself, the tail lamps, which shine far when it brakes, and the blue light
- * of the police.
+ * itself, and the tail lamps, which shine far when it brakes.
  * @param {!Car} c
  */
 function carLamps(c) {
   const front = c.type.length / 2;
-  stand(c.x, c.y);
   lay(BEAM, 1, 0.35, c.x, c.y, c.a, front - 1, -11, 30, 22);
   lay(WARM, 0.5, 0, c.x, c.y, c.a, -5, -5, 10, 10);
   const r = braking(c) ? 8 : 3;
@@ -113,10 +115,16 @@ function carLamps(c) {
     2 * r,
     2 * r
   );
-  if (c.siren) {
-    const on = ((state.t * 6) | 0) % 2;
-    lay(on ? BLUE : RED, 0.9, 0.5, c.x, c.y, c.a, -12, -12, 24, 24);
-  }
+}
+
+/**
+ * The blue light of the police and the fire brigade, flashing: also on a
+ * fire engine that stands across the road with nobody at the wheel.
+ * @param {!Car} c
+ */
+function blueLamp(c) {
+  const on = ((state.t * 6) | 0) % 2;
+  lay(on ? BLUE : RED, 0.9, 0.5, c.x, c.y, c.a, -12, -12, 24, 24);
 }
 
 /**
@@ -153,9 +161,15 @@ export function dusk([x0, y0, x1, y1], props) {
   }
   const player = state.player;
   for (const car of state.cars) {
-    const driven = car.ai || car === player.car;
-    if (driven && seen(car) && car.type.wheelbase && !car.dead && !car.burn) {
+    if (!seen(car) || !car.type.wheelbase || car.dead || car.burn) {
+      continue;
+    }
+    stand(car.x, car.y);
+    if (car.ai || car === player.car) {
       carLamps(car);
+    }
+    if (car.siren) {
+      blueLamp(car);
     }
   }
   if (!player.car && state.mode === 'play') {
@@ -260,6 +274,23 @@ export function lanternGlow(x, y) {
   if (state.night) {
     lay(WARM, 0, 0.9, x, y, 0, -1.7, -1.7, 3.4, 3.4);
   }
+}
+
+/**
+ * A small light of a colour of its own, a paper lantern or a fire: it lights
+ * the ground around it and glows in the dark. Called once stand() has put it
+ * on its spot.
+ * @param {number} x Where it is, in metres.
+ * @param {number} y
+ * @param {number} r How far it shines, in metres.
+ * @param {number} n Which of the PAPER colours it has.
+ */
+export function shine(x, y, r, n) {
+  if (!state.night) {
+    return;
+  }
+  lay(PAPERS[n], 0.55, 0, x, y, 0, -r, -r, 2 * r, 2 * r);
+  lay(PAPERS[n], 0, 0.9, x, y, 0, -r / 7, -r / 7, r / 3.5, r / 3.5);
 }
 
 /**

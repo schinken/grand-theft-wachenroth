@@ -112,6 +112,18 @@ async page => {
           return;
         }
         const step = job.step;
+        if (step.do === 'parade') {
+          // The lantern walk is on its way. Wait by the fire engine if that
+          // is the one to bring on, else walk along behind the children.
+          const next = job.m.steps[job.i + 1];
+          const last = job.kids[job.kids.length - 1];
+          if (!car && next && next.do === 'steal' && dist(player, last) > 9) {
+            const angle = Math.atan2(last.y - player.y, last.x - player.x);
+            pad.x = Math.cos(angle);
+            pad.y = Math.sin(angle);
+          }
+          return;
+        }
         const collecting = step.do === 'collect';
         const target = collecting ? nearestOf(jobItems(), player) : job.to;
         if (!target) {
@@ -217,6 +229,11 @@ async page => {
 
         const speed = Math.hypot(car.vx, car.vy);
         bot.walk = 0;
+        if (job.kids && job.kids.some(kid => dist(kid, player) < 16)) {
+          // Behind the lantern walk: wait until the children have gone on.
+          pad.brake = speed > 0.5;
+          return;
+        }
         const hide = job.guards && job.guards.length > 0;
         const walk = step.foot && far < (hide ? 120 : 9);
         if (walk || (wanted && car !== wanted && far < 11)) {

@@ -165,6 +165,9 @@ function jobGauge(j) {
   if (st.do === 'race') {
     return j.cp / st.via.length;
   }
+  if (j.going) {
+    return j.walked / j.wayLen; // how far the lantern walk has got
+  }
   return null;
 }
 
@@ -181,7 +184,8 @@ function showMission() {
       j.need ||
       st.do === 'hold' ||
       st.do === 'chase' ||
-      st.do === 'race'
+      st.do === 'race' ||
+      j.going
     );
   show('noBar', noBar, () => {
     byId('mission').hidden = noBar;
@@ -203,6 +207,9 @@ function showMission() {
   }
   if (st.do === 'race') {
     bits.push(`Platz ${j.place} von ${st.rivals.length + 1}`);
+  }
+  if (j.going) {
+    bits.push('Laternenumzug');
   }
   if (j.fragile) {
     bits.push('Ladung');

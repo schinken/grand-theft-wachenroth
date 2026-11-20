@@ -8,7 +8,7 @@ import {MAP} from '../map.js';
 import {BUILD, NEW_ESTATE} from './buildings.js';
 import {nearest} from './geometry.js';
 import {LINKS, NODES} from './land.js';
-import {PLACES} from './missions.js';
+import {PLACES, POSTS} from './missions.js';
 import {ROOFS, fromFrame} from './roofs.js';
 import {blocked, roadside} from './scenery.js';
 import {WORLD_H, WORLD_W, dist} from './util.js';
@@ -19,6 +19,11 @@ for (const k of Object.keys(MAP.pois)) {
     key: k,
     name: PLACES[k] || k,
   });
+}
+
+// The posts of the fire brigade are places too: on the road, not beside it.
+for (const [k, [x, y, name]] of Object.entries(POSTS)) {
+  SPOT[k] = Object.assign(roadside(x, y), {key: k, name});
 }
 
 export const NEW_HOUSES = BUILD.filter(

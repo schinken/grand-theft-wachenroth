@@ -11,7 +11,17 @@ import {nearest} from './geometry.js';
 import {roadPoint} from './items.js';
 import {NODES, SEGS, surfAt} from './land.js';
 import {MISSIONS, TALK} from './missions.js';
-import {HOME, SPOT, downhill, driveSpot, field, nearNode} from './places.js';
+import {
+  HOME,
+  SPOT,
+  downhill,
+  driveSpot,
+  field,
+  nearLink,
+  nearNode,
+  pathLength,
+  routeLine,
+} from './places.js';
 import {shove, toggleCar} from './player.js';
 import {TREES, blocked} from './scenery.js';
 import {TRAILERS} from './sprites.js';
@@ -58,8 +68,19 @@ export function startJob() {
     hold: 0,
     got: 0,
     need: 0,
+    // Every vehicle the job has handed out
+    fleet: [],
   };
+  const j = state.job;
   state.items = state.items.filter(v => !v.job);
+  // What stands ready from the start does not appear out of thin air later,
+  // next to you.
+  for (const st of m.steps.filter(step => step.ready)) {
+    j.fleet.push(spawnAt(st.veh, st.at, st.trailer));
+  }
+  if (m.walk) {
+    gatherWalk(j, ...m.walk);
+  }
   flash(m.title, `Auftrag ${state.jobN + 1} von ${MISSIONS.length}`);
   page(...m.intro);
   nextStep();
@@ -231,6 +252,266 @@ function calmRivals(j) {
   j.rivals = [];
 }
 
+// The lantern walk: how fast the children go, in metres a second, and how
+// long their line is, in metres.
+const WALK = 2.8;
+const COLUMN = 10;
+
+/**
+ * Puts something on a line, a number of metres from its start, facing along
+ * it.
+ * @param {!Array<number>} line A flat list of x, y pairs.
+ * @param {number} d
+ * @param {!Object} o Gets x, y and the heading a.
+ */
+function along(line, d, o) {
+  let i = 0;
+  let len = Math.hypot(line[2] - line[0], line[3] - line[1]);
+  while ((d > len || !len) && i + 5 < line.length) {
+    d -= len;
+    i += 2;
+    len = Math.hypot(line[i + 2] - line[i], line[i + 3] - line[i + 1]);
+  }
+  const t = clamp(d / (len || 1), 0, 1);
+  o.x = lerp(line[i], line[i + 2], t);
+  o.y = lerp(line[i + 1], line[i + 3], t);
+  o.a = Math.atan2(line[i + 3] - line[i + 1], line[i + 2] - line[i]);
+}
+
+/**
+ * How many metres along a line the point of it lies that is nearest to a
+ * place.
+ * @param {!Array<number>} line A flat list of x, y pairs.
+ * @param {!Point} o
+ * @return {number}
+ */
+function wayAt(line, o) {
+  let best = 1e9;
+  let at = 0;
+  let run = 0;
+  for (let i = 0; i + 3 < line.length; i += 2) {
+    const q = nearest(o.x, o.y, line[i], line[i + 1], line[i + 2], line[i + 3]);
+    const d = Math.hypot(o.x - q[0], o.y - q[1]);
+    if (d < best) {
+      best = d;
+      at = run + Math.hypot(q[0] - line[i], q[1] - line[i + 1]);
+    }
+    run += Math.hypot(line[i + 2] - line[i], line[i + 3] - line[i + 1]);
+  }
+  return at;
+}
+
+// Where a child of the walk is meant to be: one object, used for each in turn.
+const slot = {x: 0, y: 0, a: 0};
+
+/**
+ * Where a child of the lantern walk belongs just now: in its row behind the
+ * head of the line, on its side of the road, swaying a little.
+ * @param {!Object} j
+ * @param {!Object} k The child.
+ * @return {!Object} x, y and the heading a.
+ */
+function kidSlot(j, k) {
+  along(j.way, j.walked - k.back, slot);
+  const side = k.side + Math.sin(state.t * 0.9 + k.n) * 0.2;
+  slot.x -= Math.sin(slot.a) * side;
+  slot.y += Math.cos(slot.a) * side;
+  return slot;
+}
+
+/**
+ * The lantern walk gathers where it starts: sixteen children in pairs, one
+ * pair behind the other. They wait until a parade step sends them off.
+ * @param {!Object} j
+ * @param {string} from Where they wait.
+ * @param {string} to Where they walk to.
+ */
+function gatherWalk(j, from, to) {
+  // How far every junction is from where the walk ends
+  j.far = field(SPOT[to]);
+  j.way = routeLine(j.far, SPOT[from], SPOT[to]);
+  j.wayLen = pathLength(j.way);
+  // How far the head of the line has got, in metres
+  j.walked = COLUMN;
+  j.going = false;
+  j.shoutT = 0;
+  // The junctions inside the roads that are closed for the walk
+  j.zone = new Set();
+  j.kids = Array.from({length: 16}, (v, n) => {
+    const k = {n, t: n, back: (n >> 1) * 1.3, side: n % 2 ? 0.7 : -0.7};
+    return Object.assign(k, kidSlot(j, k));
+  });
+}
+
+/**
+ * The lantern walk moves on, and the fire engines of the job that stand
+ * about flash their blue lights. Who drives into the children has lost.
+ * @param {!Object} j
+ * @param {number} dt
+ */
+function moveWalk(j, dt) {
+  const car = state.player.car;
+  const go = j.going && j.walked < j.wayLen;
+  if (go) {
+    j.walked += WALK * dt;
+  }
+  // Each child eases into its place: that rounds the corners.
+  const ease = Math.min(1, dt * 6);
+  for (const k of j.kids) {
+    const to = kidSlot(j, k);
+    k.x += (to.x - k.x) * ease;
+    k.y += (to.y - k.y) * ease;
+    k.a += wrap(to.a - k.a) * ease;
+    k.t += go ? WALK * dt : 0;
+  }
+  for (const c of j.fleet) {
+    if (c !== car) {
+      c.siren = true;
+    }
+  }
+  // Behind the children you drive at their pace: come close faster than
+  // that and they shout, closer still and the job is lost.
+  const fast = car && Math.hypot(car.vx, car.vy) > 3;
+  const within = r => fast && j.kids.find(k => dist(k, car) < r);
+  const near = within(10);
+  j.shoutT -= dt;
+  if (within(4.5)) {
+    j.caught = 'kids';
+  } else if (near && j.shoutT < 0) {
+    j.shoutT = 1.2;
+    float(near, 'VORSICHT!', '#ff5a1f');
+  }
+}
+
+/**
+ * How loud the children of the lantern walk are heard singing where the
+ * player is.
+ * @return {number} From 0 to 1.
+ */
+export function walkSong() {
+  const j = state.job;
+  return j && j.going
+    ? clamp(1.25 - dist(state.player, j.kids[0]) / 80, 0, 1)
+    : 0;
+}
+
+/**
+ * The junctions on the roads that fire engines close off for the lantern
+ * walk: all that cars reach from the walk without passing a post.
+ * @param {!Array<string>} keys The posts.
+ * @param {!Float32Array} f How far every junction is from where the walk
+ *     ends: that is the side of a post that lies inside.
+ * @return {!Set<number>}
+ */
+export function enclosed(keys, f) {
+  const gates = keys.map(k => nearLink(SPOT[k])[0]);
+  const shut = (a, b) => gates.some(l => l.includes(a) && l.includes(b));
+  const todo = gates.map(l => (f[l[0]] < f[l[1]] ? l[0] : l[1]));
+  const zone = new Set(todo);
+  while (todo.length) {
+    const n = todo.pop();
+    for (const e of NODES[n].car) {
+      if (!zone.has(e.n) && !shut(n, e.n)) {
+        zone.add(e.n);
+        todo.push(e.n);
+      }
+    }
+  }
+  return zone;
+}
+
+/**
+ * Which way a vehicle goes home along the road it stands on.
+ * @param {!Car} c
+ * @param {!Float32Array} f How far every junction is from home.
+ * @return {!Array<number>} The junction behind it, and the one ahead.
+ */
+function homeward(c, f) {
+  const [link] = nearLink(c);
+  return f[link[0]] > f[link[1]] ? link : [link[1], link[0]];
+}
+
+/**
+ * Colleagues drive home the vehicles of a job that no post needs any more,
+ * with blue lights. The one you sit in stays yours.
+ * @param {!Object} j
+ * @param {!Array<string>} keep The posts that stay.
+ */
+function relieve(j, keep) {
+  const f = field(SPOT[j.m.home]);
+  for (const c of j.fleet) {
+    const stays =
+      c === state.player.car ||
+      c.ai ||
+      c.dead ||
+      c.burn ||
+      keep.some(k => dist(c, SPOT[k]) < 15);
+    if (stays) {
+      continue;
+    }
+    const [from, to] = homeward(c, f);
+    c.ai = newAI(from, to, {f, home: true});
+    c.duty = false;
+    c.siren = true;
+  }
+}
+
+/**
+ * The roads around the lantern walk are closed at other posts from now on.
+ * Where no fire engine stands yet, colleagues have put one; engines at posts
+ * that are not needed any more go home; and who is still driving about in
+ * there, out of sight, is gone.
+ * @param {!Object} j
+ * @param {!Object} st The step.
+ */
+function closeRoads(j, st) {
+  j.zone = enclosed(st.shut, j.far);
+  for (const k of st.shut) {
+    if (j.fleet.some(c => dist(c, SPOT[k]) < 15)) {
+      continue;
+    }
+    const c = spawnAt('fire', k);
+    // Half across the road, the nose towards home: it gets away later
+    // without turning round.
+    const [from, to] = homeward(c, field(SPOT[j.m.home])).map(n => NODES[n]);
+    c.a = Math.atan2(to.y - from.y, to.x - from.x) + 0.5;
+    c.duty = true;
+    j.fleet.push(c);
+  }
+  relieve(j, st.shut);
+  for (const c of state.cars) {
+    const inside = c.ai && j.zone.has(c.ai.from) && j.zone.has(c.ai.to);
+    if (inside && !c.ai.home && dist(c, state.player) > 90) {
+      c.gone = true;
+    }
+  }
+}
+
+/**
+ * The lantern walk sets off, or walks on.
+ * @param {!Object} j
+ */
+function beginParade(j) {
+  j.going = true;
+  // The line has to be this far before the step is done: all of it past the
+  // place, with room for a fire engine behind it.
+  j.mark = Math.min(wayAt(j.way, j.to) + 10, j.wayLen - COLUMN);
+}
+
+/**
+ * The vehicle has reached its post: you get out, and a colleague minds it.
+ * @param {!Object} j
+ */
+function standGuard(j) {
+  const c = j.veh;
+  c.vx = c.vy = 0;
+  if (state.player.car === c) {
+    toggleCar();
+  }
+  c.duty = true;
+  float(c, 'Ein Kamerad übernimmt', '#ffe9a0');
+}
+
 // How fast the strays of a job run from you, in metres a second. A rocker
 // is slower than a hen: he is moshing.
 const FLEE = {hen: 2.6, rocker: 2.1};
@@ -374,8 +655,8 @@ function moveDoris(j, dt) {
 
 /**
  * The cast of a job moves: the hens run from you, the guards walk their
- * lines, the dogs and Mama Doris run after you, and the thieves find their
- * way to you.
+ * lines, the dogs and Mama Doris run after you, the thieves find their way
+ * to you, and the lantern walk goes its way.
  * @param {!Object} j
  * @param {number} dt
  */
@@ -398,14 +679,21 @@ export function jobCast(j, dt) {
   if (j.doris) {
     moveDoris(j, dt);
   }
+  if (j.kids) {
+    moveWalk(j, dt);
+  }
 }
 
 /**
- * What the step that is done leaves behind: a word, and a tip.
+ * What the step that is done leaves behind: a vehicle at its post, a word,
+ * and a tip.
  * @param {!Object} j
  * @param {!Object} done The step.
  */
 function payOff(j, done) {
+  if (done.post) {
+    standGuard(j);
+  }
   if (done.got) {
     float(state.player, done.got, '#ffe9a0');
   }
@@ -534,13 +822,20 @@ function itemSpot(st, c, free) {
 }
 
 /**
- * A vehicle to get into waits at its place.
+ * A vehicle to get into waits at its place: one of the job's that stands
+ * there already, ready from the start or left at its post, or else a new
+ * one.
  * @param {!Object} j
  * @param {!Object} st The step.
  */
 function beginSteal(j, st) {
-  j.veh = spawnAt(st.veh, st.at, st.trailer);
+  const there = j.fleet.find(c => dist(c, SPOT[st.at]) < 15);
+  j.veh = there || spawnAt(st.veh, st.at, st.trailer);
   j.veh.hp *= st.armour || 1;
+  j.veh.duty = false; // the colleague at its post hands it back
+  if (!there) {
+    j.fleet.push(j.veh);
+  }
   j.to = j.veh;
 }
 
@@ -708,6 +1003,14 @@ function beginStep(j, st) {
     case 'race':
       beginRace(j, st);
       break;
+    case 'bring':
+      if (j.veh) {
+        j.veh.duty = false; // the colleague at its post hands it back
+      }
+      break;
+    case 'parade':
+      beginParade(j);
+      break;
     default: // the other kinds need nothing
   }
 }
@@ -740,6 +1043,9 @@ export function nextStep() {
   }
   state.pager.idle = fill(st.obj);
   beginStep(j, st);
+  if (st.shut) {
+    closeRoads(j, st);
+  }
   state.gps = null;
 }
 
@@ -884,6 +1190,8 @@ function stepDone(j, dt) {
       return chaseDone(j, st);
     case 'race':
       return raceDone(j, st);
+    case 'parade':
+      return j.walked - COLUMN >= j.mark;
     default:
       throw new Error(`unknown step: ${st.do}`);
   }
@@ -944,6 +1252,9 @@ function endJob() {
   state.items = state.items.filter(v => !v.job);
   calmThieves(j);
   calmRivals(j);
+  if (m.home) {
+    relieve(j, []);
+  }
   if (m.sober) {
     state.drunk = 0; // slept it off
   }
@@ -971,6 +1282,7 @@ const LOST = {
   dog: 'Der Schäferhund hat dich gestellt',
   gone: 'Entkommen',
   race: 'Ein anderer war schneller',
+  kids: 'Mitten in den Laternenumzug gefahren',
   busted: '',
   wasted: '',
 };
@@ -984,6 +1296,9 @@ export function failJob(why) {
   state.job = null;
   calmThieves(j);
   calmRivals(j);
+  if (j.m.home) {
+    relieve(j, []);
+  }
   state.nextJob = 10;
   state.pager.idle = '';
   state.items = state.items.filter(v => !v.job);

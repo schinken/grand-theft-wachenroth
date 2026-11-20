@@ -295,7 +295,8 @@ export function toggleCar() {
       dist(o, player) -
       o.type.length / 4 -
       (state.job && o === state.job.veh ? 2.5 : 0);
-    if (!o.dead && !o.burn && d < bd) {
+    // A fire engine on duty at its post is not yours to take.
+    if (!o.dead && !o.burn && !o.duty && d < bd) {
       bd = d;
       best = o;
     }

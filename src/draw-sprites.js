@@ -8,6 +8,7 @@ import {makeSign} from './buildings.js';
 import {braking} from './cars.js';
 import {puff} from './effects.js';
 import {stand} from './hills.js';
+import {PAPER, shine} from './night.js';
 import {SHIRTS} from './people.js';
 import {SPOT} from './places.js';
 import {carSprite, icon} from './sprites.js';
@@ -109,8 +110,9 @@ function drawRearLights(g, c) {
  * @param {string} shirt
  * @param {string} hair
  * @param {boolean=} mane Long hair down the back, as rockers wear it.
+ * @param {number=} size A grown-up is drawn a bit larger than life.
  */
-function drawPerson(p, shirt, hair, mane = false) {
+function drawPerson(p, shirt, hair, mane = false, size = 1.3) {
   const sw = Math.sin(p.t * 4) * 0.22;
   const rect = (x, y, w, h, f) => {
     ctx.fillStyle = f;
@@ -131,7 +133,7 @@ function drawPerson(p, shirt, hair, mane = false) {
   ctx.save();
   ctx.translate(p.x, p.y - up * 0.9);
   ctx.rotate(p.a + (p.spin || 0));
-  ctx.scale(1.3 + up * 0.6, 1.3 + up * 0.6); // a bit larger than life
+  ctx.scale(size + up * 0.6, size + up * 0.6);
   if (p.slide) {
     // Feet first, on one hip, one arm stretched out over the car.
     rect(0.05, -0.28, 0.65, 0.2, '#1c1c22');
@@ -365,6 +367,7 @@ function drawProps() {
           Math.random() < 0.5 ? 'fire' : 'smoke'
         );
       }
+      shine(x, y, 13 + Math.sin(state.t * 9), 0);
     } else if (pr.k === 'tent') {
       // A tent stands on the ground itself; the way there ends beside it.
       ctx.save();
@@ -462,6 +465,40 @@ function drawPlayer() {
   if (state.job && state.job.step.item === 'rocker') {
     drawHammer(player);
   }
+}
+
+/**
+ * A child of the lantern walk, in a woolly hat: it holds a paper lantern on
+ * a stick out ahead, which swings as it walks and shines at night.
+ * @param {!Object} k
+ */
+function drawKid(k) {
+  const paper = k.n % PAPER.length;
+  const a = k.a + 0.45 + Math.sin(k.t * 2 + k.n) * 0.12;
+  const x = k.x + Math.cos(a) * 1.1;
+  const y = k.y + Math.sin(a) * 1.1;
+  ctx.strokeStyle = '#6b4a2a';
+  ctx.lineWidth = 0.08;
+  ctx.beginPath();
+  ctx.moveTo(k.x, k.y);
+  ctx.lineTo(x, y);
+  ctx.stroke();
+  drawPerson(
+    k,
+    SHIRTS[k.n % SHIRTS.length],
+    SHIRTS[(k.n * 5 + 3) % SHIRTS.length],
+    false,
+    0.9
+  );
+  ctx.fillStyle = `rgb(${PAPER[paper]})`;
+  ctx.beginPath();
+  ctx.arc(x, y, 0.34, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = '#fff3c4'; // the candle
+  ctx.beginPath();
+  ctx.arc(x, y, 0.13, 0, TAU);
+  ctx.fill();
+  shine(x, y, 5, paper);
 }
 
 /**
@@ -663,6 +700,11 @@ export function drawSprites(x0, y0, x1, y1) {
   }
   if (job && job.doris && seen(job.doris)) {
     drawDoris(job.doris);
+  }
+  for (const k of (job && job.kids) || []) {
+    if (seen(k)) {
+      drawKid(k);
+    }
   }
   for (const c of state.cars) {
     if (seen(c) && !(c.alt > 0.3)) {
