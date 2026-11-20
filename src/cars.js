@@ -83,6 +83,7 @@ export function makeCar(x, y, a, kind, col = PAINT[kind] || pick(COLORS)) {
     steer: 0,
     wheelAngle: 0,
     hb: false,
+    braked: -1, // when it last braked, on the clock of the game
     type,
     kind,
     col,
@@ -360,8 +361,16 @@ export function pedals(c, vf, max, push, dt) {
  * @param {!Car} c
  * @return {boolean}
  */
-export const braking = c =>
+const braking = c =>
   c.hb || (c.thr < -0.05 && c.vf > 0.1) || (c.thr > 0.05 && c.vf < -0.1);
+
+/**
+ * Whether the brake lights are on. They stay lit for a moment after the
+ * pedal: a computer driver dabs it frame by frame, which would flicker.
+ * @param {!Car} c
+ * @return {boolean}
+ */
+export const brakeLit = c => braking(c) || state.t - c.braked < 0.25;
 
 /**
  * How steeply the ground rises along the nose of a vehicle, the way the game
@@ -449,6 +458,9 @@ export function stepCar(c, dt) {
   if (c.dead) {
     c.thr = c.steer = 0;
   }
+  if (braking(c)) {
+    c.braked = state.t;
+  }
   c.a += c.spin * dt;
   c.spin *= Math.exp(-3 * dt);
   if (c.kind === 'heli') {
@@ -521,11 +533,11 @@ export function stepCar(c, dt) {
   const slip = Math.abs(
     c.vy * fx - c.vx * fy - (along * Math.tan(c.wheelAngle)) / 2
   );
-  const braking = c.hb || (c.thr < -0.8 && along > 10);
+  const hard = c.hb || (c.thr < -0.8 && along > 10);
   const speed = Math.hypot(c.vx, c.vy);
   c.skid =
     !air && type.wheelbase && ground & 1 && speed > 3
-      ? clamp(Math.max(braking ? speed / 15 : 0, (slip - 1.5) / 6), 0, 1)
+      ? clamp(Math.max(hard ? speed / 15 : 0, (slip - 1.5) / 6), 0, 1)
       : 0;
   tyreMarks(c);
 }

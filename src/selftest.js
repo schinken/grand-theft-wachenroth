@@ -4,7 +4,7 @@
 
 import {MAP} from '../map.js';
 import {BUILD} from './buildings.js';
-import {hill, pedals, rollCar} from './cars.js';
+import {brakeLit, hill, pedals, rollCar} from './cars.js';
 import {inFront, parting} from './draw-buildings.js';
 import {FENCE_TILES, FURROWS, fieldMasks} from './draw-ground.js';
 import {tyreMarks} from './effects.js';
@@ -92,6 +92,14 @@ export function selftest() {
           stopped < rollingSpeed * 0.4 &&
           pedals(brake, 0.1, 38, 15, 0.1) === 0 &&
           pedals(brake, -0.1, 38, 15, 0.1) === 0
+        );
+      })(),
+    'the brake lights stay on over the quick dabs of a computer driver':
+      (() => {
+        const coast = {thr: 0, hb: false, vf: 10};
+        return (
+          brakeLit({...coast, braked: state.t - 0.1}) &&
+          !brakeLit({...coast, braked: state.t - 1})
         );
       })(),
     'the hills are in the map: Flo lives some 20 m above the church':

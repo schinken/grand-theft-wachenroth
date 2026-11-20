@@ -5,7 +5,7 @@
  * whatever no lamp reaches.
  */
 
-import {braking} from './cars.js';
+import {brakeLit} from './cars.js';
 import {put, stand} from './hills.js';
 import {state} from './state.js';
 import {canvas, lerp} from './util.js';
@@ -102,11 +102,11 @@ function carLamps(c) {
   const front = c.type.length / 2;
   lay(BEAM, 1, 0.35, c.x, c.y, c.a, front - 1, -11, 30, 22);
   lay(WARM, 0.5, 0, c.x, c.y, c.a, -5, -5, 10, 10);
-  const r = braking(c) ? 8 : 3;
+  const r = brakeLit(c) ? 8 : 3;
   lay(
     RED,
     0.8,
-    braking(c) ? 0.6 : 0.3,
+    brakeLit(c) ? 0.6 : 0.3,
     c.x,
     c.y,
     c.a,

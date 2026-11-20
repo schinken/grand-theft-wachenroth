@@ -5,7 +5,7 @@
 
 import {MAP} from '../map.js';
 import {makeSign} from './buildings.js';
-import {braking} from './cars.js';
+import {brakeLit} from './cars.js';
 import {puff} from './effects.js';
 import {stand} from './hills.js';
 import {PAPER, shine} from './night.js';
@@ -59,7 +59,7 @@ function drawRearLights(g, c) {
   if (!c.type.wheelbase || c.dead || c.burn) {
     return;
   }
-  const brakes = braking(c);
+  const brakes = brakeLit(c);
   const reversing = c.vf < -0.2;
   if (!brakes && !reversing) {
     return;
