@@ -8,6 +8,7 @@ import {BUILD} from './buildings.js';
 import {bail, hitch, makeCar, repaint} from './cars.js';
 import {decal, flash, float, info, page, puff} from './effects.js';
 import {nearest} from './geometry.js';
+import {onScreen} from './hills.js';
 import {roadPoint} from './items.js';
 import {NODES, SEGS, surfAt} from './land.js';
 import {MISSIONS, TALK} from './missions.js';
@@ -335,8 +336,13 @@ function gatherWalk(j, from, to) {
   j.walked = COLUMN;
   j.going = false;
   j.shoutT = 0;
-  // The junctions inside the roads that are closed for the walk
-  j.zone = new Set();
+  // The stretches of road that fire engines close, each as the junction
+  // outside and the one inside; the junctions on the roads between them,
+  // which are kept empty once the walk is under way; and the seconds a
+  // driver who is still in there has left to get out.
+  j.gates = [];
+  j.zone = new Map();
+  j.grace = 8;
   j.kids = Array.from({length: 16}, (v, n) => {
     const k = {n, t: n, back: (n >> 1) * 1.3, side: n % 2 ? 0.7 : -0.7};
     return Object.assign(k, kidSlot(j, k));
@@ -351,7 +357,8 @@ function gatherWalk(j, from, to) {
  */
 function moveWalk(j, dt) {
   const car = state.player.car;
-  const go = j.going && j.walked < j.wayLen;
+  // The children walk only while nobody drives on their roads.
+  const go = j.going && !clearRoads(j, dt) && j.walked < j.wayLen;
   if (go) {
     j.walked += WALK * dt;
   }
@@ -396,28 +403,66 @@ export function walkSong() {
 }
 
 /**
+ * The stretch of road a fire engine closes at its post.
+ * @param {string} key The post.
+ * @param {!Float32Array} f How far every junction is from where the walk
+ *     ends: the nearer end of the stretch lies inside.
+ * @return {!Array<number>} The junction outside, and the one inside.
+ */
+function gateAt(key, f) {
+  const [l] = nearLink(SPOT[key]);
+  return f[l[0]] < f[l[1]] ? [l[1], l[0]] : [l[0], l[1]];
+}
+
+/**
  * The junctions on the roads that fire engines close off for the lantern
  * walk: all that cars reach from the walk without passing a post.
  * @param {!Array<string>} keys The posts.
  * @param {!Float32Array} f How far every junction is from where the walk
- *     ends: that is the side of a post that lies inside.
- * @return {!Set<number>}
+ *     ends.
+ * @return {!Map<number, number>} For each of them, how many junctions it is
+ *     to the nearest way out, counting itself.
  */
 export function enclosed(keys, f) {
-  const gates = keys.map(k => nearLink(SPOT[k])[0]);
-  const shut = (a, b) => gates.some(l => l.includes(a) && l.includes(b));
-  const todo = gates.map(l => (f[l[0]] < f[l[1]] ? l[0] : l[1]));
-  const zone = new Set(todo);
-  while (todo.length) {
-    const n = todo.pop();
+  const gates = keys.map(k => gateAt(k, f));
+  const shut = (a, b) => gates.some(g => g.includes(a) && g.includes(b));
+  const todo = gates.map(g => g[1]);
+  const zone = new Map(todo.map(n => [n, 1]));
+  for (let i = 0; i < todo.length; i++) {
+    const n = todo[i];
     for (const e of NODES[n].car) {
       if (!zone.has(e.n) && !shut(n, e.n)) {
-        zone.add(e.n);
+        zone.set(e.n, zone.get(n) + 1);
         todo.push(e.n);
       }
     }
   }
   return zone;
+}
+
+/**
+ * Keeps the roads that are closed for the lantern walk empty. Who drives in
+ * there out of sight is gone at once. Who is in sight drives out by the
+ * shortest way (see nextNode() in traffic.js) and has a few seconds for it.
+ * @param {!Object} j
+ * @param {number} dt
+ * @return {boolean} Whether somebody is still on the way out.
+ */
+function clearRoads(j, dt) {
+  let busy = false;
+  for (const c of state.cars) {
+    const ai = c.ai;
+    if (!ai || ai.home || !j.zone.has(ai.from) || !j.zone.has(ai.to)) {
+      continue;
+    }
+    if (j.grace > 0 && onScreen(c)) {
+      busy = true;
+    } else {
+      c.gone = true;
+    }
+  }
+  j.grace = busy ? j.grace - dt : 8;
+  return busy;
 }
 
 /**
@@ -432,21 +477,15 @@ function homeward(c, f) {
 }
 
 /**
- * Colleagues drive home the vehicles of a job that no post needs any more,
- * with blue lights. The one you sit in stays yours.
+ * Colleagues drive vehicles of a job home, with blue lights. The one you sit
+ * in stays yours.
  * @param {!Object} j
- * @param {!Array<string>} keep The posts that stay.
+ * @param {!Array<!Car>} cars
  */
-function relieve(j, keep) {
+function relieve(j, cars) {
   const f = field(SPOT[j.m.home]);
-  for (const c of j.fleet) {
-    const stays =
-      c === state.player.car ||
-      c.ai ||
-      c.dead ||
-      c.burn ||
-      keep.some(k => dist(c, SPOT[k]) < 15);
-    if (stays) {
+  for (const c of cars) {
+    if (c === state.player.car || c.ai || c.dead || c.burn) {
       continue;
     }
     const [from, to] = homeward(c, f);
@@ -457,15 +496,18 @@ function relieve(j, keep) {
 }
 
 /**
- * The roads around the lantern walk are closed at other posts from now on.
- * Where no fire engine stands yet, colleagues have put one; engines at posts
- * that are not needed any more go home; and who is still driving about in
- * there, out of sight, is gone.
+ * Fire engines close the roads at other posts from now on: no car gets past
+ * one into the roads of the lantern walk. Once the walk is under way, those
+ * roads are kept empty too. Where no fire engine stands yet, colleagues have
+ * put one, and the engines on duty at posts that are not needed any more go
+ * home.
  * @param {!Object} j
  * @param {!Object} st The step.
  */
 function closeRoads(j, st) {
-  j.zone = enclosed(st.shut, j.far);
+  const at = c => st.shut.some(k => dist(c, SPOT[k]) < 15);
+  j.gates = st.shut.map(k => gateAt(k, j.far));
+  j.zone = j.going ? enclosed(st.shut, j.far) : new Map();
   for (const k of st.shut) {
     if (j.fleet.some(c => dist(c, SPOT[k]) < 15)) {
       continue;
@@ -478,13 +520,8 @@ function closeRoads(j, st) {
     c.duty = true;
     j.fleet.push(c);
   }
-  relieve(j, st.shut);
-  for (const c of state.cars) {
-    const inside = c.ai && j.zone.has(c.ai.from) && j.zone.has(c.ai.to);
-    if (inside && !c.ai.home && dist(c, state.player) > 90) {
-      c.gone = true;
-    }
-  }
+  const free = j.fleet.filter(c => c.duty && !at(c));
+  relieve(j, free);
 }
 
 /**
@@ -1253,7 +1290,7 @@ function endJob() {
   calmThieves(j);
   calmRivals(j);
   if (m.home) {
-    relieve(j, []);
+    relieve(j, j.fleet);
   }
   if (m.sober) {
     state.drunk = 0; // slept it off
@@ -1297,7 +1334,7 @@ export function failJob(why) {
   calmThieves(j);
   calmRivals(j);
   if (j.m.home) {
-    relieve(j, []);
+    relieve(j, j.fleet);
   }
   state.nextJob = 10;
   state.pager.idle = '';

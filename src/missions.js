@@ -53,8 +53,9 @@
 //   got      what you call out once the step is done
 //   beat     you are pulled out of the vehicle and slapped about, and see
 //            stars for a while
-//   shut     the posts where fire engines keep the traffic out of the roads
-//            around the lantern walk from now on
+//   shut     the posts where fire engines stand from now on: no car gets
+//            past one into the roads of the lantern walk, and once the walk
+//            is under way those roads are kept empty
 //
 // Props: k ('fire', 'tent', 'stage', or 'person' with shirt colour col) at
 // place `at`, dx and dy metres off it, shown from step `from` until before
@@ -745,6 +746,7 @@ export const MISSIONS = [
         do: 'steal',
         veh: 'fire',
         at: 'firestation',
+        shut: ['postSouth'],
         obj: 'Hol das Löschfahrzeug bei der Feuerwehr, Am Graben 7',
       },
       {
@@ -759,6 +761,7 @@ export const MISSIONS = [
         veh: 'fire',
         at: 'maras',
         ready: true,
+        shut: ['postSouth', 'postEast'],
         obj: "Steig ins zweite Löschfahrzeug vor Mara's Marktschänke",
         say: 'Da kommt keiner mehr durch, ein Kamerad bleibt beim Auto. Das zweite Löschfahrzeug steht gleich vor der Mara.',
       },

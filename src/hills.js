@@ -61,6 +61,16 @@ export function shown(o) {
 }
 
 /**
+ * Whether a point on the ground is on the screen, or nearly.
+ * @param {{x: number, y: number}} o
+ * @return {boolean}
+ */
+export function onScreen(o) {
+  const [x, y] = shown(o);
+  return x > -80 && y > -80 && x < viewW + 80 && y < viewH + 80;
+}
+
+/**
  * Stands what is drawn next on the ground at a point: nearer and bigger the
  * higher that ground is. A house keeps its shape, all of it stands as high
  * as this one point.

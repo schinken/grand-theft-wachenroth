@@ -324,9 +324,9 @@ export function selftest() {
     'the posts of the fire brigade close the roads round the lantern walk':
       MISSIONS.filter(m => m.walk).every(m => {
         const far = field(SPOT[m.walk[1]]);
-        const zones = m.steps
-          .filter(s => s.shut)
-          .map(s => enclosed(s.shut, far));
+        // From the step on that sends the walk off
+        const steps = m.steps.slice(m.steps.findIndex(s => s.do === 'parade'));
+        const zones = steps.filter(s => s.shut).map(s => enclosed(s.shut, far));
         // Shut in, the roads are few; through a gap the whole village leaks.
         return zones[0].size > 10 && zones.every(zone => zone.size < 60);
       }),

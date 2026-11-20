@@ -53,9 +53,15 @@ function nextNode(from, to, ai) {
     return -1;
   }
   const zone = state.job && state.job.zone;
-  if (zone && !zone.has(to)) {
-    // Nobody turns into a road that is closed for the lantern walk, nor up
-    // to the fire engine in front of it, while another way is open.
+  if (zone && zone.has(to)) {
+    // Inside the roads that are closed for the lantern walk: out again, by
+    // the shortest way.
+    const hops = e => zone.get(e.n) || 0;
+    const least = Math.min(...opts.map(hops));
+    opts = opts.filter(e => hops(e) === least);
+  } else if (zone) {
+    // Nobody turns into such a road, nor up to the fire engine in front of
+    // it, while another way is open.
     const shut = n => zone.has(n) || NODES[n].car.some(e => zone.has(e.n));
     const open = opts.filter(e => !shut(e.n));
     opts = open.length ? open : opts;
@@ -89,8 +95,8 @@ function gateShut(c, reach) {
 }
 
 /**
- * Whether a car has to wait for the lantern walk: the fire brigade lets
- * nobody into the roads it has closed, and nobody drives into the children.
+ * Whether a car has to wait for the lantern walk: nobody gets past a fire
+ * engine into the roads it closes, and nobody drives into the children.
  * @param {!Car} c
  * @param {number} reach How far ahead it minds the children, in metres.
  * @return {boolean}
@@ -100,7 +106,8 @@ function walkAhead(c, reach) {
   if (!j || !j.kids) {
     return false;
   }
-  if (!j.zone.has(c.ai.from) && j.zone.has(c.ai.to)) {
+  const {from, to} = c.ai;
+  if (j.gates.some(g => g[0] === from && g[1] === to)) {
     return true;
   }
   const fx = Math.cos(c.a);
@@ -272,11 +279,13 @@ export function crime(heat) {
  */
 function sendPatrol() {
   const player = state.player;
-  const spots = NODES.filter(n => {
+  const zone = state.job && state.job.zone;
+  const spots = NODES.filter((n, i) => {
     const d = dist(n, player);
     return (
       d > 110 &&
       d < 230 &&
+      !(zone && zone.has(i)) &&
       n.gps.length &&
       n.x > 0 &&
       n.y > 0 &&
